@@ -11,6 +11,10 @@ const DB_PATH = () => path.join(DATA_DIR(), "faelights.json");
 const FILES_DIR = () => path.join(DATA_DIR(), "files");
 
 let win = null;
+let splash = null, splashShownAt = 0;
+const ICON = path.join(__dirname, "..", "renderer", "assets", "brand", "app-icon.png");
+const SPLASH_MIN_MS = 900;   // long enough to read, short enough not to get in the way
+const SPLASH_MAX_MS = 8000;  // show the app even if the renderer never reports ready
 let pendingOpen = []; // PDFs passed on the command line / "Open with"
 
 /* ---------------- storage ---------------- */
@@ -52,11 +56,36 @@ function saveDb(db) {
 async function statOrNull(p) { try { return await fsp.stat(p); } catch (_) { return null; } }
 
 /* ---------------- window ---------------- */
+const themeBg = () => nativeTheme.shouldUseDarkColors ? "#14121B" : "#F2F0F6";
+
+function createSplash() {
+  splash = new BrowserWindow({
+    width: 440, height: 280, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
+    center: true, show: false, title: "Faelights", icon: ICON, backgroundColor: themeBg(),
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
+  });
+  splash.once("ready-to-show", () => { if (splash) { splash.show(); splashShownAt = Date.now(); } });
+  splash.on("closed", () => { splash = null; });
+  splash.loadFile(path.join(__dirname, "..", "renderer", "splash.html"));
+}
+
+// Swap the splash for the main window once the renderer has loaded the library
+function revealMain() {
+  if (!win || win.isDestroyed() || win.isVisible()) return;
+  const wait = splash && splashShownAt ? Math.max(0, SPLASH_MIN_MS - (Date.now() - splashShownAt)) : 0;
+  setTimeout(() => {
+    if (!win || win.isDestroyed()) return;
+    win.show(); win.focus();
+    if (splash) splash.destroy();
+  }, wait);
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1360, height: 860, minWidth: 900, minHeight: 560,
     title: "Faelights",
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#14121B" : "#F2F0F6",
+    backgroundColor: themeBg(),
+    icon: ICON,
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -67,7 +96,7 @@ function createWindow() {
       spellcheck: false
     }
   });
-  win.once("ready-to-show", () => win.show());
+  setTimeout(revealMain, SPLASH_MAX_MS);
   win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
   // external links open in the system browser
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: "deny" }; });
@@ -91,6 +120,7 @@ else {
   app.whenReady().then(() => {
     pendingOpen.push(...pdfArgs(process.argv.slice(1)));
     buildAppMenu();
+    createSplash();
     createWindow();
     app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   });
@@ -139,6 +169,7 @@ ipcMain.handle("db:load", async () => {
   return db;
 });
 ipcMain.handle("db:save", async (_e, db) => { await saveDb(db); return true; });
+ipcMain.on("app:ready", revealMain);
 ipcMain.handle("app:pending", () => { const p = pendingOpen; pendingOpen = []; return p; });
 
 ipcMain.handle("pdf:choose", async () => {

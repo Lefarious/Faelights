@@ -44,12 +44,10 @@ button, select, input { font: inherit; color: inherit; }
 
 /* ---------- sidebar ---------- */
 .side { background: var(--pane); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
-.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 12px; }
-.mote { width: 10px; height: 10px; border-radius: 50%; background: var(--glow); flex: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 25%, transparent), 0 0 18px 4px color-mix(in srgb, var(--glow) 55%, transparent);
-  animation: pulse 3.2s ease-in-out infinite; }
-@keyframes pulse { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 12%, transparent), 0 0 8px 1px color-mix(in srgb, var(--glow) 30%, transparent); } }
-.brand h1 { font-family: var(--font-display); font-weight: 400; font-size: 21px; margin: 0; }
+.brand { display: flex; align-items: center; gap: 4px; padding: 16px 18px 10px; }
+.brand-mark, .blank-mote, .drop-mote { display: block; flex: none; }
+.brand-mark img { width: 34px; height: 34px; display: block; margin: -4px -4px -4px -6px; }
+.brand h1 { font-family: var(--font-display); font-weight: 400; font-size: 22px; margin: 0 0 2px; letter-spacing: -.01em; }
 .side .add { margin: 4px 14px 14px; justify-content: center; }
 .side-scroll { overflow-y: auto; flex: 1; padding: 0 8px 16px; }
 .side h3 { display: flex; align-items: center; justify-content: space-between; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 18px 10px 6px; }
@@ -176,6 +174,7 @@ select.btn { font-weight: 500; padding-right: 8px; }
 .blank { margin: auto; padding: 40px; max-width: 48ch; display: grid; gap: 12px; justify-items: start; }
 .blank h2 { font-family: var(--font-display); font-weight: 400; font-size: 26px; margin: 0; }
 .blank p { color: var(--muted); margin: 0; }
+.blank-mote img { width: 44px; height: 44px; display: block; margin: 0 0 -4px -8px; }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; color: var(--muted); margin-top: 8px; }
 kbd { font-family: var(--font-ui); font-size: 11.5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; background: var(--surface); color: var(--ink); }
 
@@ -199,5 +198,7 @@ kbd { font-family: var(--font-ui); font-size: 11.5px; border: 1px solid var(--li
 .drop div { border: 2px dashed var(--accent); border-radius: 18px; padding: 40px 52px; text-align: center; background: var(--surface); display: grid; gap: 6px; }
 .drop b { font-family: var(--font-display); font-weight: 400; font-size: 24px; }
 .drop span { color: var(--muted); }
+.drop-mote { justify-self: center; }
+.drop-mote img { width: 52px; height: 52px; display: block; }
 .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 500; z-index: 30; max-width: 80vw; }
-@media (prefers-reduced-motion: reduce) { .mote, .ex.flash { animation: none; } * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .ex.flash { animation: none; } * { transition: none !important; } }
