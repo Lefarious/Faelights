@@ -102,4 +102,4 @@ Library menu / menu `export-library` → `exportLibrary(id)` → per-doc `docTex
 | `src/preload.js` | preload-bridge |
 
 ## Excluded
-`node_modules/`, `dist/` (gitignored build output), `package-lock.json`, `README.md`, `.gitignore`.
+`build/icon.png` (asset, see packaging), `node_modules/`, `dist/` (gitignored build output), `package-lock.json`, `README.md`, `.gitignore`.

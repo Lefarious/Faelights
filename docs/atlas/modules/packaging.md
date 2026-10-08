@@ -26,6 +26,6 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 - **Steps:** checkout → setup-node → `npm ci || npm install` → `npm run <script> -- --publish never` → upload-artifact
 
 ## Gotchas
-- `icon: build/icon.png` and `directories.buildResources: build` are configured, but no `build/` folder is committed. Builds fall back to the default Electron icon (unverified whether electron-builder warns or fails).
+- `build/icon.png` is the single icon source for win/mac/linux (`directories.buildResources: build`). electron-builder converts it to `.ico`/`.icns`.
 - The pdfjs-dist version is pinned exactly, and `core.js` relies on its annotation object shape.
 - There are no code signing or notarisation steps.

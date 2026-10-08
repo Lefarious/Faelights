@@ -88,7 +88,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Data migrations:** none. `loadDb` only adds a missing Inbox and missing settings defaults. The DB has `version: 1`, but nothing reads it yet.
 - **Rollback:** reinstall the previous installer. User data in `userData/library` is untouched by install and uninstall (unverified for the NSIS uninstaller).
 - **Secrets:** none.
-- **App icon:** `build/icon.png` is referenced but not committed (see Tech debt).
+- **App icon:** `build/icon.png` (committed) is used for all three platforms through `directories.buildResources: build`.
 
 ## 6. UI & UX
 - **Design system:** CSS custom properties in `renderer/styles.css`, with a light palette (lavender-grey background, amber accent `#B8721A`, glow `#F4B23E`) and an automatic dark palette through `prefers-color-scheme`. Fonts: Young Serif for display, Figtree for UI, Newsreader for reading text. Highlight marks use the PDF annotation's own colour at reduced alpha.
@@ -121,7 +121,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Touched:** all modules (see [ATLAS](atlas/ATLAS.md)).
 - **Added:** deps electron, electron-builder, pdfjs-dist, @fontsource ×3. `.pdf` file association. CI workflow.
 - **Trade-offs:** whole-DB JSON saves (simple, but cost grows with library size); analysis runs on the renderer thread apart from the pdf.js worker; no tests (see D-002, D-004).
-- **Known limits / follow-ups:** no OCR; flattened annotations can't be read; no app icon; unsigned builds.
+- **Known limits / follow-ups:** no OCR; flattened annotations can't be read; unsigned builds.
 - **Commit range:** 18c8052 (reconstructed from git: the entire app arrived in the initial commit)
 
 ## 8. Decision log
@@ -142,7 +142,6 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 ### Now
 - (none set)
 ### Next
-- App icon (`build/icon.png`) so installers are branded. Status: open.
 - Smoke tests for `core.js` extraction against `renderer/sample.pdf` (it is already Node-exportable). Status: open.
 ### Later
 - Code signing and notarisation; publishing GitHub Releases from CI.
@@ -163,7 +162,6 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 ## 11. Tech debt & open questions
 | Item | Impact | Introduced by | Suggested fix |
 |---|---|---|---|
-| `build/icon.png` missing | Installers use the default Electron icon | F-001 | Add icon assets under `build/` |
 | No automated tests | Extraction regressions go unnoticed | F-001 | Node test running `analyzePdf` on fixture PDFs |
 | Whole DB (including all results) saved on every change | Slow saves with large libraries | F-001 / D-002 | Split results per doc or move to SQLite |
 | `saveDb` errors are only logged | Silent data loss is possible | F-001 | Surface failures to the renderer as a toast |
