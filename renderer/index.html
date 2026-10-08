@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; worker-src 'self' blob:; connect-src 'self'">
+<title>Faelights</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app" id="app">
+  <nav class="side" id="side" aria-label="Libraries"></nav>
+  <section class="list" id="list" aria-label="PDFs"></section>
+  <main class="reader" id="reader"></main>
+</div>
+<div class="drop" id="drop" hidden><div><b>Drop PDFs to add them</b><span id="drop-target"></span></div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="../node_modules/pdfjs-dist/build/pdf.min.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

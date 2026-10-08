@@ -1,0 +1,74 @@
+{
+  "name": "faelights",
+  "productName": "Faelights",
+  "version": "1.0.0",
+  "description": "Pull highlights out of annotated PDFs, organised by topic, and keep them in libraries.",
+  "main": "src/main.js",
+  "author": "Joel Nanayakkara",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "@fontsource/figtree": "^5.0.0",
+    "@fontsource/newsreader": "^5.0.0",
+    "@fontsource/young-serif": "^5.0.0",
+    "pdfjs-dist": "3.11.174"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "app.faelights.desktop",
+    "productName": "Faelights",
+    "files": [
+      "src/**",
+      "renderer/**",
+      "node_modules/pdfjs-dist/build/pdf.min.js",
+      "node_modules/pdfjs-dist/build/pdf.worker.min.js",
+      "node_modules/@fontsource/**",
+      "package.json"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "pdf",
+        "name": "PDF Document",
+        "role": "Viewer"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "signAndEditExecutable": false,
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "icon": "build/icon.png"
+    },
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    }
+  }
+}

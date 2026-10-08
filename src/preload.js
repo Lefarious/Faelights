@@ -1,0 +1,24 @@
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
+
+contextBridge.exposeInMainWorld("fl", {
+  loadDb: () => ipcRenderer.invoke("db:load"),
+  saveDb: db => ipcRenderer.invoke("db:save", db),
+  pendingFiles: () => ipcRenderer.invoke("app:pending"),
+  choosePdfs: () => ipcRenderer.invoke("pdf:choose"),
+  importPdf: p => ipcRenderer.invoke("pdf:import", p),
+  readPdf: doc => ipcRenderer.invoke("pdf:read", doc),
+  statPdf: p => ipcRenderer.invoke("pdf:stat", p),
+  openPdf: doc => ipcRenderer.invoke("pdf:open", doc),
+  revealPdf: doc => ipcRenderer.invoke("pdf:reveal", doc),
+  relinkPdf: doc => ipcRenderer.invoke("pdf:relink", doc),
+  removeStored: p => ipcRenderer.invoke("pdf:removeStored", p),
+  exportFile: (name, text) => ipcRenderer.invoke("export:file", { name, text }),
+  exportFolder: (folderName, files) => ipcRenderer.invoke("export:folder", { folderName, files }),
+  openFolder: p => ipcRenderer.invoke("export:openFolder", p),
+  copy: text => ipcRenderer.invoke("clip:write", text),
+  popup: items => ipcRenderer.invoke("menu:popup", items),
+  confirm: (message, detail, ok) => ipcRenderer.invoke("ask:confirm", { message, detail, ok }),
+  pathFor: file => { try { return webUtils.getPathForFile(file); } catch (_) { return file.path || ""; } },
+  onMenu: fn => ipcRenderer.on("menu", (_e, ch) => fn(ch)),
+  onOpenFiles: fn => ipcRenderer.on("open-files", (_e, files) => fn(files))
+});
