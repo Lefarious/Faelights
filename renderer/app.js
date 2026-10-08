@@ -41,6 +41,9 @@ const lib = id => S.db.libraries.find(l => l.id === id);
 const rgb = c => `${c[0]} ${c[1]} ${c[2]}`;
 const ckey = c => c.map(v => Math.round(v / 24) * 24).join(",");
 const plural = (n, a, b) => n + " " + (n === 1 ? a : (b || a + "s"));
+// extracts that come before the first topic (title page, abstract) are grouped under this label
+const PRE_TOPIC = "Abstract";
+const outdated = d => !d.result || (d.result.v || 1) < ANALYZER_VERSION;
 
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2200); }
 async function copyText(text, what) { await fl.copy(text); toast(what + " copied"); }
@@ -112,7 +115,7 @@ async function rescan(d, quiet) {
 }
 
 async function rescanAll() {
-  const list = S.db.docs.filter(d => d.stale || !d.result);
+  const list = S.db.docs.filter(d => d.stale || outdated(d));
   const all = list.length ? list : S.db.docs;
   if (!all.length) return;
   S.busy = { label: `Rescanning ${plural(all.length, "PDF")}`, done: 0, total: all.length, page: "" }; renderList();
@@ -232,7 +235,7 @@ function docText(d, fmt, frontmatter, entries) {
   out.push(fmt === "plain" ? d.title : `# ${d.title}`, "");
   const done = new Set();
   for (const g of groupsOf(entries)) {
-    const path = g.topic ? g.topic.path : ["Before the first heading"];
+    const path = g.topic ? g.topic.path : [PRE_TOPIC];
     path.forEach((t, i) => {
       const key = path.slice(0, i + 1).join("\u0001");
       if (i < path.length - 1 && done.has(key)) return;
@@ -438,7 +441,8 @@ async function openDoc(id, entryIdx) {
   const d = doc(id);
   if (S.view.kind === "search") S.view = { kind: "library", id: d.libraryId };
   renderAll();
-  if (d.stale && d.sourcePath) { const ok = await rescan(d, true); if (ok) { toast("Updated from the changed PDF"); renderAll(); } }
+  const changed = d.stale && d.sourcePath;
+  if (changed || outdated(d)) { const ok = await rescan(d, true); if (ok) { toast(changed ? "Updated from the changed PDF" : "Topics refreshed"); renderAll(); } }
 }
 
 /* ---------------- rendering: reader ---------------- */
@@ -543,11 +547,11 @@ function renderReader() {
     const ul = el("ul", "toc");
     groups.forEach((g, gi) => {
       const li = el("li", g.topic && g.topic.level > 1 ? "sub" : ""); const a = el("a"); a.href = "#";
-      a.append(el("span", "t", g.topic ? g.topic.title : "Before the first heading"), el("span", "c", String(g.items.reduce((n, e) => n + e.spans.length, 0))));
+      a.append(el("span", "t", g.topic ? g.topic.title : PRE_TOPIC), el("span", "c", String(g.items.reduce((n, e) => n + e.spans.length, 0))));
       a.onclick = ev => { ev.preventDefault(); $("g" + gi)?.scrollIntoView({ behavior: "smooth" }); };
       li.append(a); ul.append(li);
     });
-    sec.append(ul, el("p", "source", d.result.topicSource === "outline" ? "From the PDF's bookmarks." : d.result.topics.length ? "From headings detected by font size." : "No headings found; in page order."));
+    sec.append(ul, el("p", "source", TOPIC_SOURCE[d.result.topicSource] || "No headings found; in page order."));
     rail.append(sec);
   }
   if (!d.result.entries.length && !d.result.loose.length) {
@@ -559,7 +563,7 @@ function renderReader() {
     const sec = el("section", "group"); sec.id = "g" + gi;
     const gh = el("div", "group-head");
     if (g.topic && g.topic.path.length > 1) gh.append(el("p", "crumb", g.topic.path.slice(0, -1).join("  ›  ")));
-    const h = el("h3"); h.append(document.createTextNode(g.topic ? g.topic.title : "Before the first heading"));
+    const h = el("h3"); h.append(document.createTextNode(g.topic ? g.topic.title : PRE_TOPIC));
     const n = g.items.reduce((a, e) => a + e.spans.length, 0); h.append(el("small", null, plural(n, "extract"))); gh.append(h); sec.append(gh);
     for (const e of g.items) {
       const row = el("article", "ex"); row.id = "e" + e.n;
@@ -583,6 +587,12 @@ function renderReader() {
     if (target) setTimeout(() => { target.scrollIntoView({ block: "center" }); target.classList.add("flash"); }, 30);
   }
 }
+const TOPIC_SOURCE = {
+  outline: "From the PDF's bookmarks.",
+  headings: "From headings detected by font size.",
+  patterns: "From section headings found in the text.",
+  pages: "No headings found, so grouped by page."
+};
 function filtered(d) {
   return d.result.entries.map(e => ({ ...e, spans: e.spans.filter(s => !S.off.has(ckey(s.color))) })).filter(e => e.spans.length);
 }

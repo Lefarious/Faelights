@@ -1,6 +1,14 @@
 // ===== Faelights extraction core =====
 const MARK_TYPES = { Highlight: "Highlight", Underline: "Underline", Squiggly: "Squiggly", StrikeOut: "Strike" };
 const ABBR = /\b(?:e\.g|i\.e|et al|etc|vs|cf|Fig|Figs|Eq|Eqs|Dr|Mr|Mrs|Ms|Prof|St|No|Vol|pp|approx|Ch|Sec)\.$/i;
+// Bump when the shape or quality of results changes so saved docs get rescanned.
+const ANALYZER_VERSION = 2;
+
+// Section headings recognised by their wording when font size gives nothing to go on
+const SECTION_NAMES = /^(?:abstract|summary|introduction|background|overview|related work|literature review|methods?|methodology|materials and methods|approach|experiments?|experimental (?:setup|results)|results?(?: and discussion)?|discussion|evaluation|analysis|findings|conclusions?(?: and future work)?|future work|limitations|recommendations|references|bibliography|acknowledge?ments?|appendix(?: [a-z0-9]+)?|preface|foreword|prologue|epilogue|chapter [0-9ivxlc]+)$/i;
+const NUMBERED = /^((?:\d{1,2}\.){0,3}\d{1,2}\.?|[IVX]{1,5}\.|[A-H]\.)\s+(.+)$/;
+const RUN_IN = /^(abstract|keywords|index terms)\s*[—–:.-]/i;
+const CAPTION = /^(?:fig(?:ure)?|table|eq(?:uation)?|source|note)\b/i;
 
 function normQuads(a) {
   const q = a.quadPoints, out = [];
@@ -182,6 +190,12 @@ async function analyzePdf(pdf, onProgress) {
       stack[level - 1] = m.title;
       return { title: m.title, path: stack.filter(Boolean), level, page: m.page, at: m.start };
     });
+    // a lone large line is usually just the document title; try wording-based detection
+    if (topics.length < 2) {
+      const found = patternTopics(lines, text);
+      if (found.length) { topics = found; topicSource = "patterns"; }
+    }
+    if (!topics.length) { topics = pageTopics(lines); topicSource = "pages"; }
   }
   topics.sort((a, b) => a.at - b.at);
 
@@ -272,7 +286,60 @@ async function analyzePdf(pdf, onProgress) {
   });
 
   const looseOut = loose.map(a => ({ page: a.page, color: a.color, type: a.type, comment: a.comment }));
-  return { entries: out, loose: looseOut, topics, topicSource, pages: pdf.numPages, count: annots.length };
+  return { v: ANALYZER_VERSION, entries: out, loose: looseOut, topics, topicSource, pages: pdf.numPages, count: annots.length };
+}
+
+// Headings found by wording: "3.2 Results", "IV. DISCUSSION", "Conclusion", "Abstract—…", short ALL-CAPS lines
+function patternTopics(lines, text) {
+  const cand = [];
+  for (const l of lines) {
+    const s = text.slice(l.start, l.end).replace(/\s+/g, " ").trim();
+    if (!s || CAPTION.test(s)) continue;
+    let title = null, level = 1;
+    const run = s.match(RUN_IN);
+    if (run) title = run[1][0].toUpperCase() + run[1].slice(1).toLowerCase();
+    else if (s.length <= 80 && !/[,;]$/.test(s)) {
+      const bare = s.replace(/\s*:$/, "");
+      const num = bare.match(NUMBERED);
+      if (SECTION_NAMES.test(bare)) title = bare;
+      else if (num && headingText(num[2])) {
+        title = bare;
+        level = /^[A-H]\.$/.test(num[1]) ? 2 : /^[IVX]+\.$/.test(num[1]) ? 1 : num[1].replace(/\.$/, "").split(".").length;
+      } else if (capsHeading(bare)) title = bare;
+    }
+    if (title) cand.push({ title, level: Math.min(level, 3), page: l.page, at: l.start });
+  }
+  // running headers and footers repeat on many pages
+  const pagesOf = new Map();
+  const norm = t => t.toLowerCase().replace(/[\d\s]+/g, " ").trim();
+  for (const c of cand) { const k = norm(c.title); if (!pagesOf.has(k)) pagesOf.set(k, new Set()); pagesOf.get(k).add(c.page); }
+  const kept = cand.filter(c => pagesOf.get(norm(c.title)).size < 3);
+  const stack = [];
+  return kept.map(c => {
+    stack.length = c.level - 1;
+    stack[c.level - 1] = c.title;
+    return { title: c.title, path: stack.filter(Boolean), level: c.level, page: c.page, at: c.at };
+  });
+}
+function headingText(t) {
+  const words = t.split(" ");
+  return /^[A-Z]/.test(t) && words.length <= 10 && !/[.!?,;]$/.test(t) && /[a-z]{3}|[A-Z]{3}/.test(t);
+}
+function capsHeading(t) {
+  return t.length >= 4 && t.length <= 60 && t === t.toUpperCase() && /[A-Z]{4}/.test(t)
+    && /^[A-Z0-9][A-Z0-9 &,:'’()\-–]+$/.test(t) && t.split(" ").length <= 8;
+}
+
+// Last resort: one topic per page so long documents are still navigable
+function pageTopics(lines) {
+  const out = [], seen = new Set();
+  for (const l of lines) {
+    if (seen.has(l.page)) continue;
+    seen.add(l.page);
+    const title = "Page " + l.page;
+    out.push({ title, path: [title], level: 1, page: l.page, at: l.start });
+  }
+  return out;
 }
 
 function topicAt(topics, at) {
@@ -281,4 +348,4 @@ function topicAt(topics, at) {
   return t;
 }
 
-if (typeof module !== "undefined") module.exports = { analyzePdf };
+if (typeof module !== "undefined") module.exports = { analyzePdf, ANALYZER_VERSION };
