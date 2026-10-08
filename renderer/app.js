@@ -18,6 +18,13 @@ const ICON = {
   open: '<path d="M14 3h7v7M10 14 21 3M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>',
   add: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15h6"/>'
 };
+// Brand artwork with light/dark variants (renderer/assets/brand/<name>-light|dark.svg)
+function brandImg(name, cls) {
+  const p = el("picture", cls), src = el("source"), img = el("img");
+  src.srcset = `assets/brand/${name}-dark.svg`; src.media = "(prefers-color-scheme: dark)";
+  img.src = `assets/brand/${name}-light.svg`; img.alt = "";
+  p.append(src, img); return p;
+}
 const btn = (cls, label, icon, title) => { const b = el("button", "btn " + (cls || "")); if (icon) b.append(svg(ICON[icon])); if (label) b.append(document.createTextNode(label)); if (title) { b.title = title; b.setAttribute("aria-label", title); } return b; };
 
 /* ---------------- state ---------------- */
@@ -290,7 +297,7 @@ function navItem({ icon, name, count, current, onClick, onContext, onDrop, editi
 }
 function renderSide() {
   const side = $("side"); side.replaceChildren();
-  const brand = el("div", "brand"); brand.append(el("span", "mote"), el("h1", null, "Faelights"));
+  const brand = el("div", "brand"); brand.append(brandImg("mark", "brand-mark"), el("h1", null, "faelights")); brand.setAttribute("aria-label", "Faelights");
   const add = btn("primary add", "Add PDFs", "add"); add.onclick = chooseAndAdd;
   side.append(brand, add);
   const sc = el("div", "side-scroll");
@@ -598,6 +605,7 @@ function filtered(d) {
 }
 function renderBlank(r) {
   const b = el("div", "blank");
+  b.append(brandImg("mote", "blank-mote"));
   if (!S.db.docs.length) {
     b.append(el("h2", null, "Your highlights, organised"), el("p", null, "Add annotated PDFs and Faelights lists every highlight in reading order, grouped by the topic it sits under. Sort PDFs into libraries, tag them, and search across all of them."));
     const row = el("div"); row.style.display = "flex"; row.style.gap = "8px"; row.style.flexWrap = "wrap";
@@ -699,6 +707,7 @@ fl.onOpenFiles(files => addPaths(files));
   const inbox = S.db.docs.filter(d => d.libraryId === "inbox").sort((a, b) => b.addedAt - a.addedAt);
   S.docId = inbox[0] ? inbox[0].id : null;
   renderAll();
+  fl.ready();
   const pending = await fl.pendingFiles();
   if (pending.length) addPaths(pending);
 })();

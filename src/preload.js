@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld("fl", {
   loadDb: () => ipcRenderer.invoke("db:load"),
   saveDb: db => ipcRenderer.invoke("db:save", db),
   pendingFiles: () => ipcRenderer.invoke("app:pending"),
+  ready: () => ipcRenderer.send("app:ready"),
   choosePdfs: () => ipcRenderer.invoke("pdf:choose"),
   importPdf: p => ipcRenderer.invoke("pdf:import", p),
   readPdf: doc => ipcRenderer.invoke("pdf:read", doc),
