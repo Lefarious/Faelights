@@ -3,28 +3,35 @@
 _Last updated: 2026-10-09 · Current sprint: 3 (not planned) · main: green 63/63 @ f541b3f (local, not pushed)_
 
 ## Settings
-- Capacity: 3 parallel features per sprint
+- Capacity: 3 parallel features per sprint · minor bugs/polish (XS/S) are exempt and don't count
+- Todo ids: `T-NNN`, next free: T-012 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
 
 ## To do
 
-**Next sprint (Sprint 2):** meta-enrich, which fills in paper details from CrossRef and arXiv, stays optional, and keeps working offline. Any of the proposals below can join it if you approve them.
+Every todo has a todo id (`T-NNN`, never reused) and a type: `feature`, `enhancement`, `bug` or `polish`. The type is the branch prefix: `<type>/<todo-id>-<slug>`, e.g. `feature/T-001-meta-enrich`. Minor bugs and polish (size XS or S) don't count toward the sprint cap.
 
-- [ ] **meta-enrich** (M, depends on F-011 ✓): fill and refresh Info fields from CrossRef (DOI) and the arXiv API. Runs when a paper is added by DOI/link and on demand from the Info card. Never blocks adding or opening a PDF; results are saved in `meta`, so they still show offline.
+**Next sprint (Sprint 3):** T-001 meta-enrich, which fills in paper details from CrossRef and arXiv, stays optional, and keeps working offline. Any of the proposals below can join it if you approve them.
 
-Proposals waiting for approval (each can join Sprint 2):
+- [ ] **T-001 meta-enrich** (feature · M, depends on F-011 ✓): fill and refresh Info fields from CrossRef (DOI) and the arXiv API. Runs when a paper is added by DOI/link and on demand from the Info card. Never blocks adding or opening a PDF; results are saved in `meta`, so they still show offline.
 
-- [ ] [Risk · S] A mistyped link says "You're offline": tell "no connection" apart from "couldn't reach that site".
-- [ ] [Risk · S] nature.com bot-blocks downloads, so some open-access papers fail: add an alternative-source lookup (fits meta-enrich).
-- [ ] [Feature · S] Second test PDF (underline, strike-through, bookmark and wording topics, marks with no text) and run `npm test` in the GitHub build.
-- [ ] [Optimization · XS] Rename "Annotate" in the PDF menu to "View"; remove the unused native-menu IPC (`menu:popup`).
-- [ ] [Risk · S] Dev-only setting for a separate library folder, so a test copy can run while the real app is open.
+Proposals waiting for approval (each can join Sprint 3; "exempt" = doesn't count toward the cap):
+
+- [ ] **T-002** [bug · S · exempt] A mistyped link says "You're offline": tell "no connection" apart from "couldn't reach that site".
+- [ ] **T-003** [enhancement · S] nature.com bot-blocks downloads, so some open-access papers fail: add an alternative-source lookup (fits T-001).
+- [ ] **T-004** [enhancement · S] Second test PDF (underline, strike-through, bookmark and wording topics, marks with no text) and run `npm test` in the GitHub build.
+- [ ] **T-005** [polish · XS · exempt] Rename "Annotate" in the PDF menu to "View"; remove the unused native-menu IPC (`menu:popup`).
+- [ ] **T-006** [enhancement · S] Dev-only setting for a separate library folder, so a test copy can run while the real app is open.
+- [ ] **T-008** [bug · S · exempt] PMC serves a bot-check page instead of PDFs, so PMCID (and PMIDs that resolve to PMC) may fail: try Europe PMC / Unpaywall.
+- [ ] **T-009** [polish · XS · exempt] ISBN lookup may pick a scan of another edition: show the edition title in the result row.
+- [ ] **T-010** [enhancement · S] Move and resize image boxes in the viewer (today: delete and redraw).
+- [ ] **T-011** [polish · XS · exempt] `ckey` is duplicated in order.js and app.js, and `groupsOf` overlaps `Order.groupItems`: fold both into order.js.
 
 Polish (reported by user):
 
-- [x] [Fix · XS] Taskbar icon size: done (F-017). The tile used 87.5% of the canvas and there was no .ico; now ~96% plus a 16–256 px .ico.
+- [x] **T-007** [bug · XS · exempt] The app icon on the Windows taskbar looked a different size from other apps' icons. Fixed in 055a74f (`fix/taskbar-icon-size`).
 
 ## Backlog
 | id | requirements (short) | footprint | depends on | size | priority | status |
@@ -32,7 +39,7 @@ Polish (reported by user):
 | item-actions | Themed in-app action menu (icons, groups, danger item, keyboard, ARIA) for library + PDF actions, opened by right-click or a ⋯ button | renderer/app.js (menus, navItem, doc cards, reader library picker), renderer/styles.css (own block) | — | M | 1 | merged f576105 (F-010) |
 | add-by-identifier | Add PDFs from a DOI, arXiv id, article page URL or direct PDF URL; main process downloads; clean failures with "Open in browser" | src/main.js, src/preload.js, new src/identify.js, renderer/app.js (add flow, drop/paste), renderer/styles.css (own block), test/identify.test.js | — | M | 1 | merged c5c0dbe (F-011) |
 | test-harness | `npm test` via node:test; smoke tests for core.js analyzePdf on renderer/sample.pdf | package.json (scripts only), test/core.test.js, test/helpers | — | S | 1 | merged c6748e9 (F-012) |
-| meta-enrich | Fill/augment doc metadata from CrossRef (DOI) and arXiv API, on add-by-identifier and on demand from the Info card | src/main.js, src/preload.js, renderer/app.js (readMeta/loadMeta/infoEl) | add-by-identifier | M | 2 | todo (left out of Sprint 2 by user) |
+| T-001 meta-enrich | Fill/augment doc metadata from CrossRef (DOI) and arXiv API, on add-by-identifier and on demand from the Info card | src/main.js, src/preload.js, renderer/app.js (readMeta/loadMeta/infoEl) | add-by-identifier | M | 2 | todo (left out of Sprint 2 by user) |
 | add-ids | "Add by identifier" dialog: ISBN, DOI, PMID, PMCID, arXiv, ADS Bibcode, links; several at once; ISBN = free copy via Open Library/Internet Archive else explain | src/identify.js, src/main.js (resolve/pdf:fetch), renderer/app.js (add dialog), styles.css (addid block), test/identify.test.js | — | M | 1 | merged 40bb2c7 |
 | image-box | Capture-image tool in viewer: thin coloured outline Square annotation, recolour/note/delete/undo | renderer/annotator.js, styles.css (.pv block) | — | M | 1 | merged 40bb2c7 |
 | image-extract | core.js reads Square annots → result.images {id,n,page,rect,color,comment,at,topic}; image inside a fact sorts before it | renderer/core.js, test/core.test.js, test/fixtures/ | — | M | 1 | merged 40bb2c7 |
@@ -100,15 +107,7 @@ Polish (reported by user):
 | 2026-10-09 | c5c0dbe (sprint close) | 23/23 | none |
 
 ## Proposed (recommendations awaiting user approval)
-- [Risk] PMC now serves a bot-check page instead of PDFs, so PMCID (and PMIDs that resolve to PMC) may fail; try Europe PMC render endpoint / Unpaywall fallback · S · sprint 2
-- [Risk] ISBN → Open Library picks a scan from any edition of the work; show the edition title in the result row (or prefer exact-ISBN editions) · XS · sprint 2
-- [Feature] Move / resize image boxes in the viewer (today: delete and redraw) · S · sprint 2
-- [Optimization] `ckey` duplicated in order.js and app.js; `groupsOf` (exportfmt.js) and `Order.groupItems` overlap — fold into order.js · XS · sprint 2
-- [Risk] `ERR_NAME_NOT_RESOLVED` maps to "offline", so a mistyped hostname says "You're offline" — check navigator.onLine before choosing offline vs "couldn't reach site" · S · sprint 1
-- [Risk] Some publishers (nature.com) serve a bot challenge to Chromium's network stack, so even open-access DOIs can fail — fall back to Unpaywall/CrossRef link lookup (fits meta-enrich) · S · sprint 1
-- [Feature] Second test-fixture PDF covering underline/strike/squiggly, bookmark and wording-based topics, marks with no text — sample.pdf only covers highlights + font-size headings · S · sprint 1
-- [Optimization] Doc menu still says "Annotate" while the reader button is now "View" — align the label · XS · sprint 1
-- [Risk] Dev/test launch: `--user-data-dir` doesn't move userData and the single-instance lock blocks test runs while the real app is open — add a `FAELIGHTS_USER_DATA` env override for dev · S · sprint 1
+All open proposals are listed with todo ids under **To do** above: T-002 … T-006, T-008 … T-011. New proposals get the next free id.
 
 ## Decisions
 - 2026-10-09 — Item actions: themed in-app menu + ⋯ trigger (not hover bar / command palette).
