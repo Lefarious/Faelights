@@ -1073,7 +1073,7 @@ function renderBlank(r) {
     const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; const s = btn("", "Try a sample PDF"); s.onclick = addSample; row.append(a, addIdBtn(), s); b.append(row);
   } else b.append(el("h2", null, "Pick a PDF"), el("p", null, "Choose a PDF from the list to read its highlights."));
   const k = el("div", "keys"); const mod = process_platform() === "darwin" ? "⌘" : "Ctrl";
-  for (const [key, what] of [[`${mod} O`, "Add PDFs"], [`${mod} ⇧ O`, "Add from DOI or link"],[`${mod} F`, "Search all highlights"], [`${mod} T`, "Full sentence / highlights only"], [`${mod} E`, "Export current PDF"], [`${mod} ⇧ N`, "New library"], [`${mod} B`, "Show / hide sidebar"]]) {
+  for (const [key, what] of [[`${mod} O`, "Add PDFs"], [`${mod} ⇧ O`, "Add by identifier"],[`${mod} F`, "Search all highlights"], [`${mod} T`, "Full sentence / highlights only"], [`${mod} E`, "Export current PDF"], [`${mod} ⇧ N`, "New library"], [`${mod} B`, "Show / hide sidebar"]]) {
     const kk = el("span"); for (const part of key.split(" ")) { kk.append(el("kbd", null, part), document.createTextNode(" ")); } k.append(kk, el("span", null, what));
   }
   b.append(k); r.append(b);
@@ -1135,50 +1135,57 @@ function addSample() {
   addPaths([p], { sample: true });
 }
 
-/* ---------------- add from DOI / link ---------------- */
+/* ---------------- add by identifier ---------------- */
 // The only feature that uses the network, and only when the user submits. Everything else works offline.
 const ADD_FAIL = {
-  invalid: "That doesn't look like a DOI, arXiv ID or web link.",
+  invalid: "That doesn't look like an ISBN, DOI, PMID, arXiv ID, ADS bibcode or web link.",
   offline: "You're offline. Connect to the internet to fetch this paper, or add a PDF from your computer.",
   paywalled: "The publisher didn't hand over the PDF. It may need a subscription or sign-in. Open the page in your browser, download it there, then add the file.",
   "not-pdf": "Couldn't find a PDF there. Open the page in your browser to download it, then add the file.",
   "not-found": "Nothing was found for that. Check it for typos.",
+  "no-free-copy": "No free PDF was found for this. Open it in your browser, or add a PDF you already have.",
   network: "Couldn't reach the server, or it took too long. Try again in a moment.",
   "too-large": "That PDF is over 150 MB, so it wasn't downloaded."
 };
-let addDlg = null;  // {back, box, input, hint, off, msg, ok, id, busy, seq, opener}
+const ADD_OPEN = ["paywalled", "not-pdf", "no-free-copy"];   // failures where the landing page is worth opening
+let addDlg = null;  // {back, box, input, hint, off, msg, list, ok, cancel, items, ids, busy, batch, stop, cur, seq, opener}
 function addIdBtn(compact) {
-  const b = compact ? btn("icon add-id", "", "link", "Add from DOI or link") : btn("", "Add from DOI or link", "link");
+  const b = compact ? btn("icon add-id", "", "link", "Add by identifier") : btn("", "Add by identifier", "link");
   b.onclick = () => openAddId(); return b;
 }
+// pasted / dropped / clipboard text worth prefilling: mostly identifiers, not a paragraph that happens to hold a link
+const looksLikeIds = xs => xs.length > 0 && xs.filter(x => x.id).length * 2 >= xs.length;
 function sameOrigin(id) { const v = id.value.toLowerCase(); return S.db.docs.find(d => d.origin && d.origin.kind === id.kind && String(d.origin.value).toLowerCase() === v); }
 function showExisting(d) {
   S.view = { kind: "library", id: d.libraryId }; openDoc(d.id);
   toast(`Already in ${lib(d.libraryId)?.name || "your library"}: “${d.title}”`);
 }
 async function openAddId(prefill) {
-  if (addDlg) { if (prefill && !addDlg.busy) { addDlg.input.value = prefill; addIdHint(); } addDlg.input.focus(); return; }
-  const D = addDlg = { seq: 0, busy: false, id: null, opener: document.activeElement };
+  if (addDlg) { if (prefill && !addDlg.busy) { addDlg.input.value = prefill; addDlg.list.hidden = true; addDlg.grow(); addIdHint(); } addDlg.input.focus(); return; }
+  const D = addDlg = { seq: 0, busy: false, items: [], ids: 0, opener: document.activeElement };
   D.back = el("div", "addid-back");
   D.box = el("div", "addid"); D.box.setAttribute("role", "dialog"); D.box.setAttribute("aria-modal", "true");
   D.box.setAttribute("aria-labelledby", "addid-h"); D.box.setAttribute("aria-describedby", "addid-p");
-  const h = el("h2", null, "Add from DOI or link"); h.id = "addid-h";
-  const p = el("p", null, "Paste a DOI, an arXiv ID or a link to a paper. Faelights downloads the PDF into your library."); p.id = "addid-p";
-  D.input = el("input", "search"); D.input.placeholder = "DOI, arXiv ID or link"; D.input.setAttribute("aria-label", "DOI, arXiv ID or link");
-  D.input.spellcheck = false; D.input.autocomplete = "off"; D.input.oninput = addIdHint;
+  const h = el("h2", null, "Add by identifier"); h.id = "addid-h";
+  const p = el("p", null, "Enter ISBNs, DOIs, PMIDs, arXiv IDs, ADS Bibcodes or links to add to your library."); p.id = "addid-p";
+  D.input = el("textarea", "search addid-in"); D.input.rows = 2; D.input.placeholder = "e.g. 10.1038/nature12373, 2101.00001, PMID 31452104";
+  D.input.setAttribute("aria-label", "Identifiers or links, one or more"); D.input.spellcheck = false; D.input.autocomplete = "off";
+  D.grow = () => { D.input.style.height = "auto"; D.input.style.height = D.input.scrollHeight + 2 + "px"; };   // CSS caps it at 6 rows
+  D.input.oninput = () => { D.grow(); D.list.hidden = true; addIdCancelLabel("Cancel"); addIdHint(); };
   const line = el("div", "addid-line"); D.hint = el("span", "addid-hint"); D.hint.setAttribute("aria-live", "polite");
   D.off = el("span", "addid-off", "Offline"); D.off.title = "No internet connection. Fetching needs one; adding PDFs from your computer works offline.";
   line.append(D.hint, D.off);
   D.msg = el("div", "addid-msg"); D.msg.setAttribute("role", "alert"); D.msg.hidden = true;
-  const row = el("div", "addid-row"), cancel = btn("", "Cancel"); D.ok = btn("primary", "Add");
-  cancel.onclick = closeAddId; D.ok.onclick = submitAddId; row.append(cancel, D.ok);
-  D.box.append(h, p, D.input, line, D.msg, row); D.back.append(D.box); document.body.append(D.back);
+  D.list = el("ul", "addid-list"); D.list.hidden = true; D.list.setAttribute("aria-label", "Items");
+  const row = el("div", "addid-row"); D.cancel = btn("", "Cancel"); D.ok = btn("primary", "Add");
+  D.cancel.onclick = () => D.batch ? stopAddBatch() : closeAddId(); D.ok.onclick = submitAddId; row.append(D.cancel, D.ok);
+  D.box.append(h, p, D.input, line, D.msg, D.list, row); D.back.append(D.box); document.body.append(D.back);
   D.back.onmousedown = e => { if (e.target === D.back && !D.busy) closeAddId(); };
   D.box.onkeydown = e => {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeAddId(); }
-    else if (e.key === "Enter" && e.target === D.input) { e.preventDefault(); submitAddId(); }
+    else if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.target === D.input) { e.preventDefault(); submitAddId(); }   // Shift+Enter: new line
     else if (e.key === "Tab") {   // keep focus inside the dialog
-      const f = [...D.box.querySelectorAll("input, button")].filter(x => !x.disabled && x.offsetParent);
+      const f = [...D.box.querySelectorAll("textarea, input, button")].filter(x => !x.disabled && x.offsetParent);
       const i = f.indexOf(document.activeElement), n = e.shiftKey ? i - 1 : i + 1;
       e.preventDefault(); f[(n + f.length) % f.length]?.focus();
     }
@@ -1186,57 +1193,73 @@ async function openAddId(prefill) {
   D.net = () => { D.off.hidden = navigator.onLine; };
   addEventListener("online", D.net); addEventListener("offline", D.net); D.net();
   // reading the clipboard is local; it only prefills when it holds something recognisable
-  if (prefill == null) { const clip = await fl.readClipboardText().catch(() => ""); if (addDlg === D && !D.input.value && (await fl.parseId(clip))) prefill = clip.trim(); }
+  if (prefill == null) { const clip = await fl.readClipboardText().catch(() => ""); if (addDlg === D && !D.input.value && looksLikeIds(await fl.parseIds(clip))) prefill = clip.trim(); }
   if (addDlg !== D) return;
   if (prefill) D.input.value = prefill;
-  addIdHint(); D.input.focus(); D.input.select();
+  D.grow(); addIdHint(); D.input.focus(); D.input.select();
 }
 function closeAddId() {
   const D = addDlg; if (!D) return;
-  if (D.busy) fl.cancelFetch();
+  if (D.busy) { D.stop = true; fl.cancelFetch(); }
   removeEventListener("online", D.net); removeEventListener("offline", D.net);
   D.back.remove(); addDlg = null;
   if (D.opener && D.opener.isConnected && D.opener.focus) D.opener.focus();
 }
+function addIdCancelLabel(t) { const D = addDlg; if (D && D.cancel.lastChild) D.cancel.lastChild.textContent = t; }
 async function addIdHint() {
   const D = addDlg; if (!D) return;
   const v = D.input.value, s = ++D.seq;
-  const id = v.trim() ? await fl.parseId(v) : null;
+  const items = v.trim() ? await fl.parseIds(v) : [];
   if (addDlg !== D || s !== D.seq) return;
-  D.id = id; D.msg.hidden = true;
-  D.hint.textContent = !v.trim() ? "" : id ? id.label : "Not recognised";
-  D.hint.classList.toggle("bad", !!v.trim() && !id);
-  D.ok.disabled = !id || D.busy;
+  const ids = items.filter(x => x.id).length, bad = items.length - ids;
+  Object.assign(D, { items, ids }); D.msg.hidden = true;
+  D.hint.textContent = !items.length ? "" : items.length === 1 ? (ids ? items[0].id.label : "Not recognised") : `${ids} recognised${bad ? ` · ${bad} not recognised` : ""}`;
+  D.hint.classList.toggle("bad", items.length > 0 && !ids);
+  D.ok.disabled = !ids || D.busy;
 }
 function addIdBusy(label) {
   const D = addDlg; if (!D) return;
-  D.busy = !!label; D.input.readOnly = D.busy; D.ok.disabled = D.busy || !D.id;
+  D.busy = !!label; D.input.readOnly = D.busy; D.ok.disabled = D.busy || !D.ids;
   D.box.classList.toggle("busy", D.busy); D.box.setAttribute("aria-busy", D.busy);
   if (label) { D.msg.hidden = false; D.msg.className = "addid-msg progress"; D.msg.replaceChildren(el("span", "spin"), el("span", null, label)); }
+}
+// "Open in browser" / "Add PDFs from file…" for a failure reason; null when neither applies
+function addIdActs(reason, landingUrl, file = true) {
+  const acts = el("div", "addid-acts");
+  if (landingUrl && ADD_OPEN.includes(reason)) { const o = btn("", "Open in browser", "open"); o.onclick = () => fl.openExternal(landingUrl); acts.append(o); }
+  if (file && (reason === "offline" || ADD_OPEN.includes(reason))) { const f = btn("", "Add PDFs from file…", "add"); f.onclick = () => { closeAddId(); chooseAndAdd(); }; acts.append(f); }
+  return acts.childNodes.length ? acts : null;
 }
 function addIdFail(reason, landingUrl) {
   const D = addDlg; if (!D) return;
   D.msg.hidden = false; D.msg.className = "addid-msg err"; D.msg.replaceChildren(el("span", null, ADD_FAIL[reason] || ADD_FAIL.network));
-  const acts = el("div", "addid-acts");
-  if (landingUrl && (reason === "paywalled" || reason === "not-pdf")) { const o = btn("", "Open in browser", "open"); o.onclick = () => fl.openExternal(landingUrl); acts.append(o); }
-  if (["offline", "paywalled", "not-pdf"].includes(reason)) { const f = btn("", "Add PDFs from file…", "add"); f.onclick = () => { closeAddId(); chooseAndAdd(); }; acts.append(f); }
-  if (acts.childNodes.length) D.msg.append(acts);
+  const a = addIdActs(reason, landingUrl); if (a) D.msg.append(a);
   D.input.focus();
 }
+// One row of the batch list. state: wait | run | ok | dup | err | bad | skip
+function addIdRow(it, state, label, reason, landingUrl) {
+  it.li = it.li || el("li", "addid-item");
+  const top = el("div", "addid-item-top"), t = el("span", "addid-item-t", it.text), st = el("span", "addid-item-s " + state, label);
+  t.title = it.text; if (state === "run") st.prepend(el("span", "spin"));
+  top.append(t, st); it.li.replaceChildren(top);
+  if (reason) { it.li.append(el("div", "addid-item-why", ADD_FAIL[reason] || ADD_FAIL.network)); const a = addIdActs(reason, landingUrl, false); if (a) it.li.append(a); }
+}
 fl.onFetchProgress(p => {
-  if (!addDlg || !addDlg.busy) return;
+  const D = addDlg; if (!D || !D.busy) return;
   const mb = n => (n / 1048576).toFixed(1) + " MB";
-  addIdBusy(p.stage === "find" ? "Finding PDF…" : p.stage === "import" ? "Saving to your library…"
-    : p.got ? `Downloading… ${mb(p.got)}${p.total ? " of " + mb(p.total) : ""}` : "Downloading…");
+  const label = p.stage === "find" ? "Finding PDF…" : p.stage === "import" ? "Saving to your library…"
+    : p.got ? `Downloading… ${mb(p.got)}${p.total ? " of " + mb(p.total) : ""}` : "Downloading…";
+  if (D.cur) addIdRow(D.cur, "run", label); else if (!D.batch) addIdBusy(label);
 });
 async function submitAddId() {
   const D = addDlg; if (!D || D.busy) return;
-  await addIdHint(); if (addDlg !== D || !D.id) return;
-  const id = D.id, dup = sameOrigin(id);
+  await addIdHint(); if (addDlg !== D || !D.ids) return;
+  if (D.items.length > 1) return addIdBatch(D);
+  const { text, id } = D.items[0], dup = sameOrigin(id);
   if (dup) { closeAddId(); showExisting(dup); return; }
   if (!navigator.onLine) { addIdFail("offline"); return; }
   addIdBusy("Finding PDF…");
-  const r = await fl.fetchPdf(D.input.value);
+  const r = await fl.fetchPdf(text);
   if (addDlg !== D) { if (r.ok) fl.removeStored(r.info.storedPath); return; }   // cancelled meanwhile
   addIdBusy(null);
   if (!r.ok) { addIdFail(r.reason, r.landingUrl); return; }
@@ -1252,6 +1275,50 @@ async function submitAddId() {
   renderAll();
   toast(d ? `Added “${d.title}”` : "The downloaded PDF couldn't be read. It may be damaged or password-protected.");
 }
+// Several items: one at a time (the main process runs a single fetch), with a status row each.
+// The dialog stays open on any failure, stop or unrecognised item; otherwise it closes with a toast.
+async function addIdBatch(D) {
+  const items = D.items.map(x => ({ ...x })), n = D.ids;
+  if (!navigator.onLine && items.some(x => x.id && !sameOrigin(x.id))) { addIdFail("offline"); return; }
+  D.batch = items; D.stop = false; D.list.replaceChildren(); D.list.hidden = false; addIdCancelLabel("Cancel");
+  for (const it of items) { addIdRow(it, it.id ? "wait" : "bad", it.id ? "Waiting" : "Not recognised"); D.list.append(it.li); }
+  const target = S.view.kind === "library" ? S.view.id : "inbox", why = new Set();
+  let added = 0, failed = 0, dups = 0, k = 0, stopped = false, lastId = null;
+  for (const it of items) {
+    if (!it.id) continue;
+    if (addDlg !== D || D.stop) { stopped = true; addIdRow(it, "skip", "Skipped"); continue; }
+    addIdBusy(`Adding ${++k} of ${n}…`);
+    if (sameOrigin(it.id)) { dups++; addIdRow(it, "dup", "Already in library"); continue; }
+    addIdRow(it, "run", "Finding PDF…"); it.li.scrollIntoView({ block: "nearest" }); D.cur = it;
+    const r = await fl.fetchPdf(it.text);
+    D.cur = null;
+    if (addDlg !== D || D.stop || r.reason === "cancelled") { stopped = true; if (r.ok) fl.removeStored(r.info.storedPath); addIdRow(it, "skip", "Cancelled"); continue; }
+    if (!r.ok) {
+      failed++; why.add(r.reason); addIdRow(it, "err", "Couldn't add", r.reason, r.landingUrl);
+      if (r.reason === "offline") D.stop = true;   // the rest would fail the same way
+      continue;
+    }
+    const same = S.db.docs.find(d => d.hash === r.info.hash);
+    if (same) { await fl.removeStored(r.info.storedPath); dups++; addIdRow(it, "dup", "Already in library"); continue; }
+    addIdRow(it, "run", "Reading PDF…");
+    let d = null;
+    try { d = await addImported(r.info, target, { origin: r.origin, title: r.title }); } catch (err) { console.error(err); await fl.removeStored(r.info.storedPath); }
+    if (d) { added++; lastId = d.id; save(); addIdRow(it, "ok", "Added"); }
+    else { failed++; addIdRow(it, "err", "Couldn't read the PDF (damaged or password-protected)"); }
+  }
+  D.batch = null;
+  if (lastId) { if (S.view.kind !== "library" || S.view.id !== target) S.view = { kind: "library", id: target }; S.docId = lastId; S.off = new Set(); renderAll(); }
+  const bad = items.length - n, summary = `Added ${plural(added, "PDF")}` + (dups ? ` · ${dups} already in your library` : "");
+  if (addDlg !== D) { if (added) toast(summary); return; }   // closed mid-batch
+  addIdBusy(null);
+  if (!failed && !stopped && !bad) { closeAddId(); toast(added ? summary : "Already in your library"); return; }
+  D.msg.hidden = false; D.msg.className = "addid-msg" + (failed ? " err" : "");
+  D.msg.replaceChildren(el("span", null, summary + (failed ? ` · ${failed} couldn't be added` : "") + (bad ? ` · ${bad} not recognised` : "") + (stopped ? " · stopped" : "")));
+  const a = [...why].map(r => addIdActs(r, null)).find(Boolean); if (a) D.msg.append(a);
+  addIdCancelLabel("Close"); D.input.focus();
+}
+function stopAddBatch() { const D = addDlg; if (D && D.batch) { D.stop = true; fl.cancelFetch(); } }
+
 
 let dragDepth = 0;
 function hideDrop() { dragDepth = 0; $("drop").hidden = true; }
@@ -1260,16 +1327,16 @@ addEventListener("dragleave", () => { if (--dragDepth <= 0) hideDrop(); });
 addEventListener("dragover", e => e.preventDefault());
 addEventListener("drop", e => {
   e.preventDefault(); hideDrop(); const files = [...e.dataTransfer.files]; if (files.length) return addPaths(files.map(f => fl.pathFor(f)));
-  // a dropped link (e.g. dragged from a browser) opens "Add from DOI or link" prefilled
+  // dropped links (e.g. dragged from a browser) open "Add by identifier" prefilled
   if (e.dataTransfer.types.includes("application/x-faelights-doc")) return;
-  const t = (e.dataTransfer.getData("text/uri-list") || "").split(/\r?\n/).find(l => l && !l.startsWith("#")) || e.dataTransfer.getData("text/plain");
-  if (t) fl.parseId(t).then(id => { if (id) openAddId(t.trim()); });
+  const t = (e.dataTransfer.getData("text/uri-list") || "").split(/\r?\n/).filter(l => l.trim() && !l.startsWith("#")).join("\n") || e.dataTransfer.getData("text/plain");
+  if (t) fl.parseIds(t).then(xs => { if (looksLikeIds(xs)) openAddId(t.trim()); });
 });
-// Ctrl/⌘+V outside a text field with a DOI, arXiv ID or link opens the dialog prefilled
+// Ctrl/⌘+V outside a text field with identifiers or links (one or a list) opens the dialog prefilled
 addEventListener("paste", e => {
   if (addDlg || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
   const t = e.clipboardData?.getData("text/plain"); if (!t) return;
-  fl.parseId(t).then(id => { if (id) openAddId(t.trim()); });
+  fl.parseIds(t).then(xs => { if (looksLikeIds(xs)) openAddId(t.trim()); });
 });
 
 addEventListener("keydown", e => {
