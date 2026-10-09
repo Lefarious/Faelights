@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-09 · Last logged commit: c6424a0 · Version: 1.0.0 (unreleased changes on main)
+> Last updated: 2026-10-09 · Last logged commit: c5c0dbe · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything is pushed to GitHub. There are no automated tests, and installers are built in CI but not published.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into local `main`, not yet pushed: a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). Installers are built in CI but not published. Next: online metadata lookup (meta-enrich, Sprint 2).
 
 ## 2. Vision & scope
 - **Goals:**
@@ -13,7 +13,7 @@ Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pull
   - Clean export into personal knowledge tools, especially an Obsidian vault.
   - Highlights survive the original PDF moving or being deleted.
 - **Non-goals:**
-  - Cloud sync, accounts or any network service. Nothing in the code makes network calls.
+  - Cloud sync, accounts or any background network service. ~~Nothing in the code makes network calls.~~ Revised 2026-10-09: the app may go online only when the user explicitly asks (add a paper by DOI/arXiv/link, F-011; metadata lookup, planned). It must keep working fully offline, and nothing runs in the background (→ D-009).
   - ~~Annotating or editing PDFs inside the app.~~ Revised 2026-10-09: annotating is now in scope (F-007). Editing page content (text, images, page order) is still out of scope, and the user's original PDF is still never written.
   - OCR. Marks over scanned pages are listed as "loose" and the user is told to OCR the file outside the app.
 - **Success criteria (unverified):** highlights from common readers (Acrobat, Preview, Zotero and similar) extract correctly; exports drop into Obsidian without cleanup.
@@ -38,6 +38,7 @@ flowchart LR
     MAIN --> THEME[(userData/theme.json)]
   end
   OSOPEN[OS 'Open with' / argv] --> MAIN
+  MAIN -. on user request only .-> NET[(arxiv.org · doi.org + publishers · api.crossref.org)]
   MAIN --> SRC[(Original PDFs on disk)]
   MAIN --> EXPORT[(Export folder e.g. Obsidian vault<br/>or annotated PDF copy)]
 ```
@@ -51,6 +52,7 @@ flowchart LR
 | Renderer UI | Three-pane UI, search, export formatting | Vanilla JS + CSS, no framework | [renderer-ui](atlas/modules/renderer-ui.md) |
 | Annotator | In-app PDF viewer; writes highlight/underline/strike/note/ink annotations into the library copy | pdf.js render + text layer, pdf-lib | [annotator](atlas/modules/annotator.md) |
 | Packaging | Installers and CI builds | electron-builder, GitHub Actions | [packaging](atlas/modules/packaging.md) |
+| Tests | Extraction snapshot and identifier-parsing tests | node:test (built-in) | [tests](atlas/modules/tests.md) |
 
 ### Tech stack
 | Layer | Choice | Version | Why chosen |
@@ -84,7 +86,9 @@ flowchart LR
 | GitHub Actions | Build installers on `v*` tags | `.github/workflows/build.yml` | none | Free tier minutes | No installers. Build locally with `npm run dist:*`. |
 | OS shell / file associations | "Open with" for `.pdf`, open/reveal files | `package.json build.fileAssociations` | none | — | Users add PDFs from inside the app instead |
 
-There are no network APIs, analytics or telemetry. The app reads no environment variables.
+| arXiv, doi.org (+ publisher sites), CrossRef REST API | Download a paper's PDF when the user adds it by arXiv ID, DOI or link (F-011) | `src/main.js` `pdf:fetch` | none | No key; public endpoints. Limits: 150 MB per PDF, 15 s to first response, 30 s stall | Clear in-app message: offline, paywalled (with "Open in browser"), not a PDF, not found. Adding from disk is unaffected. |
+
+There are no analytics or telemetry, and no background network calls: requests happen only inside the add-by-DOI/link dialog after the user submits it (→ D-009). Fetches use a separate in-memory session so publisher cookies don't persist. The app reads no environment variables.
 
 ## 5. Environments & deployment
 | Env | Target | Branch | How it deploys | Notes |
@@ -121,7 +125,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
   Topics: extracts before the first topic sit under "Abstract"
   ```
 - **State:** one global state object, re-rendered fully on each change. Persistence is debounced (250 ms) and saves the whole DB.
-- **Interaction:** native context menus (library, doc), drag PDFs from the OS onto the window or onto a library, drag docs between libraries, keyboard (↑↓/J K, Delete, Ctrl/⌘ shortcuts from the app menu).
+- **Interaction:** a themed in-app action menu for libraries and PDFs (F-010), opened by right-click, a ⋯ button on hover/focus/current row, or Shift+F10 / the ContextMenu key, with icons, groups, red destructive items last, and shortcut hints only where they work; "Add from DOI or link" dialog (link button next to Add PDFs, File menu Ctrl/⌘+Shift+O, Ctrl/⌘+V of a DOI or link outside text fields, or dropping a link) with a live "recognised as…" hint and an "Offline" pill (F-011); drag PDFs from the OS onto the window or onto a library, drag docs between libraries, keyboard (↑↓/J K, Delete, Ctrl/⌘ shortcuts from the app menu).
 - **Accessibility:** ARIA labels on icon buttons and inputs, `aria-current`/`aria-pressed` states, `:focus-visible` outlines, and a `role=status` toast.
 - **Layout:** the sidebar, PDF list and topics rail can each be resized by dragging the handle at their right edge and hidden with a panel button (or Ctrl+B / Ctrl+Shift+B / Ctrl+Alt+B, View menu). A hidden column becomes a 34 px strip with a vertical label that reopens it. Dragging below the minimum snaps the column shut. Double-click a handle to reset it; View → Reset Column Widths resets all. Handles are focusable separators (←/→ resize, Enter toggles).
 - **Scrollbars:** slim rounded thumbs in the muted tone that firm up when their pane is hovered and turn accent while dragged.
@@ -130,6 +134,40 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Annotator keys:** V/H/U/S/N/D pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
+### F-012 · Test harness and extraction snapshot tests · 2026-10-09 · shipped to local main (c6748e9, not pushed)
+- **Why:** there were no automated tests, so merges (especially parallel ones) were checked blind.
+- **How:** `npm test` runs Node's built-in test runner over `test/**/*.test.js`, with no new dependencies. A helper loads PDFs in Node through pdf.js's legacy build. `core.test.js` snapshots `analyzePdf` on `renderer/sample.pdf` (pages, marks, every entry, topics, analyzer version, known phrases).
+- **Touched:** [tests](atlas/modules/tests.md), [packaging](atlas/modules/packaging.md)
+- **Added:** `npm test` script; `test/` folder.
+- **Trade-offs:** snapshot values are exact, so any intended extraction change must update the test. Node ≥ 21 is needed for the glob.
+- **Verified:** 7/7 pass; deliberately dropping an entry in `core.js` failed 4 of 7.
+- **Known limits / follow-ups:** the sample covers only highlights and font-size headings; underline/strike/squiggly, outline and wording-based topics and loose marks need a second fixture. Not yet run in CI.
+- **Commit range:** 9d85bfa (branch `test/s1-test-harness`), merged in c6748e9
+
+### F-011 · Add PDFs by DOI, arXiv ID or link (offline-safe) · 2026-10-09 · shipped to local main (c5c0dbe, not pushed)
+- **Why:** papers are usually found as a DOI or a link, not a file on disk; the user wanted to add them directly instead of downloading by hand first.
+- **How:**
+  - A dialog (link button beside Add PDFs, File menu, paste, or link drop) recognises DOIs, arXiv IDs (new and old), PubMed Central IDs and http(s) links as you type.
+  - The main process downloads: arXiv from arxiv.org; DOIs through doi.org to the publisher page and its `citation_pdf_url`, falling back to CrossRef's full-text links; other links directly or via their page's PDF link. The bytes must start with `%PDF-`. The file is then imported like a disk file, and the temp copy is deleted.
+  - These docs have no original on disk (like the sample) and remember where they came from (`origin`). Adding the same paper twice opens the existing one.
+  - Offline: the dialog fails immediately with a friendly message, keeps the input, and offers "Add PDFs from file…". Paywalled or bot-blocked papers offer "Open in browser".
+- **Touched:** [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [renderer-ui](atlas/modules/renderer-ui.md), [tests](atlas/modules/tests.md)
+- **Added:** `src/identify.js`; IPC `id:parse`, `pdf:fetch`, `pdf:fetchCancel`, `app:openExternal`, `clip:read`, push `fetch-progress`; File menu "Add from DOI or Link…"; optional doc field `origin` (no migration). External endpoints arxiv.org, doi.org, api.crossref.org. No new dependencies.
+- **Trade-offs:** first network use in the app, limited to explicit user action (→ D-009). Uses `net.request` (Chromium stack, system proxy) rather than `net.fetch` (→ D-010). Without an Unpaywall key, open-access copies hosted elsewhere aren't found. The landing page's title is used only when the PDF has none.
+- **Verified:** 16 unit tests; live: arXiv ID and arXiv DOI imported "Attention Is All You Need"; a PLOS DOI and a direct PLOS PDF imported; `10.1038/nature14539` failed cleanly; invalid and `javascript:` input rejected; simulated offline (DNS blocked and `navigator.onLine` false) failed fast while disk add still worked. Not verified live: OS "Open with", real Ctrl+Shift+O keypress.
+- **Known limits / follow-ups:** a mistyped hostname reports "offline" (DNS failure is treated as offline); nature.com serves a bot challenge to Chromium, so some open-access DOIs fail; no metadata lookup yet (Sprint 2: meta-enrich).
+- **Commit range:** 1df4dc9..3c94833 (branch `feature/s1-add-by-identifier`), merged in c5c0dbe
+
+### F-010 · Themed item action menu · 2026-10-09 · shipped to local main (f576105, not pushed)
+- **Why:** library and PDF actions were plain native OS menus, only reachable by right-click, and didn't match the app's look.
+- **How:** a reusable in-app popover menu replaces the native popup for the library menu, the PDF menu and the reader's library picker. Items have icons, groups, a red style for destructive actions (listed last), ✓ for checked items, submenus (Move to), and shortcut hints only where the shortcut applies. A ⋯ button appears on library rows and PDF cards on hover, focus or when current; right-click, Shift+F10 and the ContextMenu key open the same menu. Full keyboard support and ARIA menu roles.
+- **Touched:** [renderer-ui](atlas/modules/renderer-ui.md)
+- **Added:** no dependencies or IPC. The native `menu:popup` channel is now unused but kept.
+- **Trade-offs:** chosen over a hover action bar or a command palette (user decision, 2026-10-09). Rows were restructured into wrappers because buttons can't nest, keeping drag-and-drop and click behaviour.
+- **Verified:** 39/39 scripted checks over DevTools Protocol in an isolated profile, light and dark screenshots; user tried it in the combined build before merge. Dialog-opening actions were checked by stubbing, not clicked for real.
+- **Known limits / follow-ups:** the PDF menu still says "Annotate" while the reader button says "View".
+- **Commit range:** 338ae82 (branch `feature/s1-item-actions`, plus merge of main 4cab30c), merged in f576105
+
 ### F-009 · "My publications" section · 2026-10-09 · shipped (merged to main from `feature/my-publications`)
 - **Why:** the user wanted a sidebar section for their own papers, under Starred.
 - **How:** a `mine` flag on each doc, working like the star. "My publications" sits in the sidebar under Starred, with a count, and shows only those docs. A PDF is marked from a reader-header toggle ("Mark as mine" / "My publication"), from its ⋯ menu, or by dragging it onto the sidebar item. The section has its own empty state.
@@ -272,19 +310,29 @@ Context: columns needed to be resized and hidden without breaking the immediate-
 ### D-008 · Annotations via pdf-lib into the library copy, byte-snapshot undo · 2026-10-09
 Context: F-007 needs to add annotations that other readers and our own extractor both see, without breaking "never modify the original". Options: pdf.js's built-in editor layer (v3.11: FreeText/Ink/Stamp only, needs the full viewer); upgrading to pdf.js v4+ (risky for extraction, D-003); pdf-lib writing annotation dicts directly. Decision: pdf-lib, writing our own appearance streams, applied to the stored copy, which then becomes the doc's source of truth (`annotated` flag). Each edit re-saves the whole file and is re-rendered by pdf.js, so the screen always shows what's in the file and undo is a list of byte snapshots. Consequences: a second PDF library to keep; edit latency grows with file size; annotated docs stop following their original until reverted.
 
+### D-009 · Network only on explicit user action; app must work fully offline · 2026-10-09
+Context: adding papers by DOI/link (F-011) and planned metadata lookup need the internet, which contradicted the "no network calls" non-goal. Options: stay offline and only open the DOI in the browser; fetch on explicit request; also enrich metadata online. Decision (user): fetch on explicit request, plus metadata enrichment later, with the app working fully offline. No background or startup requests; offline gives a fast, distinct "offline" error with an add-from-file fallback; fetched data is stored locally so it shows offline. Consequences: network code lives only in `main.js` behind IPC; the renderer CSP stays strict; every new online feature must have an offline path.
+
+### D-010 · `net.request` with manual redirects for downloads · 2026-10-09
+Context: F-011 needs the final URL after redirects to resolve relative PDF links and record `origin`. Electron's `net.fetch` returned an empty final URL. Decision: `net.request` on a separate in-memory session, following redirects by hand and checking each hop is http(s). Consequences: system proxy support is kept; publisher cookies don't persist; size and time limits are enforced in our own code.
+
 ## 9. Roadmap & deployment plan
 No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
 ### Now
-- (none set)
+- Push Sprint 1 (F-010, F-011, F-012) to GitHub after the user's second OK.
 ### Next
-- Smoke tests for `core.js` extraction against `renderer/sample.pdf` (it is already Node-exportable). Status: open.
+- meta-enrich (Sprint 2): fill and refresh Info fields from CrossRef (DOI) and the arXiv API, on add-by-DOI/link and on demand from the Info card; optional, never blocks add/open, cached in `meta` so it shows offline (D-009). Depends on F-011.
+- Second test fixture PDF (underline/strike/squiggly, outline and wording topics, loose marks); run `npm test` in CI.
 ### Later
 - Code signing and notarisation; publishing GitHub Releases from CI.
 - DB schema versioning and migrations, and per-doc result storage if the library grows large.
 - Move analysis off the UI thread (worker).
-- Online metadata lookup (CrossRef / arXiv) and editable Info fields; metadata in export frontmatter (follow-up to F-006).
+- Editable Info fields; metadata in export frontmatter (follow-up to F-006). Online lookup moved to Next (meta-enrich).
 - Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
+- Test harness · 2026-10-09 · F-012
+- Add by DOI / arXiv / link · 2026-10-09 · F-011
+- Themed item action menu · 2026-10-09 · F-010
 - My publications section · 2026-10-09 · F-009
 - Brand refresh (dot-ring mark, icon, animated splash) · 2026-10-09 · F-008
 - PDF viewer and annotator · 2026-10-09 · F-007
@@ -306,11 +354,18 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - PDF bytes are written only to the stored copy or a path the user picks in a save dialog. Annotated docs read only their stored copy.
 - Theming goes only through `nativeTheme.themeSource`. CSS reacts to `prefers-color-scheme`; never add per-page theme classes.
 - Brand artwork lives in `renderer/assets/brand/` with `-light`/`-dark` variants.
+- Network access only in `main.js`, only on explicit user action, never at startup or in the background; every online feature needs an offline path (D-009).
+- Item actions go through the in-app `openMenu`; don't reintroduce native `fl.popup` menus.
+- Run `npm test` before merging; update the snapshot in `test/core.test.js` only for intended extraction changes.
 
 ## 11. Tech debt & open questions
 | Item | Impact | Introduced by | Suggested fix |
 |---|---|---|---|
-| No automated tests | Extraction regressions go unnoticed | F-001 | Node test running `analyzePdf` on fixture PDFs |
+| ~~No automated tests~~ Revised 2026-10-09: F-012 added `npm test`. Coverage is thin (one fixture; no UI or fetch tests) | Some extraction paths unguarded | F-001 | Second fixture PDF; run tests in CI |
+| DNS failure (`ERR_NAME_NOT_RESOLVED`) is reported as "offline" | A mistyped link says "You're offline" | F-011 | Use `navigator.onLine` to tell offline from an unreachable host |
+| Some publishers (nature.com) bot-wall Chromium's network stack | Open-access DOIs can fail | F-011 | Unpaywall / alternate-location lookup (fits meta-enrich) |
+| `menu:popup` IPC unused; PDF menu says "Annotate", reader says "View" | Dead code; inconsistent wording | F-010 / F-009 | Remove the channel; rename the menu item |
+| Test launches hit the single-instance lock and `--user-data-dir` doesn't move `userData` | Can't test while the real app is open | — | Dev-only env override for the userData path |
 | Whole DB (including all results) saved on every change | Slow saves with large libraries | F-001 / D-002 | Split results per doc or move to SQLite |
 | `saveDb` errors are only logged | Silent data loss is possible | F-001 | Surface failures to the renderer as a toast |
 | Unsigned builds | OS warnings on install | F-001 | Sign and notarise in CI |
@@ -324,7 +379,7 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 ## 12. Resume checklist
 1. Read this file, then [docs/atlas/ATLAS.md](atlas/ATLAS.md).
 2. `npm install && npm start` (Node 18+). Try "Try a sample PDF" on an empty library, then "Annotate". When launching from a VS Code terminal, unset `ELECTRON_RUN_AS_NODE` first.
-3. Tests: none yet.
+3. Tests: `npm test` (Node ≥ 21). See `test/README.md`.
 4. Build: `npm run dist:win|mac|linux`, or push a `v*` tag for CI.
 5. User data lives at `<userData>/library` (*File → Show Library Folder*).
 6. After a feature: run codebase-atlas `sync`, then project-compass `log`.
