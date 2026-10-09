@@ -28,6 +28,7 @@
   "build": {
     "appId": "app.faelights.desktop",
     "productName": "Faelights",
+    "npmRebuild": false,
     "files": [
       "src/**",
       "renderer/**",
