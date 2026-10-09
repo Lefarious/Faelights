@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-09 · Last logged commit: c5c0dbe · Version: 1.0.0 (unreleased changes on main)
+> Last updated: 2026-10-09 · Last logged commit: e4be24f · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into local `main`, not yet pushed: a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). Installers are built in CI but not published. Next: online metadata lookup (meta-enrich, Sprint 2).
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into `main` (pushed 2026-10-09): a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). A follow-up fix put Add PDFs buttons in the PDF list header and left-aligned the reader toolbar (F-013, pushed). Installers are built in CI but not published. Next: online metadata lookup (meta-enrich, Sprint 2).
 
 ## 2. Vision & scope
 - **Goals:**
@@ -134,7 +134,15 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Annotator keys:** V/H/U/S/N/D pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
-### F-012 · Test harness and extraction snapshot tests · 2026-10-09 · shipped to local main (c6748e9, not pushed)
+### F-013 · Add PDFs from the list header; left-aligned reader toolbar · 2026-10-09 · shipped (e4be24f, pushed)
+- **Why:** once a library had PDFs, the only add buttons were in the sidebar, which can be hidden. The reader toolbar also started at the right edge, away from the meta row above it.
+- **How:** the PDF list header gets icon buttons for "Add PDFs" and "Add from DOI or link" beside the hide-pane button, in every view. The reader toolbar's leading spacer was removed, so View, Info, the mode switch, format, Copy and Export start from the left.
+- **Touched:** [renderer-ui](atlas/modules/renderer-ui.md)
+- **Added:** CSS class `.head-acts`; removed `.r-tools .sp`. No IPC, dependencies or data changes.
+- **Verified:** `npm test` 23/23 on the branch and on `main`; the user checked it in the running app on the branch (gate 1) and on `main` (gate 2).
+- **Commit range:** 9a24fec (branch `fix/list-add-and-reader-tools`), merged in e4be24f
+
+### F-012 · Test harness and extraction snapshot tests · 2026-10-09 · shipped (c6748e9, pushed)
 - **Why:** there were no automated tests, so merges (especially parallel ones) were checked blind.
 - **How:** `npm test` runs Node's built-in test runner over `test/**/*.test.js`, with no new dependencies. A helper loads PDFs in Node through pdf.js's legacy build. `core.test.js` snapshots `analyzePdf` on `renderer/sample.pdf` (pages, marks, every entry, topics, analyzer version, known phrases).
 - **Touched:** [tests](atlas/modules/tests.md), [packaging](atlas/modules/packaging.md)
@@ -144,7 +152,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Known limits / follow-ups:** the sample covers only highlights and font-size headings; underline/strike/squiggly, outline and wording-based topics and loose marks need a second fixture. Not yet run in CI.
 - **Commit range:** 9d85bfa (branch `test/s1-test-harness`), merged in c6748e9
 
-### F-011 · Add PDFs by DOI, arXiv ID or link (offline-safe) · 2026-10-09 · shipped to local main (c5c0dbe, not pushed)
+### F-011 · Add PDFs by DOI, arXiv ID or link (offline-safe) · 2026-10-09 · shipped (c5c0dbe, pushed)
 - **Why:** papers are usually found as a DOI or a link, not a file on disk; the user wanted to add them directly instead of downloading by hand first.
 - **How:**
   - A dialog (link button beside Add PDFs, File menu, paste, or link drop) recognises DOIs, arXiv IDs (new and old), PubMed Central IDs and http(s) links as you type.
@@ -158,7 +166,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Known limits / follow-ups:** a mistyped hostname reports "offline" (DNS failure is treated as offline); nature.com serves a bot challenge to Chromium, so some open-access DOIs fail; no metadata lookup yet (Sprint 2: meta-enrich).
 - **Commit range:** 1df4dc9..3c94833 (branch `feature/s1-add-by-identifier`), merged in c5c0dbe
 
-### F-010 · Themed item action menu · 2026-10-09 · shipped to local main (f576105, not pushed)
+### F-010 · Themed item action menu · 2026-10-09 · shipped (f576105, pushed)
 - **Why:** library and PDF actions were plain native OS menus, only reachable by right-click, and didn't match the app's look.
 - **How:** a reusable in-app popover menu replaces the native popup for the library menu, the PDF menu and the reader's library picker. Items have icons, groups, a red style for destructive actions (listed last), ✓ for checked items, submenus (Move to), and shortcut hints only where the shortcut applies. A ⋯ button appears on library rows and PDF cards on hover, focus or when current; right-click, Shift+F10 and the ContextMenu key open the same menu. Full keyboard support and ARIA menu roles.
 - **Touched:** [renderer-ui](atlas/modules/renderer-ui.md)
@@ -319,7 +327,7 @@ Context: F-011 needs the final URL after redirects to resolve relative PDF links
 ## 9. Roadmap & deployment plan
 No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
 ### Now
-- Push Sprint 1 (F-010, F-011, F-012) to GitHub after the user's second OK.
+- Nothing in progress. Sprint 2 (meta-enrich) is planned.
 ### Next
 - meta-enrich (Sprint 2): fill and refresh Info fields from CrossRef (DOI) and the arXiv API, on add-by-DOI/link and on demand from the Info card; optional, never blocks add/open, cached in `meta` so it shows offline (D-009). Depends on F-011.
 - Second test fixture PDF (underline/strike/squiggly, outline and wording topics, loose marks); run `npm test` in CI.
@@ -330,6 +338,7 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - Editable Info fields; metadata in export frontmatter (follow-up to F-006). Online lookup moved to Next (meta-enrich).
 - Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
+- Add buttons in the PDF list header; left-aligned reader toolbar · 2026-10-09 · F-013
 - Test harness · 2026-10-09 · F-012
 - Add by DOI / arXiv / link · 2026-10-09 · F-011
 - Themed item action menu · 2026-10-09 · F-010
