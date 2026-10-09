@@ -1,5 +1,5 @@
 # Module: renderer-ui
-> Path: renderer/ (app.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: c6424a0 · Related features: F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008
+> Path: renderer/ (app.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: c6424a0 · Related features: F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008, F-009
 
 ## Purpose
 This is the whole user interface plus the splash page and brand artwork. It holds app state (`S`), renders the three panes (library sidebar, PDF list, extract reader) and the search view, and formats exports. It drives PDF import, rescan and analysis by combining `window.fl` (OS access) with `analyzePdf` (extraction). It does not touch the filesystem directly.
