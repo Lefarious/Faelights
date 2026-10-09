@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-09 · Last logged commit: 1b3b232 · Version: 1.0.0 (unreleased changes on main)
+> Last updated: 2026-10-09 · Last logged commit: 8d525a2 · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006, on branch `feature/pdf-metadata-panel`). There are no automated tests, and installers are built in CI but not published.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. There are no automated tests, and installers are built in CI but not published.
 
 ## 2. Vision & scope
 - **Goals:**
@@ -120,7 +120,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Motion:** the brand SVGs pulse and the splash fades in; both stop under `prefers-reduced-motion`.
 
 ## 7. Feature log (newest first)
-### F-006 · PDF info panel (Zotero-style metadata) · 2026-10-09 · shipped (on branch)
+### F-006 · PDF info panel (Zotero-style metadata) · 2026-10-09 · shipped (merged to main 8d525a2)
 - **Why:** users wanted to see a paper's bibliographic details (authors, DOI, publication, dates) next to its highlights, like Zotero's Info pane, without leaving the app.
 - **How:**
   - Metadata is read from the PDF itself: XMP (Dublin Core and PRISM fields) first, then the Info dictionary, then a regex scan of page 1 for a DOI and an arXiv id. File details (version, creation/modification dates, creator app, producer) come from the same read.
@@ -133,7 +133,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Known limits / follow-ups:** optional online lookup by DOI/arXiv id; editable fields; include metadata as frontmatter in exports; "Copy citation".
 - **Commit range:** 7175816..1b3b232
 
-### F-005 · Resizable, collapsible columns and better scrollbars · 2026-10-09 · shipped (on branch)
+### F-005 · Resizable, collapsible columns and better scrollbars · 2026-10-09 · shipped (merged to main 7175816)
 - **Why:** fixed column widths wasted space on wide screens and crowded the reader on small ones; long topic lists in the sticky rail were cut off; default scrollbars looked heavy.
 - **How:**
   - Column widths and hidden flags live in `settings.layout` and are applied as CSS variables and classes on the app grid. Toggling a column only flips a class, so nothing re-renders and scroll positions survive.
@@ -145,7 +145,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Added:** `settings.layout`; menu channels `pane:side`, `pane:list`, `pane:rail`, `layout-reset`. No dependencies.
 - **Trade-offs:** layout is stored in the library DB (saved on drag end), not a separate file like the theme, since it isn't needed before first render (→ D-007). The 1100 px / 1250 px media queries were replaced by a width-borrowing rule and a container query.
 - **Verified:** over DevTools Protocol in an isolated user-data dir: drag resize, drag-to-collapse (reopens at the previous width), strip and hide buttons with focus handoff, keyboard resize/toggle, double-click reset, search view hiding the list handle, persistence across reload. The menu accelerators weren't exercised (synthetic key events don't reach the native menu).
-- **Commit range:** 312784a (branch `feature/resizable-columns`)
+- **Commit range:** 312784a..fbf49b1, merged in 7175816
 
 ### F-004 · Light / dark / system theme toggle · 2026-10-09 · shipped
 - **Why:** let users override the OS appearance, for example reading in light mode on a dark-themed system.
