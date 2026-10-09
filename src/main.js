@@ -1,11 +1,12 @@
 // Faelights — main process
 // Owns the library file on disk, file dialogs, native menus and file access.
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeTheme, session, net } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, nativeTheme, session, net } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const fsp = fs.promises;
 const crypto = require("crypto");
 const { parseIdentifier, parseIdentifiers, describe, findPdfLink, isPdf, fileNameFor, fetchFailureReason } = require("./identify");
+const { lookupTarget, fromCrossref, fromArxivAtom } = require("./metadata");
 const exportPaths = require("./exportPaths");
 
 const DATA_DIR = () => path.join(app.getPath("userData"), "library");
@@ -223,7 +224,7 @@ async function importPdf(srcPath) {
 ipcMain.handle("pdf:import", (_e, srcPath) => importPdf(srcPath));
 
 /* ---------------- add from DOI / link ---------------- */
-// The only code that touches the network, and only when the user asks for a paper (no background calls).
+// The only code that touches the network, and only when the user asks for a paper or its details (no background calls).
 // Requests go through an in-memory session so publisher cookies never mix with the app's own session; it still uses the system proxy.
 const FETCH_HEAD_MS = 15000, FETCH_STALL_MS = 30000, MAX_PDF = 150 * 1024 * 1024, MAX_HTML = 5 * 1024 * 1024;
 let fetchSes = null, fetchCtl = null;
@@ -233,12 +234,13 @@ const sendProgress = p => { if (win && !win.isDestroyed()) win.webContents.send(
 // GET one http(s) URL, streaming the body with a size cap and a no-progress timeout.
 // net.request (Chromium's stack: system proxy, session cookies) with manual redirects, so every hop is checked
 // to be http(s) and the final URL is known (session.fetch leaves Response.url empty).
+// opts.signal: cancels the request (default: the current PDF download's); opts.quiet: no fetch-progress events.
 const header = (res, k) => { const v = res.headers[k]; return String((Array.isArray(v) ? v[0] : v) || ""); };
-function fetchUrl(url, accept, maxBytes) {
+function fetchUrl(url, accept, maxBytes, opts = {}) {
   return new Promise((resolve, reject) => {
     if (!/^https?:\/\//i.test(url)) return reject(new FetchFail("invalid"));
     fetchSes = fetchSes || session.fromPartition("faelights-fetch");
-    const outer = fetchCtl.signal;
+    const outer = opts.signal || fetchCtl.signal;
     let finalUrl = url, hops = 0, settled = false, timer = null;
     const req = net.request({ url, session: fetchSes, useSessionCookies: true, redirect: "manual" });
     req.setHeader("User-Agent", `Faelights/${app.getVersion()} (desktop PDF highlights app)`);
@@ -271,7 +273,7 @@ function fetchUrl(url, accept, maxBytes) {
         if (settled) return;
         arm(FETCH_STALL_MS); got += c.length; chunks.push(c);
         if (got > cap) return done(new FetchFail(html ? "not-pdf" : "too-large"));
-        if (!html && got > 65536) sendProgress({ stage: "download", got, total: len });
+        if (!html && !opts.quiet && got > 65536) sendProgress({ stage: "download", got, total: len });
       });
       res.on("end", () => done(null, { url: finalUrl, type, html, buf: Buffer.concat(chunks) }));
       res.on("error", e => done(new FetchFail(fetchFailureReason(e))));
@@ -383,6 +385,36 @@ ipcMain.handle("pdf:fetch", async (_e, text) => {
   }
 });
 ipcMain.handle("pdf:fetchCancel", () => { if (fetchCtl) fetchCtl.abort(); return true; });
+
+// Bibliographic details for one paper, from {doi, arxiv, origin} (CrossRef for a DOI, else the arXiv API)
+// → {ok, meta, source, id} | {ok: false, reason}. Own cancel signal, so it never interrupts (or is interrupted by)
+// a PDF download; capped at 20 s overall.
+const META_MS = 20000;
+ipcMain.handle("meta:lookup", async (_e, q = {}) => {
+  const str = v => typeof v === "string" ? v.slice(0, 300) : "";
+  const origin = q.origin && { kind: str(q.origin.kind), value: str(q.origin.value) };
+  const t = lookupTarget({ doi: str(q.doi), arxiv: str(q.arxiv) }, origin);
+  if (!t) return { ok: false, reason: "invalid" };
+  const id = t.id;
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), META_MS);
+  const opts = { signal: ctl.signal, quiet: true };
+  try {
+    let meta;
+    if (t.source === "crossref") {
+      const r = await fetchUrl("https://api.crossref.org/works/" + encodeURIComponent(id), "application/json", MAX_HTML, opts);
+      try { meta = fromCrossref(JSON.parse(r.buf.toString("utf8"))); } catch (_) { throw new FetchFail("network"); }
+    } else {
+      const r = await fetchUrl("https://export.arxiv.org/api/query?id_list=" + encodeURIComponent(id), "application/atom+xml", MAX_HTML, opts);
+      meta = fromArxivAtom(r.buf.toString("utf8"));
+    }
+    if (!meta || !meta.title) return { ok: false, reason: "not-found" };
+    return { ok: true, meta, source: t.source, id };
+  } catch (err) {
+    if (!(err instanceof FetchFail)) console.error("metadata lookup failed", err);
+    const reason = err instanceof FetchFail ? err.reason : "network";
+    return { ok: false, reason: reason === "cancelled" ? "network" : reason };   // our own timeout
+  } finally { clearTimeout(timer); }
+});
 ipcMain.handle("id:parse", (_e, text) => { const id = parseIdentifier(text); return id && { ...id, label: describe(id) }; });
 ipcMain.handle("id:parseMany", (_e, text) => parseIdentifiers(text).slice(0, 200).map(({ text, id }) => ({ text, id: id && { ...id, label: describe(id) } })));
 ipcMain.handle("app:openExternal", (_e, url) => {
@@ -490,6 +522,12 @@ ipcMain.handle("export:folder", async (_e, { folderName, files, assets }) => {
 ipcMain.handle("export:openFolder", async (_e, p) => { shell.openPath(p); return true; });
 
 ipcMain.handle("clip:write", (_e, text) => { clipboard.writeText(text); return true; });
+// PNG bytes of a captured image (renderer Images.png) → clipboard as an image
+ipcMain.handle("clip:image", (_e, bytes) => {
+  const img = nativeImage.createFromBuffer(Buffer.from(bytes || []));
+  if (img.isEmpty()) return false;
+  clipboard.writeImage(img); return true;
+});
 
 // Native context menu: renderer sends items, gets back the chosen id
 ipcMain.handle("menu:popup", (_e, items) => new Promise(resolve => {
