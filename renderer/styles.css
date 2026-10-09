@@ -47,6 +47,9 @@ button, select, input { font: inherit; color: inherit; }
 .brand { display: flex; align-items: center; gap: 4px; padding: 16px 18px 10px; }
 .brand-mark, .blank-mote, .drop-mote { display: block; flex: none; }
 .brand-mark img { width: 34px; height: 34px; display: block; margin: -4px -4px -4px -6px; }
+.brand .theme-btn { margin-left: auto; border: 0; background: none; color: var(--muted); padding: 6px; border-radius: 7px; cursor: pointer; display: grid; place-items: center; }
+.brand .theme-btn:hover { color: var(--ink); background: var(--sel); }
+.brand .theme-btn .ico { width: 17px; height: 17px; }
 .brand h1 { font-family: var(--font-display); font-weight: 400; font-size: 22px; margin: 0 0 2px; letter-spacing: -.01em; }
 .side .add { margin: 4px 14px 14px; justify-content: center; }
 .side-scroll { overflow-y: auto; flex: 1; padding: 0 8px 16px; }
