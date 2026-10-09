@@ -245,3 +245,13 @@ kbd { font-family: var(--font-ui); font-size: 11.5px; border: 1px solid var(--li
 .drop-mote img { width: 52px; height: 52px; display: block; }
 .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 500; z-index: 30; max-width: 80vw; }
 @media (prefers-reduced-motion: reduce) { .ex.flash { animation: none; } * { transition: none !important; } }
+
+/* ---------- info card (above extracts) ---------- */
+.info-btn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.info .label { margin: 18px 0 4px; }
+.info-grid { display: grid; grid-template-columns: minmax(84px, max-content) minmax(0, 1fr); gap: 0 18px; margin: 8px 0 0; max-width: 78ch; font-size: 13.5px; }
+.info-grid dt, .info-grid dd { padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.info-grid dt { color: var(--muted); text-align: right; font-size: 12.5px; padding-top: 6px; }
+.info-grid dd { margin: 0; overflow-wrap: anywhere; user-select: text; }
+.info-grid dd.abstract { font-family: var(--font-read); font-size: 15px; line-height: 1.55; max-height: 9.3em; overflow-y: auto; }
+.info-grid a { color: var(--accent); text-underline-offset: 2px; }

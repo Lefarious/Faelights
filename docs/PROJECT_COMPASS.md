@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-09 · Last logged commit: 312784a · Version: 1.0.0 (unreleased changes on main)
+> Last updated: 2026-10-09 · Last logged commit: 1b3b232 · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005, on branch `feature/resizable-columns`). There are no automated tests, and installers are built in CI but not published.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006, on branch `feature/pdf-metadata-panel`). There are no automated tests, and installers are built in CI but not published.
 
 ## 2. Vision & scope
 - **Goals:**
@@ -103,8 +103,9 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
   Splash (frameless 440×280): mark + wordmark + "Gathering your highlights…"
   ├── Sidebar: brand (mark + wordmark) · Add PDFs · Search / All PDFs / Starred · Libraries (+ new) · Tags · footer (stale count, Rescan · theme icon switch)
   ├── List: view title · filter box · sort · progress meter · PDF cards (marks, pages, colour swatches, Changed / Original moved)
-  └── Reader: title (click to rename) · library/star/tags · Full/Only toggle · format select · Copy · Export
+  └── Reader: title (click to rename) · library/star/tags · Info toggle · Full/Only toggle · format select · Copy · Export
                ├── Rail (own scroll, resizable, hideable): colour filter chips · Topics TOC
+               ├── Info card (when toggled on): Zotero-style fields (type, title, authors, abstract, publication, DOI/arXiv links…) + File details
                └── Groups by topic → extracts (page, quote, notes, copy-one)
   Search view (list pane hidden): query · library scope · mode toggle → results by PDF, click to jump
   Empty states: mote + onboarding with "Try a sample PDF" + shortcut legend
@@ -119,6 +120,19 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Motion:** the brand SVGs pulse and the splash fades in; both stop under `prefers-reduced-motion`.
 
 ## 7. Feature log (newest first)
+### F-006 · PDF info panel (Zotero-style metadata) · 2026-10-09 · shipped (on branch)
+- **Why:** users wanted to see a paper's bibliographic details (authors, DOI, publication, dates) next to its highlights, like Zotero's Info pane, without leaving the app.
+- **How:**
+  - Metadata is read from the PDF itself: XMP (Dublin Core and PRISM fields) first, then the Info dictionary, then a regex scan of page 1 for a DOI and an arXiv id. File details (version, creation/modification dates, creator app, producer) come from the same read.
+  - It is stored on each doc as `meta` during add and rescan. Docs scanned earlier get it lazily from the stored copy the first time the panel is shown, so no rescan or `ANALYZER_VERSION` bump is needed.
+  - An info icon button sits just before the Full sentence / Highlights only switch and toggles `settings.info`. The card is the first section of the extracts column; DOI/arXiv/URL open in the browser and double-clicking a value copies it.
+  - Item type is a guess: Book (ISBN), Journal Article (publication/volume/ISSN), Preprint (arXiv), else Document.
+- **Touched:** [renderer-ui](atlas/modules/renderer-ui.md)
+- **Added:** doc field `meta`; setting `settings.info`. No dependencies, IPC channels or services.
+- **Trade-offs:** offline only. Zotero fills gaps by looking DOIs/arXiv ids up online (CrossRef, arXiv API); that was left out to keep the app local-first, so PDFs with empty metadata (common for arXiv LaTeX builds) show little beyond the id and file details. Fields are read-only. The DOI scan is limited to page 1 because later pages often cite other papers' DOIs. Title fallback uses the existing `cleanTitle` filter, so the import title may now come from XMP `dc:title` before the Info `Title`.
+- **Known limits / follow-ups:** optional online lookup by DOI/arXiv id; editable fields; include metadata as frontmatter in exports; "Copy citation".
+- **Commit range:** 7175816..1b3b232
+
 ### F-005 · Resizable, collapsible columns and better scrollbars · 2026-10-09 · shipped (on branch)
 - **Why:** fixed column widths wasted space on wide screens and crowded the reader on small ones; long topic lists in the sticky rail were cut off; default scrollbars looked heavy.
 - **How:**
@@ -218,7 +232,9 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - Code signing and notarisation; publishing GitHub Releases from CI.
 - DB schema versioning and migrations, and per-doc result storage if the library grows large.
 - Move analysis off the UI thread (worker).
+- Online metadata lookup (CrossRef / arXiv) and editable Info fields; metadata in export frontmatter (follow-up to F-006).
 ### Done
+- PDF info panel · 2026-10-09 · F-006
 - Resizable, collapsible columns + scrollbars · 2026-10-09 · F-005
 - Theme toggle · 2026-10-09 · F-004
 - Brand icons, logo, splash · 2026-10-08 · F-003
