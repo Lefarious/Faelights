@@ -291,11 +291,13 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 .pv-page { position: relative; flex: none; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .18), 0 6px 18px rgb(0 0 0 / .08); }
 .pv-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .pv-over { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
-.pv[data-tool="draw"] .pv-page, .pv[data-tool="note"] .pv-page { cursor: crosshair; }
-.pv[data-tool="draw"] .textLayer, .pv[data-tool="note"] .textLayer { pointer-events: none; user-select: none; }
-.pv[data-tool="draw"] .pv-page { touch-action: none; }
+.pv:is([data-tool="draw"], [data-tool="note"], [data-tool="image"]) .pv-page { cursor: crosshair; }
+.pv:is([data-tool="draw"], [data-tool="note"], [data-tool="image"]) .textLayer { pointer-events: none; user-select: none; }
+.pv:is([data-tool="draw"], [data-tool="image"]) .pv-page { touch-action: none; }
 .pv-ink { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .pv-selbox { position: absolute; border: 2px solid var(--accent); border-radius: 4px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.pv-selbox.box { border-style: dashed; border-radius: 2px; box-shadow: none; }
+.pv-boxdraw { position: absolute; z-index: 4; pointer-events: none; border: 1.5px solid var(--c, var(--accent)); outline: 1px dashed color-mix(in srgb, var(--c, var(--accent)) 60%, #000); outline-offset: 2px; }
 .pv-noteicon { position: absolute; width: 20px; height: 20px; color: #E8B020; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .35)); }
 .pv-noteicon .ico { width: 20px; height: 20px; fill: currentColor; stroke: #3a3340; stroke-width: 1.4; }
 
