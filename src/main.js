@@ -166,6 +166,12 @@ function buildAppMenu() {
     { label: "View", submenu: [
       { label: "Search All Highlights", accelerator: "CmdOrCtrl+F", click: send("search") },
       { label: "Toggle Full Sentence / Highlights Only", accelerator: "CmdOrCtrl+T", click: send("toggle-mode") },
+      { type: "separator" },
+      { label: "Show / Hide Sidebar", accelerator: "CmdOrCtrl+B", click: send("pane:side") },
+      { label: "Show / Hide PDF List", accelerator: "CmdOrCtrl+Shift+B", click: send("pane:list") },
+      { label: "Show / Hide Topics", accelerator: "CmdOrCtrl+Alt+B", click: send("pane:rail") },
+      { label: "Reset Column Widths", click: send("layout-reset") },
+      { type: "separator" },
       { label: "Theme", submenu: THEMES.map(t => ({ label: t[0].toUpperCase() + t.slice(1), type: "radio", checked: nativeTheme.themeSource === t, click: () => applyTheme(t) })) },
       { type: "separator" },
       { role: "reload" }, { role: "toggleDevTools" }, { type: "separator" },

@@ -1,5 +1,5 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-09 · Synced at commit: 5a2c5e0
+> Last synced: 2026-10-09 · Synced at commit: 312784a
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
@@ -63,6 +63,9 @@ per page: `getTextContent()` + `getAnnotations()` → keep Highlight/Underline/S
 Reader "Export" / menu `export-doc` → `exportDoc(d)` → `docText(d, fmt, frontmatter)` (uses `groupsOf`, `entryLines`, `settings.mode`) → `fl.exportFile` → IPC `export:file` save dialog → write.
 Library menu / menu `export-library` → `exportLibrary(id)` → per-doc `docText(..., frontmatter=true)` with de-duplicated `safeName`s → `fl.exportFolder` → IPC `export:folder` directory picker → writes `<dir>/<library name>/*.md|.txt` → `fl.openFolder`.
 
+### Column resize / collapse
+Pointer down on a `.resizer[data-pane]` (window-level listener in `app.js`) → `pointermove` sets `layout()[pane].w` (clamped to `PANES` min/max) or `closed` when dragged below ~half the minimum → `applyLayout()` writes `--side-w/--list-w/--rail-w` and `*-closed` classes on `#app` (borrowing width from list then sidebar so the reader keeps `READER_MIN`) → `pointerup` → `save()`. Hide buttons (`paneBtn`), strips (`strip`), focused-handle keys (`resizerKey`), double-click (reset one pane) and menu `pane:*` / `layout-reset` all end in `togglePane()` / `resetLayout()` → `applyLayout()` + `save()`. No pane re-renders.
+
 ### Theme change
 Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → `fl.setTheme(t)` → IPC `theme:set` → `main.js applyTheme(t)` sets `nativeTheme.themeSource`, `setBackgroundColor` on every window, writes `userData/theme.json`, rebuilds the menu, pushes `theme` → `fl.onTheme` → `S.theme`, `renderSide()`. View → Theme radio items call `applyTheme` directly. All styling and `<picture>` brand art react through `prefers-color-scheme`.
 
@@ -74,7 +77,7 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | IPC invoke | `export:file`, `export:folder`, `export:openFolder`, `clip:write`, `menu:popup`, `ask:confirm` | `preload.js` | `main.js` |
 | IPC invoke | `theme:get`, `theme:set` | `preload.js` | `main.js` |
 | IPC send (renderer → main) | `app:ready` | `app.js boot()` via `fl.ready()` | `main.js revealMain()` |
-| IPC push | `menu` (payloads: `add`, `new-library`, `export-doc`, `export-library`, `rescan-all`, `search`, `toggle-mode`) | `main.js buildAppMenu()` | `app.js fl.onMenu` handler |
+| IPC push | `menu` (payloads: `add`, `new-library`, `export-doc`, `export-library`, `rescan-all`, `search`, `toggle-mode`, `pane:side`, `pane:list`, `pane:rail`, `layout-reset`) | `main.js buildAppMenu()` | `app.js fl.onMenu` handler |
 | IPC push | `open-files` | `main.js` `second-instance` / `open-file` | `app.js fl.onOpenFiles` → `addPaths` |
 | IPC push | `theme` (`system`/`light`/`dark`) | `main.js applyTheme()` | `app.js fl.onTheme` |
 | Persisted file | `userData/theme.json` (`{theme}`) | `main.js applyTheme` | `main.js loadTheme` at startup |
@@ -90,6 +93,8 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | Brand asset paths | `assets/brand/{mark,mote}-{light,dark}.svg`, `favicon-*.ico`, `app-icon.png` | files in `renderer/assets/brand/` | `app.js brandImg()`, `index.html`, `splash.html`, `main.js ICON` |
 | Media query | `prefers-color-scheme` | `nativeTheme.themeSource` (main) | `styles.css`, `splash.html`, `<picture>` sources |
 | Settings keys | `settings.mode` (`full`/`only`), `fmt` (`md`/`obsidian`/`plain`), `sort` (`added`/`title`/`count`) | `main.js EMPTY_DB` defaults | `app.js` reader, export, list |
+| Settings key | `settings.layout` (`{side,list,rail: {w, closed}}`; no main default, filled by `app.js layout()`) | `app.js` drag / toggle / `resetLayout` | `app.js applyLayout()` |
+| CSS vars + classes on `#app` | `--side-w`, `--list-w`, `--rail-w`; `side-closed`, `list-closed`, `rail-closed`, `wide` | `app.js applyLayout()`, `renderList()` | `styles.css` grid, strips, `.app > .resizer` positions |
 | Env vars | none read | — | — |
 
 ## Conventions

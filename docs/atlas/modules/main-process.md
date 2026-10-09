@@ -1,5 +1,5 @@
 # Module: main-process
-> Path: src/main.js · Last synced commit: 5a2c5e0 · Related features: F-001, F-003, F-004
+> Path: src/main.js · Last synced commit: 312784a · Related features: F-001, F-003, F-004, F-005
 
 ## Purpose
 This is the Electron main process. It owns the on-disk library (`faelights.json` plus copied PDFs), the splash and main windows, the theme, the native app menu, native dialogs, context-menu popups, shell actions and the clipboard. It does not parse PDFs or hold UI state. The renderer sends the whole DB object and this module persists it as-is.
@@ -21,7 +21,7 @@ IPC handlers, called only through `preload.js`:
 - `theme:get` → `"system"|"light"|"dark"`; `theme:set(t)` → applies and returns the theme
 - `app:ready` (one-way `ipcMain.on`) → `revealMain()`
 
-Pushes to the renderer: `menu` (channel strings), `open-files` (path arrays) and `theme`.
+Pushes to the renderer: `menu` (channel strings; View menu adds `pane:side`, `pane:list`, `pane:rail`, `layout-reset`), `open-files` (path arrays) and `theme`.
 
 ## Dependencies
 - **Uses:** electron (`app`, `BrowserWindow`, `ipcMain`, `dialog`, `shell`, `Menu`, `clipboard`, `nativeTheme`), node `fs`, `path`, `crypto`
