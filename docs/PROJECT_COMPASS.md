@@ -2,7 +2,7 @@
 > Last updated: 2026-10-09 · Last logged commit: c6424a0 · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09 (not yet pushed). There are no automated tests, and installers are built in CI but not published.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything is pushed to GitHub. There are no automated tests, and installers are built in CI but not published.
 
 ## 2. Vision & scope
 - **Goals:**
@@ -107,9 +107,9 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
   ```
   Window (3-pane grid; every column resizable by drag and hideable to a slim labelled strip)
   Splash (frameless 440×280): animated lockup (dots appear, mote blooms, wordmark writes in) + "Gathering your highlights…"
-  ├── Sidebar: brand (mark + wordmark) · Add PDFs · Search / All PDFs / Starred · Libraries (+ new) · Tags · footer (stale count, Rescan · theme icon switch)
+  ├── Sidebar: brand (mark + wordmark) · Add PDFs · Search / All PDFs / Starred / My publications · Libraries (+ new) · Tags · footer (stale count, Rescan · theme icon switch)
   ├── List: view title · filter box · sort · progress meter · PDF cards (marks, pages, colour swatches, Changed / Original moved)
-  └── Reader: title (click to rename) · Annotate · open-in-app · ⋯ · library/star/tags · Info toggle · Full/Only toggle · format select · Copy · Export
+  └── Reader: title (click to rename) · open-in-app · ⋯ · library/star/tags · View (opens the annotator) · Info toggle · Full/Only toggle · format select · Copy · Export
                ├── Rail (own scroll, resizable, hideable): colour filter chips · Topics TOC
                ├── Info card (when toggled on): Zotero-style fields (type, title, authors, abstract, publication, DOI/arXiv links…) + File details
                └── Groups by topic → extracts (page → opens viewer at that page, quote, notes, copy-one)
@@ -130,6 +130,15 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Annotator keys:** V/H/U/S/N/D pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
+### F-009 · "My publications" section · 2026-10-09 · shipped (merged to main from `feature/my-publications`)
+- **Why:** the user wanted a sidebar section for their own papers, under Starred.
+- **How:** a `mine` flag on each doc, working like the star. "My publications" sits in the sidebar under Starred, with a count, and shows only those docs. A PDF is marked from a reader-header toggle ("Mark as mine" / "My publication"), from its ⋯ menu, or by dragging it onto the sidebar item. The section has its own empty state.
+- **Touched:** [renderer-ui](atlas/modules/renderer-ui.md)
+- **Added:** doc field `mine`; view kind `mine`. No dependency, IPC or migration (a missing field reads as false).
+- **Trade-offs:** a flag rather than a library, so a paper can stay in a topic library and also be listed as yours. It isn't detected from metadata (author names); the user marks papers by hand.
+- **Verified:** over DevTools Protocol: sidebar item and count, empty state, mark and unmark from the reader toggle, filtered list.
+- **Known limits / follow-ups:** no bulk marking; not yet a search scope or an export filter.
+
 ### F-008 · Brand refresh: dot-ring mark, app icon and animated splash · 2026-10-09 · shipped (merged to main b9848fb)
 - **Why:** the user supplied new brand files: a mark redrawn as a ring of dots around a glowing mote, matching favicons, and an animated splash lockup.
 - **How:**
@@ -156,6 +165,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Not verified:** the Download / Save dialogs (native dialogs can't be driven over CDP), the "Discard annotations" flow, encrypted or malformed PDFs (read-only fallback), rotated pages, large PDFs (performance), opening the output in Acrobat or Preview.
 - **Known limits / follow-ups:** no typed text boxes (FreeText), shapes or eraser; Ink and Text notes aren't extracted (core.js reads markup only); no "save back to original"; undo history is lost when the viewer closes; the green swatch buckets separately from the sample's green in the colour filter.
 - **Commit range:** a6750ae (branch `feature/pdf-annotator`)
+- **Revised 2026-10-09:** at the user's request, the reader's "Annotate" button (title area) became a "View" button with an eye icon, moved into the toolbar row just left of the Info button (branch `feature/view-button`).
 
 ### F-006 · PDF info panel (Zotero-style metadata) · 2026-10-09 · shipped (merged to main 8d525a2)
 - **Why:** users wanted to see a paper's bibliographic details (authors, DOI, publication, dates) next to its highlights, like Zotero's Info pane, without leaving the app.
@@ -275,6 +285,7 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - Online metadata lookup (CrossRef / arXiv) and editable Info fields; metadata in export frontmatter (follow-up to F-006).
 - Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
+- My publications section · 2026-10-09 · F-009
 - Brand refresh (dot-ring mark, icon, animated splash) · 2026-10-09 · F-008
 - PDF viewer and annotator · 2026-10-09 · F-007
 - PDF info panel · 2026-10-09 · F-006
