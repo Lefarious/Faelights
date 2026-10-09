@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-09 · Last logged commit: a6750ae · Version: 1.0.0 (unreleased changes on main)
+> Last updated: 2026-10-09 · Last logged commit: c6424a0 · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. There are no automated tests, and installers are built in CI but not published.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) is on branch `feature/new-icon-and-splash`, awaiting review. There are no automated tests, and installers are built in CI but not published.
 
 ## 2. Vision & scope
 - **Goals:**
@@ -97,16 +97,16 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Data migrations:** none. `loadDb` only adds a missing Inbox and missing settings defaults. The DB has `version: 1`, but nothing reads it yet.
 - **Rollback:** reinstall the previous installer. User data in `userData/library` is untouched by install and uninstall (unverified for the NSIS uninstaller).
 - **Secrets:** none.
-- **App icon:** `build/icon.png` (the brand mark on a dark rounded tile, F-003) is used for all three platforms through `directories.buildResources: build`.
+- **App icon:** `build/icon.png` (the brand mark on a dark rounded tile, F-003; redrawn with the dot-ring mark in F-008) is used for all three platforms through `directories.buildResources: build`.
 - **Local Windows build note:** on this machine (Node 26), `electron`'s postinstall did not extract its binary, so it was unzipped by hand. Build with `npx electron-builder --win --config.electronDist=node_modules/electron/dist` to avoid re-downloading Electron.
 
 ## 6. UI & UX
 - **Design system:** CSS custom properties in `renderer/styles.css`, with a light palette (lavender-grey background, amber accent `#B8721A`, glow `#F4B23E`) and a dark palette through `prefers-color-scheme`. The user picks System, Light or Dark (F-004), which sets the media query app-wide. Fonts: Young Serif for display, Figtree for UI, Newsreader for reading text. Highlight marks use the PDF annotation's own colour at reduced alpha.
-- **Brand:** a lowercase "faelights" wordmark (Young Serif) next to the **mark** (a highlight stroke plus a glowing mote). The **mote** alone is used for small accents. Every asset has light and dark variants in `renderer/assets/brand/`. The app icon is the mark on a dark rounded tile.
+- **Brand:** a lowercase "faelights" wordmark (Young Serif) next to the **mark** (a ring of small dots with one glowing mote; until F-008 it was a highlight stroke plus a mote). The **mote** alone is used for small accents. Every asset has light and dark variants in `renderer/assets/brand/`. The app icon is the mark on a dark rounded tile.
 - **Screen map:**
   ```
   Window (3-pane grid; every column resizable by drag and hideable to a slim labelled strip)
-  Splash (frameless 440×280): mark + wordmark + "Gathering your highlights…"
+  Splash (frameless 440×280): animated lockup (dots appear, mote blooms, wordmark writes in) + "Gathering your highlights…"
   ├── Sidebar: brand (mark + wordmark) · Add PDFs · Search / All PDFs / Starred · Libraries (+ new) · Tags · footer (stale count, Rescan · theme icon switch)
   ├── List: view title · filter box · sort · progress meter · PDF cards (marks, pages, colour swatches, Changed / Original moved)
   └── Reader: title (click to rename) · Annotate · open-in-app · ⋯ · library/star/tags · Info toggle · Full/Only toggle · format select · Copy · Export
@@ -126,10 +126,21 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Layout:** the sidebar, PDF list and topics rail can each be resized by dragging the handle at their right edge and hidden with a panel button (or Ctrl+B / Ctrl+Shift+B / Ctrl+Alt+B, View menu). A hidden column becomes a 34 px strip with a vertical label that reopens it. Dragging below the minimum snaps the column shut. Double-click a handle to reset it; View → Reset Column Widths resets all. Handles are focusable separators (←/→ resize, Enter toggles).
 - **Scrollbars:** slim rounded thumbs in the muted tone that firm up when their pane is hovered and turn accent while dragged.
 - **Responsive:** minimum window 900×560. On narrow windows the list, then the sidebar, give up width so the reader keeps at least 420 px; the topics rail hides when the reader is under 600 px.
-- **Motion:** the brand SVGs pulse and the splash fades in; both stop under `prefers-reduced-motion`.
+- **Motion:** the brand SVGs pulse; the splash lockup animates in over ~2.2 s and the splash stays up at least 2.3 s so it finishes. All of it stops under `prefers-reduced-motion`.
 - **Annotator keys:** V/H/U/S/N/D pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
+### F-008 · Brand refresh: dot-ring mark, app icon and animated splash · 2026-10-09 · shipped on branch `feature/new-icon-and-splash` (not yet merged)
+- **Why:** the user supplied new brand files: a mark redrawn as a ring of dots around a glowing mote, matching favicons, and an animated splash lockup.
+- **How:**
+  - The new mark and favicons (light and dark) replace the old ones under the same file names, so the sidebar, favicons and the `<picture>` wiring needed no code changes.
+  - The splash page now shows the designer's animated SVG lockup (mark plus outlined wordmark) in place of the HTML mark and Young Serif text.
+  - `SPLASH_MIN_MS` went from 900 ms to 2.3 s, so the wordmark finishes writing in before the main window takes over.
+  - Both app icon PNGs (1024 px for builds, 256 px for the window) were redrawn from the new dark mark on the same `#1F1C2A` rounded tile, with a throwaway Electron canvas script (no new dependency).
+- **Touched:** [renderer-ui](atlas/modules/renderer-ui.md), [main-process](atlas/modules/main-process.md), [packaging](atlas/modules/packaging.md)
+- **Added:** `renderer/assets/brand/splash-light|dark.svg`.
+- **Trade-offs:** every launch now takes at least 2.3 s. The splash SVG fades itself out between 2.9 and 4 s, so a slow library load leaves only the "Gathering…" line on screen. The mote files sent with the update were unchanged and were not replaced.
+- **Commit range:** c6424a0
 ### F-007 · PDF viewer and annotator · 2026-10-09 · shipped (merged to main from `feature/pdf-annotator`)
 - **Why:** the user wanted to view PDFs and add annotations inside Faelights, then export or download the annotated PDF, rather than switching to another reader to highlight.
 - **How:**
@@ -264,6 +275,7 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - Online metadata lookup (CrossRef / arXiv) and editable Info fields; metadata in export frontmatter (follow-up to F-006).
 - Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
+- Brand refresh (dot-ring mark, icon, animated splash) · 2026-10-09 · F-008 (on branch)
 - PDF viewer and annotator · 2026-10-09 · F-007
 - PDF info panel · 2026-10-09 · F-006
 - Resizable, collapsible columns + scrollbars · 2026-10-09 · F-005

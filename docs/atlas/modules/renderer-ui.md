@@ -1,5 +1,5 @@
 # Module: renderer-ui
-> Path: renderer/ (app.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: a6750ae · Related features: F-001, F-002, F-003, F-004, F-005, F-006, F-007
+> Path: renderer/ (app.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: c6424a0 · Related features: F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008
 
 ## Purpose
 This is the whole user interface plus the splash page and brand artwork. It holds app state (`S`), renders the three panes (library sidebar, PDF list, extract reader) and the search view, and formats exports. It drives PDF import, rescan and analysis by combining `window.fl` (OS access) with `analyzePdf` (extraction). It does not touch the filesystem directly.
@@ -60,12 +60,12 @@ graph TD
 - **Change impact:** class names are string-coupled to `el(tag, cls)` calls in `app.js`. Highlight colour reaches CSS as the `--mc` custom property (`"r g b"`).
 
 ### `renderer/splash.html`
-- **Role:** static splash page: mark `<picture>` + "faelights" wordmark + "Gathering your highlights…". Its tokens are inline and follow `prefers-color-scheme`. It has no script.
+- **Role:** static splash page: a `<picture>` of the animated lockup `splash-light|dark.svg` (dots appear, mote blooms, wordmark writes in by ~2.2 s, then fades out from 2.9 s) + "Gathering your highlights…". Its tokens are inline and follow `prefers-color-scheme`. It has no script.
 - **Used by:** `main.js createSplash()`
 - **Change impact:** the colours duplicate `styles.css` `--bg/--ink/--muted` and `main.js themeBg()`.
 
 ### `renderer/assets/brand/`
-- **Role:** brand files: `mark-light|dark.svg` (logo with pulsing halo), `mote-light|dark.svg` (dot), `favicon-light|dark.ico`, and `app-icon.png` (256 px window icon, rendered from `mark-dark.svg` on a `#1F1C2A` tile)
+- **Role:** brand files: `mark-light|dark.svg` (ring of dots + mote with pulsing halo), `splash-light|dark.svg` (animated mark + outlined wordmark lockup, 1176×303), `mote-light|dark.svg` (dot), `favicon-light|dark.ico`, and `app-icon.png` (256 px window icon, rendered from `mark-dark.svg` on a `#1F1C2A` tile)
 - **Used by:** `app.js brandImg()` (sidebar mark, empty-state mote), `index.html` (drop overlay, favicons), `splash.html`, `main.js ICON`
 - **Change impact:** the SVGs carry their own CSS animation, which honours `prefers-reduced-motion`.
 

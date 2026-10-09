@@ -5,28 +5,24 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'">
 <title>Faelights</title>
 <style>
-@import url("../node_modules/@fontsource/young-serif/latin-400.css");
 @import url("../node_modules/@fontsource/figtree/latin-500.css");
 :root { --bg: #F2F0F6; --ink: #1F1B2D; --muted: #696380; color-scheme: light; }
 @media (prefers-color-scheme: dark) { :root { --bg: #14121B; --ink: #ECE8F5; --muted: #9D97B3; color-scheme: dark; } }
 html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); overflow: hidden; user-select: none; -webkit-app-region: drag; }
 body { display: grid; place-items: center; font-family: "Figtree", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-.lockup { display: flex; align-items: center; gap: 4px; animation: rise .5s ease-out both; }
-.lockup img { width: 92px; height: 92px; display: block; transform: translateY(-6px); }
-.lockup h1 { font-family: "Young Serif", Georgia, serif; font-weight: 400; font-size: 52px; letter-spacing: -.01em; margin: 0 0 6px; }
+.lockup { animation: rise .5s ease-out both; }
+.lockup img { width: 360px; height: auto; display: block; }
 p { position: fixed; bottom: 26px; left: 0; right: 0; text-align: center; margin: 0; font-size: 12.5px; color: var(--muted); letter-spacing: .02em; animation: rise .5s .15s ease-out both; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .lockup, p { animation: none; } }
 </style>
 </head>
 <body>
-<div class="lockup" role="img" aria-label="Faelights">
-  <picture>
-    <source srcset="assets/brand/mark-dark.svg" media="(prefers-color-scheme: dark)">
-    <img src="assets/brand/mark-light.svg" alt="">
-  </picture>
-  <h1>faelights</h1>
-</div>
+<!-- Animated lockup (dots gather, mote blooms, wordmark writes in); it stops under reduced motion -->
+<picture class="lockup">
+  <source srcset="assets/brand/splash-dark.svg" media="(prefers-color-scheme: dark)">
+  <img src="assets/brand/splash-light.svg" alt="Faelights">
+</picture>
 <p>Gathering your highlights…</p>
 </body>
 </html>

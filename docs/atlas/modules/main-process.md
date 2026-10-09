@@ -1,5 +1,5 @@
 # Module: main-process
-> Path: src/main.js · Last synced commit: a6750ae · Related features: F-001, F-003, F-004, F-005, F-007
+> Path: src/main.js · Last synced commit: c6424a0 · Related features: F-001, F-003, F-004, F-005, F-007, F-008
 
 ## Purpose
 This is the Electron main process. It owns the on-disk library (`faelights.json` plus copied PDFs), the splash and main windows, the theme, the native app menu, native dialogs, context-menu popups, shell actions and the clipboard. It does not parse PDFs or hold UI state. The renderer sends the whole DB object and this module persists it as-is.

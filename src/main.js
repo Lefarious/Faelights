@@ -13,7 +13,7 @@ const FILES_DIR = () => path.join(DATA_DIR(), "files");
 let win = null;
 let splash = null, splashShownAt = 0;
 const ICON = path.join(__dirname, "..", "renderer", "assets", "brand", "app-icon.png");
-const SPLASH_MIN_MS = 900;   // long enough to read, short enough not to get in the way
+const SPLASH_MIN_MS = 2300;  // lets the splash animation write in the full wordmark (~2.2 s)
 const SPLASH_MAX_MS = 8000;  // show the app even if the renderer never reports ready
 let pendingOpen = []; // PDFs passed on the command line / "Open with"
 
