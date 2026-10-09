@@ -48,7 +48,7 @@ npm run dist:mac     # macOS .dmg (must be built on a Mac)
 npm run dist:linux   # Linux AppImage
 ```
 
-Build the Windows installer on Windows. Building it on Linux needs Wine. The workflow in `.github/workflows/build.yml` builds all three platforms on GitHub. Push a tag like `v1.0.0`, then download the files from the run's artifacts.
+Build the Windows installer on Windows. Building it on Linux needs Wine. The workflow in `.github/workflows/build.yml` builds all three platforms on GitHub. Push a tag like `v1.2.0`: the run attaches the installers to a draft GitHub Release, which you review and publish by hand. The files are also kept as the run's artifacts.
 
 ## Limits
 

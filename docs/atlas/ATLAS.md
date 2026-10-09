@@ -1,5 +1,5 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-09 · Synced at commit: 736ffd2
+> Last synced: 2026-10-09 · Synced at commit: b146661
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
@@ -16,7 +16,7 @@ Faelights is an Electron 31 desktop app with no bundler and no framework. Tests 
 | Renderer page | `renderer/index.html` | Loads `pdf.min.js` → `pdf-lib.min.js` → `core.js` → `annotator.js` → `images.js` → `order.js` → `exportfmt.js` → `app.js` |
 | Renderer boot | `renderer/app.js` `boot()` IIFE | Loads DB + theme, renders UI, sends `app:ready`, consumes pending "Open with" files |
 | CLI / OS file open | `src/main.js` `pdfArgs()`, `second-instance`, `open-file` | PDFs passed on argv or macOS "Open with" |
-| CI build | `.github/workflows/build.yml` | On `v*` tag: `electron-builder` for win/mac/linux |
+| CI build | `.github/workflows/build.yml` | On `v*` tag: `electron-builder` for win/mac/linux, files attached to a draft GitHub Release |
 | Tests | `npm test` → `node --test "test/**/*.test.js"` | `test/core.test.js` (extraction on `sample.pdf`), `test/images.test.js` (image boxes on `test/fixtures/images.pdf`), `test/identify.test.js`, `test/metadata.test.js`, `test/reader-images.test.js`, `test/export.test.js` |
 
 ## Module map
