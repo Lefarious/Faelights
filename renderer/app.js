@@ -21,6 +21,7 @@ const ICON = {
   moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/>',
   pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  view: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
   paneClose: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M16 15l-3-3 3-3"/>',
   paneOpen: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M14 9l3 3-3 3"/>'
@@ -754,10 +755,9 @@ function renderReader() {
     tt.append(inp); setTimeout(() => { inp.focus(); inp.select(); }, 0);
   } else { const h = el("h2", null, d.title); h.title = "Click to rename"; h.onclick = () => { S.editingTitle = true; renderReader(); }; tt.append(h); }
   const acts = el("div", "r-actions");
-  const ab = btn("", "Annotate", "pen"); ab.title = "View and annotate the PDF"; ab.onclick = () => annotate(d);
   const ob = btn("icon", null, "open", "Open PDF in your PDF app"); ob.onclick = async () => { const e = await fl.openPdf(d); if (e !== true) toast("Couldn't open the PDF"); };
   const mb = btn("icon", null, "more", "More actions"); mb.onclick = () => docMenu(d);
-  acts.append(ab, ob, mb); tt.append(acts); head.append(tt);
+  acts.append(ob, mb); tt.append(acts); head.append(tt);
 
   const meta = el("div", "r-meta");
   const lb = el("button", "lib"); lb.append(svg(lib(d.libraryId)?.system ? ICON.inbox : ICON.lib), document.createTextNode(lib(d.libraryId)?.name || "Inbox"));
@@ -786,7 +786,8 @@ function renderReader() {
   fmt.value = S.db.settings.fmt; fmt.onchange = () => { S.db.settings.fmt = fmt.value; save(); };
   const cb = btn("", "Copy", "copy"); cb.onclick = () => copyText(docText(d, S.db.settings.fmt, false, filtered(d)), "Extracts");
   const eb = btn("", "Export", "export"); eb.onclick = () => exportDoc(d);
-  tools.append(ib, seg, fmt, cb, eb); head.append(meta, tools);
+  const vb = btn("", "View", "view", "View and annotate the PDF"); vb.onclick = () => annotate(d);
+  tools.append(vb, ib, seg, fmt, cb, eb); head.append(meta, tools);
   r.append(head);
 
   if (d.sourceMissing) {

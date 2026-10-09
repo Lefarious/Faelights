@@ -109,7 +109,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
   Splash (frameless 440×280): animated lockup (dots appear, mote blooms, wordmark writes in) + "Gathering your highlights…"
   ├── Sidebar: brand (mark + wordmark) · Add PDFs · Search / All PDFs / Starred · Libraries (+ new) · Tags · footer (stale count, Rescan · theme icon switch)
   ├── List: view title · filter box · sort · progress meter · PDF cards (marks, pages, colour swatches, Changed / Original moved)
-  └── Reader: title (click to rename) · Annotate · open-in-app · ⋯ · library/star/tags · Info toggle · Full/Only toggle · format select · Copy · Export
+  └── Reader: title (click to rename) · open-in-app · ⋯ · library/star/tags · View (opens the annotator) · Info toggle · Full/Only toggle · format select · Copy · Export
                ├── Rail (own scroll, resizable, hideable): colour filter chips · Topics TOC
                ├── Info card (when toggled on): Zotero-style fields (type, title, authors, abstract, publication, DOI/arXiv links…) + File details
                └── Groups by topic → extracts (page → opens viewer at that page, quote, notes, copy-one)
@@ -156,6 +156,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Not verified:** the Download / Save dialogs (native dialogs can't be driven over CDP), the "Discard annotations" flow, encrypted or malformed PDFs (read-only fallback), rotated pages, large PDFs (performance), opening the output in Acrobat or Preview.
 - **Known limits / follow-ups:** no typed text boxes (FreeText), shapes or eraser; Ink and Text notes aren't extracted (core.js reads markup only); no "save back to original"; undo history is lost when the viewer closes; the green swatch buckets separately from the sample's green in the colour filter.
 - **Commit range:** a6750ae (branch `feature/pdf-annotator`)
+- **Revised 2026-10-09:** at the user's request, the reader's "Annotate" button (title area) became a "View" button with an eye icon, moved into the toolbar row just left of the Info button (branch `feature/view-button`).
 
 ### F-006 · PDF info panel (Zotero-style metadata) · 2026-10-09 · shipped (merged to main 8d525a2)
 - **Why:** users wanted to see a paper's bibliographic details (authors, DOI, publication, dates) next to its highlights, like Zotero's Info pane, without leaving the app.
