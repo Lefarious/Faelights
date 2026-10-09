@@ -4,7 +4,7 @@ _Last updated: 2026-10-09 · Current sprint: 3 (planned: T-001, T-012) · main: 
 
 ## Settings
 - Capacity: 3 parallel features per sprint · minor bugs/polish (XS/S) are exempt and don't count
-- Todo ids: `T-NNN`, next free: T-013 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Todo ids: `T-NNN`, next free: T-014 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
@@ -33,6 +33,7 @@ Proposals waiting for approval (each can join Sprint 3; "exempt" = doesn't count
 Polish (reported by user):
 
 - [x] **T-007** [bug · XS · exempt] The app icon on the Windows taskbar looked a different size from other apps' icons. Fixed in 055a74f (`fix/taskbar-icon-size`).
+- [ ] **T-013** [bug · S · exempt] After installing, the Start menu and desktop shortcuts show Electron's default atom icon instead of the Faelights icon. Cause: `win.signAndEditExecutable: false` stops electron-builder from writing `build/icon.ico` into Faelights.exe (the window icon is only set at runtime). Reported by user 2026-10-09.
 
 ## Backlog
 | id | requirements (short) | footprint | depends on | size | priority | status |
