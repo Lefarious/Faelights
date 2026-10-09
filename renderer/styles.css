@@ -411,3 +411,24 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 .fig figcaption .copy1 { align-self: center; padding: 4px; }
 .fig:hover .copy1 { opacity: 1; }
 .fig-fail { font-size: 13px; color: var(--muted); margin: 0; padding: 10px 14px; border: 1px dashed var(--line); border-left: 4px solid rgb(var(--mc)); border-radius: 4px; }
+
+/* ---------------- guided tour (tour.js) ---------------- */
+/* .tour-back dims the app and catches clicks behind the tour; tour.js cuts a hole in it (clip-path) around the target, which the ring outlines.
+   The ring sits outside .tour-back so the clip doesn't cut it away. Clicks through the hole are caught by .tour-shield. */
+.tour-shield { position: fixed; inset: 0; z-index: 60; }
+.tour-back { position: fixed; inset: 0; z-index: 60; background: rgb(10 8 16 / .45); pointer-events: none; }
+.tour-ring { position: fixed; z-index: 60; border-radius: 10px; box-shadow: 0 0 0 2px var(--glow), 0 0 18px 2px color-mix(in srgb, var(--glow) 35%, transparent); transition: left .2s ease, top .2s ease, width .2s ease, height .2s ease; pointer-events: none; }
+.tour-pop { position: fixed; z-index: 61; width: min(320px, calc(100vw - 16px)); padding: 16px 16px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: 0 18px 50px rgb(0 0 0 / .28); display: grid; gap: 6px; animation: tour-in .16s ease-out; }
+.tour-pop h3 { margin: 0; font: 400 19px/1.25 var(--font-display); }
+.tour-pop p { margin: 0; }
+.tour-step { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--accent); }
+.tour-step:empty { display: none; }
+.tour-body { font-size: 13.5px; line-height: 1.5; color: color-mix(in srgb, var(--ink) 85%, var(--muted)); }
+.tour-keys { font-size: 12px; color: var(--muted); }
+.tour-acts { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.tour-acts .sp { flex: 1; }
+.tour-acts .linkbtn { padding-left: 0; color: var(--muted); font-weight: 500; }
+.tour-acts .linkbtn:hover { color: var(--ink); }
+@keyframes tour-in { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-color-scheme: dark) { .tour-back { background: rgb(0 0 0 / .55); } }
+@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-pop { animation: none; } }

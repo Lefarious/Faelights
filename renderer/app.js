@@ -481,7 +481,7 @@ function moveDoc(d, libId) {
 }
 function annotate(d, page) {
   if (S.docId !== d.id) { S.docId = d.id; S.off = new Set(); renderAll(); }
-  Annot.open(d, page);
+  Annot.open(d, page); tourSoon();
 }
 async function savePdfCopy(d) {
   try {
@@ -692,8 +692,9 @@ addEventListener("resize", () => { if (S.db) applyLayout(); });
 /* ---------------- rendering: sidebar ---------------- */
 // onMenu(at, opts): row actions — adds a ⋯ trigger, right-click and Shift+F10 / ContextMenu.
 // The <li> wraps the main button and the ⋯ sibling (buttons can't nest) and is the drop target.
-function navItem({ icon, name, count, current, onClick, onMenu, onDrop, editing, onRename }) {
+function navItem({ icon, name, count, current, onClick, onMenu, onDrop, editing, onRename, tour }) {
   const li = el("li", onMenu ? "has-more" + (current ? " is-current" : "") : null);
+  if (tour) li.dataset.tour = tour;
   if (editing) {
     const inp = el("input"); inp.value = name; inp.setAttribute("aria-label", "Library name");
     const done = commit => { if (inp.dataset.done) return; inp.dataset.done = 1; onRename(commit ? inp.value.trim() : null); };
@@ -721,26 +722,26 @@ function navItem({ icon, name, count, current, onClick, onMenu, onDrop, editing,
 }
 function renderSide() {
   const side = $("side"); side.replaceChildren();
-  const brand = el("div", "brand"); brand.append(brandImg("mark", "brand-mark"), el("h1", null, "faelights"), paneBtn("side")); brand.setAttribute("aria-label", "Faelights");
-  const add = btn("primary add", "Add PDFs", "add"); add.onclick = chooseAndAdd;
-  const addRow = el("div", "add-row"); addRow.append(add, addIdBtn(true));
+  const brand = el("div", "brand"); brand.append(brandImg("mark", "brand-mark"), el("h1", null, "faelights"), paneBtn("side")); brand.lastChild.dataset.tour = "pane"; brand.setAttribute("aria-label", "Faelights");
+  const add = btn("primary add", "Add PDFs", "add"); add.onclick = chooseAndAdd; add.dataset.tour = "add";
+  const addRow = el("div", "add-row"); addRow.append(add, addIdBtn(true)); addRow.lastChild.dataset.tour = "add-id";
   side.append(brand, addRow);
   const sc = el("div", "side-scroll");
 
   const top = el("ul", "nav");
   const total = S.db.docs.reduce((n, d) => n + (d.count || 0), 0);
-  top.append(navItem({ icon: svg(ICON.search), name: "Search highlights", count: total, current: S.view.kind === "search", onClick: () => go({ kind: "search" }) }));
-  top.append(navItem({ icon: svg(ICON.all), name: "All PDFs", count: S.db.docs.length, current: S.view.kind === "all", onClick: () => go({ kind: "all" }) }));
+  top.append(navItem({ icon: svg(ICON.search), name: "Search highlights", count: total, current: S.view.kind === "search", tour: "search", onClick: () => go({ kind: "search" }) }));
+  top.append(navItem({ icon: svg(ICON.all), name: "All PDFs", count: S.db.docs.length, current: S.view.kind === "all", tour: "all", onClick: () => go({ kind: "all" }) }));
   const starred = S.db.docs.filter(d => d.starred).length;
-  top.append(navItem({ icon: svg(ICON.star), name: "Starred", count: starred, current: S.view.kind === "starred", onClick: () => go({ kind: "starred" }) }));
-  top.append(navItem({ icon: svg(ICON.pub), name: "My publications", count: S.db.docs.filter(d => d.mine).length, current: S.view.kind === "mine", onClick: () => go({ kind: "mine" }),
+  top.append(navItem({ icon: svg(ICON.star), name: "Starred", count: starred, current: S.view.kind === "starred", tour: "starred", onClick: () => go({ kind: "starred" }) }));
+  top.append(navItem({ icon: svg(ICON.pub), name: "My publications", count: S.db.docs.filter(d => d.mine).length, current: S.view.kind === "mine", onClick: () => go({ kind: "mine" }), tour: "mine",
     onDrop: e => { const d = doc(e.dataTransfer.getData("application/x-faelights-doc")); if (d) setMine(d, true); } }));
   sc.append(top);
 
-  const h = el("h3"); h.append(el("span", null, "Libraries"));
+  const h = el("h3"); h.dataset.tour = "libraries"; h.append(el("span", null, "Libraries"));
   const nb = el("button", null, "+"); nb.title = "New library"; nb.setAttribute("aria-label", "New library"); nb.onclick = newLibrary; h.append(nb);
   sc.append(h);
-  const ul = el("ul", "nav");
+  const ul = el("ul", "nav"); ul.dataset.tour = "libraries";
   for (const l of S.db.libraries) {
     const n = S.db.docs.filter(d => d.libraryId === l.id).length;
     ul.append(navItem({
@@ -772,7 +773,7 @@ function renderSide() {
   side.append(sc);
 
   const stale = S.db.docs.filter(d => d.stale).length;
-  const foot = el("div", "side-foot"), status = el("div", "foot-row");
+  const foot = el("div", "side-foot"), status = el("div", "foot-row"); foot.dataset.tour = "foot";
   status.append(el("span", null, stale ? plural(stale, "PDF") + " changed" : plural(S.db.docs.length, "PDF")));
   const rb = el("button", "linkbtn", stale ? "Rescan" : "Rescan all"); rb.onclick = rescanAll; if (S.db.docs.length) status.append(rb);
   foot.append(status, themeSwitch());
@@ -843,7 +844,7 @@ function renderList() {
   const acts = el("div", "head-acts"); acts.append(add, addIdBtn(true), paneBtn("list"));
   const hr = el("div", "head-row"); hr.append(h, acts);
   head.append(hr, el("div", "sub", `${plural(docsAll.length, "PDF")} · ${plural(hl, "highlight")}`));
-  const tools = el("div", "list-tools");
+  const tools = el("div", "list-tools"); tools.dataset.tour = "list-tools";
   const q = el("input", "search"); q.id = "dq"; q.placeholder = "Filter by title or tag"; q.value = S.docQuery; q.setAttribute("aria-label", "Filter PDFs");
   q.oninput = () => { S.docQuery = q.value; renderDocs(); };
   const sort = el("select"); sort.id = "sort"; sort.setAttribute("aria-label", "Sort PDFs");
@@ -1053,9 +1054,9 @@ function renderReader() {
   const fmt = el("select", "btn"); fmt.id = "fmt"; fmt.title = "Format used when copying or exporting"; fmt.setAttribute("aria-label", "Copy format");
   for (const [v, t] of ExportFmt.FORMATS) { const o = el("option", null, t); o.value = v; fmt.append(o); }
   fmt.value = S.db.settings.fmt; fmt.onchange = () => { S.db.settings.fmt = fmt.value; save(); };
-  const cb = btn("", "Copy", "copy"); cb.onclick = () => copyText(docText(d, S.db.settings.fmt, false, filtered(d), exportWithImages(d) ? filteredImages(d) : undefined), "Extracts");
-  const eb = btn("", "Export", "export"); eb.onclick = () => exportMenu(d, eb);
-  const vb = btn("", "View", "view", "View and annotate the PDF"); vb.onclick = () => annotate(d);
+  const cb = btn("", "Copy", "copy"); cb.dataset.tour = "copy"; cb.onclick = () => copyText(docText(d, S.db.settings.fmt, false, filtered(d), exportWithImages(d) ? filteredImages(d) : undefined), "Extracts");
+  const eb = btn("", "Export", "export"); eb.dataset.tour = "export"; eb.onclick = () => exportMenu(d, eb);
+  const vb = btn("", "View", "view", "View and annotate the PDF"); vb.dataset.tour = "view"; vb.onclick = () => annotate(d);
   tools.append(vb, ib, seg); if (imgb) tools.append(imgb); tools.append(fmt, cb, eb); head.append(meta, tools);
   r.append(head);
 
@@ -1141,6 +1142,7 @@ function renderReader() {
     const target = $("e" + S.jumpTo); S.jumpTo = null;
     if (target) setTimeout(() => { target.scrollIntoView({ block: "center" }); target.classList.add("flash"); }, 30);
   }
+  tourSoon();
 }
 const TOPIC_SOURCE = {
   outline: "From the PDF's bookmarks.",
@@ -1443,6 +1445,25 @@ async function addIdBatch(D) {
 function stopAddBatch() { const D = addDlg; if (D && D.batch) { D.stop = true; fl.cancelFetch(); } }
 
 
+/* ---------------- guided tour (renderer/tour.js) ---------------- */
+function startTour(name) {
+  const extra = name === "app" && !S.db.docs.length ? { label: "Try a sample PDF", run: addSample } : null;
+  Tour.start(name, { extra, onEnd: (ch, skipped) => {
+    Tour.markSeen(S.db.settings, ch, skipped); save();
+    if (ch === "app" && !skipped) tourSoon();   // a PDF already open carries straight on into the reader chapter
+  } });
+}
+// Each chapter runs once, the first time its part of the app is on screen: app → reader → viewer
+function maybeTour() {
+  if (Tour.isOpen() || addDlg || MENU || S.editingTitle) return;
+  const st = S.db.settings;
+  const name = !Tour.seen(st, "app") ? "app"
+    : Annot.isOpen() ? (Tour.seen(st, "viewer") ? null : "viewer")
+    : S.view.kind !== "search" && document.querySelector("#reader .r-head") && !Tour.seen(st, "reader") ? "reader" : null;
+  if (name) startTour(name);
+}
+function tourSoon() { clearTimeout(tourSoon.t); tourSoon.t = setTimeout(maybeTour, 500); }
+
 let dragDepth = 0;
 function hideDrop() { dragDepth = 0; $("drop").hidden = true; }
 addEventListener("dragenter", e => { if (e.dataTransfer.types.includes("Files")) { dragDepth++; $("drop").hidden = false; $("drop-target").textContent = "into " + (S.view.kind === "library" ? lib(S.view.id).name : "Inbox"); } });
@@ -1457,7 +1478,7 @@ addEventListener("drop", e => {
 });
 // Ctrl/⌘+V outside a text field with identifiers or links (one or a list) opens the dialog prefilled
 addEventListener("paste", e => {
-  if (addDlg || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+  if (addDlg || Tour.isOpen() || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
   const t = e.clipboardData?.getData("text/plain"); if (!t) return;
   fl.parseIds(t).then(xs => { if (looksLikeIds(xs)) openAddId(t.trim()); });
 });
@@ -1486,6 +1507,7 @@ fl.onMenu(ch => {
   if (ch === "toggle-mode") { S.db.settings.mode = S.db.settings.mode === "full" ? "only" : "full"; save(); renderReader(); }
   if (ch.startsWith("pane:")) togglePane(ch.slice(5));
   if (ch === "layout-reset") resetLayout();
+  if (ch === "tour") { S.db.settings.tour = {}; save(); startTour("app"); }
 });
 fl.onOpenFiles(files => addPaths(files));
 fl.onTheme(t => { S.theme = t; renderSide(); });
@@ -1497,6 +1519,7 @@ fl.onTheme(t => { S.theme = t; renderSide(); });
   $("app").append(resizer("side"), resizer("list"));
   renderAll();
   fl.ready();
+  setTimeout(maybeTour, 900);   // after the splash hands over
   const pending = await fl.pendingFiles();
   if (pending.length) addPaths(pending);
 })();
