@@ -22,7 +22,7 @@ Proposals waiting for approval (each can join Sprint 3; "exempt" = doesn't count
 
 - [ ] **T-002** [bug · S · exempt] A mistyped link says "You're offline": tell "no connection" apart from "couldn't reach that site".
 - [ ] **T-003** [enhancement · S] nature.com bot-blocks downloads, so some open-access papers fail: add an alternative-source lookup (fits T-001).
-- [ ] **T-004** [enhancement · S] Second test PDF (underline, strike-through, bookmark and wording topics, marks with no text) and run `npm test` in the GitHub build.
+- [ ] **T-004** [enhancement · S] Second test PDF (underline, strike-through, bookmark and wording topics, marks with no text). (The "run `npm test` in the GitHub build" half was done 2026-10-10 on `ci/build-on-push`.)
 - [ ] **T-005** [polish · XS · exempt] Rename "Annotate" in the PDF menu to "View"; remove the unused native-menu IPC (`menu:popup`).
 - [ ] **T-006** [enhancement · S] Dev-only setting for a separate library folder, so a test copy can run while the real app is open.
 - [ ] **T-008** [bug · S · exempt] PMC serves a bot-check page instead of PDFs, so PMCID (and PMIDs that resolve to PMC) may fail: try Europe PMC / Unpaywall.

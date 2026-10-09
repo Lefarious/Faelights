@@ -36,11 +36,11 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 - **Used by:** `package.json` `build.afterPack`
 
 ### `.github/workflows/build.yml`
-- **Role:** matrix build on windows-latest, macos-latest and ubuntu-latest with Node 20
-- **Steps:** checkout → setup-node → `npm ci || npm install` → `npm run <script> -- --publish never` → upload-artifact → on tag refs only, `softprops/action-gh-release@v2` with `draft: true` attaches the same `.exe/.zip/.dmg/.AppImage` files to a draft release for that tag
+- **Role:** matrix build on windows-latest, macos-latest and ubuntu-latest with Node 22
+- **Steps:** checkout → setup-node (npm cache) → `npm ci` → `npm test` → on tags, fail unless the tag equals `v` + `package.json` version → `npm run <script> -- --publish never` → upload-artifact (7 days, 90 on tags; fails if no files) → on tag refs only, `softprops/action-gh-release@v2` with `draft: true` attaches the same `.exe/.zip/.dmg/.AppImage` files to a draft release for that tag
 - **Matrix:** `fail-fast: false`, so each platform finishes even if another fails
 - **Permissions:** `contents: write` (needed to create the release)
-- **Triggers:** `push` of tags `v*`; `workflow_dispatch` (manual run builds artifacts only, no release)
+- **Triggers:** `push` to `main`, `pull_request`, `push` of tags `v*`, `workflow_dispatch`; only tag runs create a release. `concurrency` cancels an older run on the same branch, never a tag run
 
 ## Gotchas
 - Windows uses `build/icon.ico` (`build.win.icon`); mac/linux use `build/icon.png`. The runtime window icon is a separate copy in `renderer/assets/brand/` (`app-icon.ico`/`.png`); regenerate both sets together, keeping the tile margin small (~2%) or the taskbar icon looks smaller than other apps'.
