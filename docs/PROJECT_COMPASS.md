@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-09 · Last logged commit: 736ffd2 · Version: 1.0.0 (unreleased changes on main)
+> Last updated: 2026-10-10 · Last logged commit: b146661 · Version: 1.2.0 (tag `v1.2.0`, draft GitHub Release)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into `main` (pushed 2026-10-09): a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). A follow-up fix put Add PDFs buttons in the PDF list header and left-aligned the reader toolbar (F-013, pushed). Sprint 2 (2026-10-09, merged to local `main` 40bb2c7, not yet pushed) added: an "Add by identifier" box that also takes ISBNs, PMIDs and ADS Bibcodes, several at once (F-014); image capture, where the user boxes a figure in the viewer and it shows up centred among the extracts in PDF order under a "With images" toggle (F-015); and more export formats (HTML) with images (F-016). A polish pass (F-017, merged to local `main` f541b3f, not pushed) labelled the reader's info button "Metadata" and resized the app icon so it matches other apps on the Windows taskbar. The installed Windows app now shows the Faelights icon in the Start menu and on shortcuts instead of Electron's (F-018). Sprint 3 (2026-10-09, merged to local `main` 736ffd2, not yet pushed) added copying a captured image to the clipboard (F-019) and looking up a paper's details (title, authors, journal, abstract…) from CrossRef or arXiv, automatically after adding by DOI/arXiv and on demand from the Info card (F-020). Installers are built in CI but not published. Next: push Sprint 3 to GitHub (waiting on the user), then pick from the proposals on the tech-lead board.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into `main` (pushed 2026-10-09): a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). A follow-up fix put Add PDFs buttons in the PDF list header and left-aligned the reader toolbar (F-013, pushed). Sprint 2 (2026-10-09) added: an "Add by identifier" box that also takes ISBNs, PMIDs and ADS Bibcodes, several at once (F-014); image capture, where the user boxes a figure in the viewer and it shows up centred among the extracts in PDF order under a "With images" toggle (F-015); and more export formats (HTML) with images (F-016). A polish pass (F-017) labelled the reader's info button "Metadata" and resized the app icon so it matches other apps on the Windows taskbar. The installed Windows app now shows the Faelights icon in the Start menu and on shortcuts instead of Electron's (F-018). Sprint 3 (2026-10-09) added copying a captured image to the clipboard (F-019) and looking up a paper's details (title, authors, journal, abstract…) from CrossRef or arXiv, automatically after adding by DOI/arXiv and on demand from the Info card (F-020). Everything through F-020 was pushed to GitHub on 2026-10-10 and released as **v1.2.0**: tagging a version now builds the installers in CI and attaches them to a draft GitHub Release, which the user publishes by hand (F-021). Next: pick Sprint 4 from the proposals on the tech-lead board.
 
 ## 2. Vision & scope
 - **Goals:**
@@ -98,9 +98,10 @@ There are no analytics or telemetry, and no background network calls: requests h
 | Env | Target | Branch | How it deploys | Notes |
 |---|---|---|---|---|
 | Local dev | `npm start` | any | manual | Node 18+ |
-| Release builds | GitHub Actions artifacts | tag `v*` | push tag → matrix build | `--publish never`. Artifacts are downloaded by hand from the run. |
+| Release builds | Draft GitHub Release (+ run artifacts) | tag `v*` | push tag → matrix build → `softprops/action-gh-release` attaches files to a draft release | electron-builder runs with `--publish never`; the workflow's release step uploads instead. The user reviews and publishes the draft. |
 
-- **CI/CD:** checkout → Node 20 → `npm ci || npm install` → `electron-builder` per OS → upload `.exe/.zip/.dmg/.AppImage`.
+- **CI/CD:** checkout → Node 20 → `npm ci || npm install` → `electron-builder` per OS → upload `.exe/.zip/.dmg/.AppImage` as artifacts and, on tags, to a draft GitHub Release (`contents: write` permission).
+- **Releasing:** bump `version` in `package.json` on a branch, merge to `main`, push, then push the matching `v<version>` tag.
 - **Code signing:** none. Windows `signAndEditExecutable: false`, so an `afterPack` hook writes the icon into the exe instead (→ D-014); macOS is not notarised, so Gatekeeper will warn (unverified).
 - **Data migrations:** none. `loadDb` only adds a missing Inbox and missing settings defaults. The DB has `version: 1`, but nothing reads it yet.
 - **Rollback:** reinstall the previous installer. User data in `userData/library` is untouched by install and uninstall (unverified for the NSIS uninstaller).
@@ -139,7 +140,15 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Annotator keys:** V/H/U/S/N/D/I pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
-### F-020 · Paper details from CrossRef and arXiv (meta-enrich) · 2026-10-09 · shipped to local main (736ffd2, not pushed)
+### F-021 · Draft GitHub Releases from CI; v1.2.0 · 2026-10-10 · shipped (tag v1.2.0)
+- **Why:** installers were only downloadable from a workflow run's artifacts; the user wanted proper releases.
+- **How:** on a `v*` tag the build workflow now also attaches the installers to a draft GitHub Release (`softprops/action-gh-release`, `contents: write`). Drafts let the user check the files before publishing. Version bumped 1.0.0 → 1.1.0 on that branch (never released), then to 1.2.0 for the first tagged release, at the user's choice.
+- **Touched:** [packaging](atlas/modules/packaging.md)
+- **Added:** release step in `.github/workflows/build.yml`. No app code.
+- **Trade-offs:** installers are still unsigned (OS warnings remain); publishing stays a manual click.
+- **Commit range:** `ci/github-releases` (71b60e5), merged at b146661; version bump on `chore/release-1.2.0`
+
+### F-020 · Paper details from CrossRef and arXiv (meta-enrich) · 2026-10-09 · shipped (736ffd2, pushed 2026-10-10, in v1.2.0)
 - **Why:** PDFs often carry little or wrong metadata; the Info card should show the real title, authors, journal, date and abstract (todo T-001, planned since Sprint 1).
 - **How:** a DOI is looked up on CrossRef, an arXiv id (or arXiv's own 10.48550 DOI) on the arXiv API. A new pure module maps both responses to the same fields the PDF reader already produces, plus an item type. Lookups run in the main process with their own cancel signal and a 20 s cap, so they never interfere with a PDF download. Runs by itself in the background after adding a paper by DOI/arXiv/link, and on demand via "Look up details" / "Refresh details" on the Info card, which also says where the details came from and when.
 - **Touched:** [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [renderer-ui](atlas/modules/renderer-ui.md), [tests](atlas/modules/tests.md)
@@ -148,7 +157,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Known limits / follow-ups:** papers with neither DOI nor arXiv id can't be looked up; exports and search don't use the looked-up fields; alternate open-access locations (T-003) could reuse this lookup.
 - **Commit range:** `feature/T-001-meta-enrich` (6d15763), merged via `feature/s3-integration` (269424f → main 736ffd2)
 
-### F-019 · Copy a captured image to the clipboard · 2026-10-09 · shipped to local main (736ffd2, not pushed)
+### F-019 · Copy a captured image to the clipboard · 2026-10-09 · shipped (736ffd2, pushed 2026-10-10, in v1.2.0)
 - **Why:** the user wanted to paste a captured figure straight into Word, Paint or Obsidian (todo T-012).
 - **How:** each image in the reader's "With images" view has a Copy button and a right-click menu (Copy image / Show page). The PNG already rendered for the reader goes to the main process, which puts it on the clipboard as an image; a toast confirms.
 - **Touched:** [renderer-ui](atlas/modules/renderer-ui.md), [preload-bridge](atlas/modules/preload-bridge.md), [main-process](atlas/modules/main-process.md)
@@ -156,7 +165,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Trade-offs:** copies at the reader's render scale (2×, capped at 2400 px), the same as export, rather than re-rendering larger.
 - **Commit range:** `enhancement/T-012-copy-image` (5c143c7), merged via `feature/s3-integration` (9d8820f → main 736ffd2)
 
-### F-018 · Faelights icon on the installed Windows app · 2026-10-09 · shipped to local main (eb99c96, not pushed)
+### F-018 · Faelights icon on the installed Windows app · 2026-10-09 · shipped (eb99c96, pushed 2026-10-10, in v1.2.0)
 - **Why:** after installing, the Start menu and shortcuts showed Electron's atom icon (user report, todo T-013).
 - **How:** the Windows build has `signAndEditExecutable: false`, which also skips writing the icon into the exe. Removing it breaks local builds (electron-builder's signing-tools archive needs symlink rights on Windows), so an `afterPack` hook now writes `build/icon.ico` into the exe with `rcedit`. Verified by building the installer and extracting the exe's icon.
 - **Touched:** [packaging](atlas/modules/packaging.md)
@@ -164,7 +173,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Trade-offs:** → D-014. Windows may show a cached old icon until sign-out.
 - **Commit range:** `bug/T-013-installed-app-icon` (71571a8), merged to main eb99c96
 
-### F-017 · "Metadata" label on the info button; taskbar-sized app icon · 2026-10-09 · shipped to local main (f541b3f, not pushed)
+### F-017 · "Metadata" label on the info button; taskbar-sized app icon · 2026-10-09 · shipped (f541b3f, pushed 2026-10-10, in v1.2.0)
 - **Why:** the user asked for a text label next to the reader's ⓘ button, and reported that the Faelights icon looked smaller than other apps' icons on the Windows taskbar.
 - **How:** the ⓘ button now reads "Metadata", like the View button beside it. The icon tile used only 87.5% of its canvas and Windows was scaling a single 256 px PNG down to 24/32 px; the tile now fills ~96% (100% at 16–24 px), and a multi-size `.ico` (16–256 px, each frame rendered separately) is used for the window on Windows and for the Windows build. Rendered with a throwaway Electron canvas script, no new dependency.
 - **Touched:** [renderer-ui](atlas/modules/renderer-ui.md), [main-process](atlas/modules/main-process.md), [packaging](atlas/modules/packaging.md)
@@ -172,7 +181,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Trade-offs:** when running from source, a pinned taskbar shortcut can still show Electron's own icon; the window and installed app use the new one. The card the button opens is still headed "Info".
 - **Commit range:** `fix/taskbar-icon-size` (055a74f), `feature/metadata-label` (47e8eeb), merged via `feature/polish-integration` (f541b3f)
 
-### F-016 · More export formats, with images · 2026-10-09 · shipped to local main (40bb2c7, not pushed)
+### F-016 · More export formats, with images · 2026-10-09 · shipped (40bb2c7, pushed 2026-10-10, in v1.2.0)
 - **Why:** captured images (F-015) needed to leave the app with the text, and an HTML export was requested alongside Markdown/Obsidian/plain.
 - **How:** Export became a menu (Markdown, Obsidian, HTML, Plain text, plus an "Include images" check bound to the reader's With images setting). With images on, crops are rendered as PNGs and written to a `<file name> images/` folder next to the export (library export: one folder per doc), linked inline in reading order; HTML is a single self-contained file with images embedded. Copy inserts `[Image, p. N]` placeholders. Formatting moved into a pure, tested module; main validates every renderer-supplied path before writing.
 - **Touched:** [renderer-ui](atlas/modules/renderer-ui.md), [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [tests](atlas/modules/tests.md)
@@ -181,7 +190,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Known limits / follow-ups:** many large crops take a few seconds (progress toast); no per-export image resolution choice.
 - **Commit range:** branch `feature/s2-image-export` (25a74e3), merged in d62427f on `feature/s2-integration`
 
-### F-015 · Image capture: boxes in the viewer, images among the extracts · 2026-10-09 · shipped to local main (40bb2c7, not pushed)
+### F-015 · Image capture: boxes in the viewer, images among the extracts · 2026-10-09 · shipped (40bb2c7, pushed 2026-10-10, in v1.2.0)
 - **Why:** figures and tables matter as much as highlighted sentences; the user wanted to mark them and see them in context.
 - **How:** a "Capture image" tool (I) draws a border-only PDF Square annotation in the highlight palette (recolour, note, delete, undo like other marks). Extraction reads every Square into `result.images` with a reading-order position; an image that falls inside a fact is placed before it. A "With images" reader toggle interleaves centred crops (rendered from the stored PDF with annotations hidden, cached per doc version) in both Full sentence and Highlights only, grouped under their topic; image colours join the colour filter. `ANALYZER_VERSION` → 3, so saved docs rescan on open.
 - **Touched:** [annotator](atlas/modules/annotator.md), [extraction-core](atlas/modules/extraction-core.md), [renderer-ui](atlas/modules/renderer-ui.md), [tests](atlas/modules/tests.md)
@@ -190,7 +199,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Known limits / follow-ups:** boxes can't be moved or resized (delete and redraw); with the toggle off, image colours don't appear in the chips.
 - **Commit range:** branches `feature/s2-image-box` (55ff131), `feature/s2-image-extract` (f8cee1d), `feature/s2-image-view` (d71ad69), merged in 7963874, 207c7d7, 96051c7 on `feature/s2-integration`
 
-### F-014 · Add by identifier (ISBN, DOI, PMID, arXiv, ADS Bibcode, links), several at once · 2026-10-09 · shipped to local main (40bb2c7, not pushed)
+### F-014 · Add by identifier (ISBN, DOI, PMID, arXiv, ADS Bibcode, links), several at once · 2026-10-09 · shipped (40bb2c7, pushed 2026-10-10, in v1.2.0)
 - **Why:** the user wanted the add box to work like Zotero's "Enter ISBNs, DOIs, PMIDs, arXiv IDs, or ADS Bibcodes".
 - **How:** the dialog became "Add by identifier" with a multi-line box; a pasted list is split, each item recognised and fetched one at a time with its own status row. New resolvers in main: PMID → NCBI ID converter → PMC copy or DOI (PubMed summary as DOI fallback); ADS → arXiv for arXiv bibcodes, else the ADS link gateway (e-print, publisher, ADS scan); ISBN → a free public-domain scan from Open Library / Internet Archive, else a clear "no free PDF" with Open in browser and Add from file.
 - **Touched:** [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [renderer-ui](atlas/modules/renderer-ui.md), [tests](atlas/modules/tests.md)
@@ -391,17 +400,19 @@ Context: F-018. Options: turn `signAndEditExecutable` back on (fails on Windows 
 ## 9. Roadmap & deployment plan
 No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
 ### Now
-- Sprint 2 (F-014–F-016), polish (F-017), the installed-app icon fix (F-018) and Sprint 3 (F-019, F-020) are on local `main` (736ffd2); waiting on the user's OK to push to GitHub.
+- v1.2.0 tagged (2026-10-10): CI builds the installers into a draft GitHub Release for the user to publish.
+- Sprint 4: not planned yet; proposals T-002…T-011 on the tech-lead board.
 ### Next
 - Second test fixture PDF (underline/strike/squiggly, outline and wording topics, loose marks); run `npm test` in CI.
 ### Later
-- Code signing and notarisation; publishing GitHub Releases from CI.
+- Code signing and notarisation. (Publishing releases from CI: done, F-021.)
 - DB schema versioning and migrations, and per-doc result storage if the library grows large.
 - Move analysis off the UI thread (worker).
 - Editable Info fields; metadata (including looked-up details, F-020) in export frontmatter (follow-up to F-006).
 - Image capture follow-ups (F-015): move/resize boxes; exact-edition ISBN downloads; a fallback for PMC's bot check.
 - Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
+- Draft GitHub Releases from CI; v1.2.0 · 2026-10-10 · F-021
 - Paper details from CrossRef / arXiv · 2026-10-09 · F-020
 - Copy a captured image · 2026-10-09 · F-019
 - Faelights icon on the installed Windows app · 2026-10-09 · F-018

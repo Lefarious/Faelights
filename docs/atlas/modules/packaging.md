@@ -1,5 +1,5 @@
 # Module: packaging
-> Path: package.json, .github/workflows/build.yml · Last synced commit: 736ffd2 · Related features: F-001, F-003, F-007, F-008, F-012
+> Path: package.json, .github/workflows/build.yml · Last synced commit: b146661 · Related features: F-001, F-003, F-007, F-008, F-012, F-018, F-021
 
 ## Purpose
 This module covers dependency declarations, npm scripts, the electron-builder configuration and the CI release workflow. It decides which files ship inside the installed app.
@@ -37,7 +37,9 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 
 ### `.github/workflows/build.yml`
 - **Role:** matrix build on windows-latest, macos-latest and ubuntu-latest with Node 20
-- **Steps:** checkout → setup-node → `npm ci || npm install` → `npm run <script> -- --publish never` → upload-artifact
+- **Steps:** checkout → setup-node → `npm ci || npm install` → `npm run <script> -- --publish never` → upload-artifact → on tag refs only, `softprops/action-gh-release@v2` with `draft: true` attaches the same `.exe/.zip/.dmg/.AppImage` files to a draft release for that tag
+- **Permissions:** `contents: write` (needed to create the release)
+- **Triggers:** `push` of tags `v*`; `workflow_dispatch` (manual run builds artifacts only, no release)
 
 ## Gotchas
 - Windows uses `build/icon.ico` (`build.win.icon`); mac/linux use `build/icon.png`. The runtime window icon is a separate copy in `renderer/assets/brand/` (`app-icon.ico`/`.png`); regenerate both sets together, keeping the tile margin small (~2%) or the taskbar icon looks smaller than other apps'.
