@@ -135,3 +135,77 @@ test("fetchFailureReason maps connection errors to offline", () => {
     assert.equal(fetchFailureReason(new Error(m)), "network", m);
   assert.equal(fetchFailureReason(null), "network");
 });
+
+const { parseIdentifiers } = require("../src/identify.js");
+
+test("ISBN-10 and ISBN-13, normalised to ISBN-13", () => {
+  for (const t of ["9780141439518", "978-0-14-143951-8", "978 0 14 143951 8", "ISBN 978-0-14-143951-8", "ISBN-13: 9780141439518", "isbn:9780141439518", "0141439513", "0-14-143951-3", "ISBN-10: 0 14 143951 3"])
+    assert.deepEqual(kv(t), ["isbn", "9780141439518"], t);
+  assert.deepEqual(kv("080442957X"), ["isbn", "9780804429573"]);
+  assert.deepEqual(kv("0-8044-2957-x"), ["isbn", "9780804429573"]);
+  assert.deepEqual(kv("979-10-90636-07-1"), ["isbn", "9791090636071"]);
+  assert.equal(parse("9780141439518").url, "https://openlibrary.org/isbn/9780141439518");
+  for (const t of ["9780141439519", "0141439514", "030640615X", "ISBN 12345", "9771234567898", "ISBN 978-0-14-143951-9"])
+    assert.equal(parse(t), null, t);
+});
+
+test("PMIDs", () => {
+  assert.deepEqual(kv("PMID: 31452104"), ["pmid", "31452104"]);
+  assert.deepEqual(kv("pmid:123"), ["pmid", "123"]);
+  assert.deepEqual(kv("PMID 31452104"), ["pmid", "31452104"]);
+  assert.deepEqual(kv("31452104"), ["pmid", "31452104"]);
+  assert.deepEqual(kv("https://pubmed.ncbi.nlm.nih.gov/31452104/"), ["pmid", "31452104"]);
+  assert.deepEqual(kv("pubmed.ncbi.nlm.nih.gov/31452104"), ["pmid", "31452104"]);
+  assert.deepEqual(kv("https://www.ncbi.nlm.nih.gov/pubmed/31452104"), ["pmid", "31452104"]);
+  assert.equal(parse("PMID: 31452104").url, "https://pubmed.ncbi.nlm.nih.gov/31452104/");
+  for (const t of ["PMID: 123456789", "pmid:abc", "PMID: 0"]) assert.equal(parse(t), null, t);
+});
+
+test("bare digits: PMID unless a valid ISBN", () => {
+  assert.equal(parse("31452104").kind, "pmid");
+  assert.equal(parse("0141439513").kind, "isbn");   // 10 digits, valid ISBN-10
+  assert.equal(parse("1234567890"), null);          // 10 digits, bad checksum, too long for a PMID
+});
+
+test("ADS bibcodes and links", () => {
+  for (const b of ["2019ApJ...882L..12P", "2020arXiv200112345A", "1998AJ....116.1009R", "2016PhRvL.116f1102A", "2003A&A...397..913M"])
+    assert.deepEqual(kv(b), ["ads", b], b);
+  assert.deepEqual(kv("bibcode:2016PhRvL.116f1102A"), ["ads", "2016PhRvL.116f1102A"]);
+  assert.deepEqual(kv("2019ApJ...882L..12P."), ["ads", "2019ApJ...882L..12P"]);   // sentence full stop
+  assert.deepEqual(kv("2019AAS...23310701."), ["ads", "2019AAS...23310701."]);     // padding dot is part of it
+  assert.deepEqual(kv("(2019AAS...23310701.)"), ["ads", "2019AAS...23310701."]);
+  assert.deepEqual(kv("https://ui.adsabs.harvard.edu/abs/2019ApJ...882L..12P/abstract"), ["ads", "2019ApJ...882L..12P"]);
+  assert.deepEqual(kv("https://ui.adsabs.harvard.edu/abs/2003A%26A...397..913M/abstract"), ["ads", "2003A&A...397..913M"]);
+  assert.deepEqual(kv("http://adsabs.harvard.edu/abs/1998AJ....116.1009R"), ["ads", "1998AJ....116.1009R"]);
+  assert.deepEqual(kv("ui.adsabs.harvard.edu/abs/2016PhRvL.116f1102A"), ["ads", "2016PhRvL.116f1102A"]);
+  assert.equal(parse("2019ApJ...882L..12P").url, "https://ui.adsabs.harvard.edu/abs/2019ApJ...882L..12P/abstract");
+  assert.equal(parse("bibcode:2019ApJ"), null);
+  assert.deepEqual(kv("https://ui.adsabs.harvard.edu/search/q=x"), ["url", "https://ui.adsabs.harvard.edu/search/q=x"]);
+});
+
+test("describe and fileNameFor new kinds", () => {
+  assert.equal(describe(parse("978-0-14-143951-8")), "ISBN 9780141439518");
+  assert.equal(describe(parse("PMID: 123")), "PMID 123");
+  assert.equal(describe(parse("2019ApJ...882L..12P")), "ADS 2019ApJ...882L..12P");
+  assert.equal(fileNameFor(parse("PMID: 123")), "PMID_123.pdf");
+  assert.equal(fileNameFor(parse("9780141439518")), "ISBN_9780141439518.pdf");
+});
+
+test("parseIdentifiers splits batch input", () => {
+  const texts = t => parseIdentifiers(t).map(x => x.text);
+  const kinds = t => parseIdentifiers(t).map(x => x.id && x.id.kind);
+  assert.deepEqual(texts("10.1038/nature12373\n2101.00001\r\nPMID 31452104"), ["10.1038/nature12373", "2101.00001", "PMID 31452104"]);
+  assert.deepEqual(texts("10.1038/nature12373, 2101.00001; PMC7096724,"), ["10.1038/nature12373", "2101.00001", "PMC7096724"]);
+  assert.deepEqual(texts("10.1038/a 10.1038/b\t2101.00001"), ["10.1038/a", "10.1038/b", "2101.00001"]);
+  // commas inside a DOI or URL are not separators
+  assert.deepEqual(texts("10.1002/(SICI)1097-4636(199706)35:4<419::AID-JBM2>3.0.CO;2-I, 10.1/x"), ["10.1002/(SICI)1097-4636(199706)35:4<419::AID-JBM2>3.0.CO;2-I", "10.1/x"]);
+  assert.deepEqual(texts("https://example.com/a,b,c.pdf, https://example.com/d"), ["https://example.com/a,b,c.pdf", "https://example.com/d"]);
+  // prefix pairs stay whole
+  assert.deepEqual(texts("doi: 10.1038/nature12373 PMID: 1, arXiv: 1706.03762"), ["doi: 10.1038/nature12373", "PMID: 1", "arXiv: 1706.03762"]);
+  assert.deepEqual(kinds("doi: 10.1038/nature12373 PMID: 1"), ["doi", "pmid"]);
+  assert.deepEqual(texts("ISBN 978 0 14 143951 8"), ["ISBN 978 0 14 143951 8"]);
+  // unrecognised items are kept with id null; exact duplicates dropped
+  assert.deepEqual(parseIdentifiers("banana\n10.1038/x\n10.1038/x, banana").map(x => [x.text, !!x.id]), [["banana", false], ["10.1038/x", true]]);
+  assert.deepEqual(parseIdentifiers("  \n\n"), []);
+  assert.deepEqual(parseIdentifiers(null), []);
+});

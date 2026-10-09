@@ -5,7 +5,8 @@ const path = require("path");
 const fs = require("fs");
 const fsp = fs.promises;
 const crypto = require("crypto");
-const { parseIdentifier, describe, findPdfLink, isPdf, fileNameFor, fetchFailureReason } = require("./identify");
+const { parseIdentifier, parseIdentifiers, describe, findPdfLink, isPdf, fileNameFor, fetchFailureReason } = require("./identify");
+const exportPaths = require("./exportPaths");
 
 const DATA_DIR = () => path.join(app.getPath("userData"), "library");
 const DB_PATH = () => path.join(DATA_DIR(), "faelights.json");
@@ -153,7 +154,7 @@ function buildAppMenu() {
     ...(isMac ? [{ role: "appMenu" }] : []),
     { label: "File", submenu: [
       { label: "Add PDFs…", accelerator: "CmdOrCtrl+O", click: send("add") },
-      { label: "Add from DOI or Link…", accelerator: "CmdOrCtrl+Shift+O", click: send("add-id") },
+      { label: "Add by Identifier…", accelerator: "CmdOrCtrl+Shift+O", click: send("add-id") },
       { label: "New Library", accelerator: "CmdOrCtrl+Shift+N", click: send("new-library") },
       { type: "separator" },
       { label: "Export Current PDF…", accelerator: "CmdOrCtrl+E", click: send("export-doc") },
@@ -290,6 +291,12 @@ async function pdfFrom(url, hops = 2) {
   throw new FetchFail("not-pdf");
 }
 
+const hardFail = e => e.reason === "cancelled" || e.reason === "offline";   // stop trying alternatives
+async function fetchJson(url) {
+  const r = await fetchUrl(url, "application/json", MAX_HTML);
+  try { return JSON.parse(r.buf.toString("utf8")) || {}; } catch (_) { throw new FetchFail("network"); }
+}
+
 async function resolvePdf(id) {
   sendProgress({ stage: "find" });
   const ax = id.kind === "doi" && /^10\.48550\/arxiv\.(.+)$/i.exec(id.value);  // arXiv's own DOIs
@@ -297,6 +304,44 @@ async function resolvePdf(id) {
     const aid = ax ? ax[1] : id.value;
     try { return await pdfFrom("https://arxiv.org/abs/" + aid, 1); }
     catch (err) { if (err.reason !== "not-pdf") throw err; return pdfFrom("https://arxiv.org/pdf/" + aid, 0); }
+  }
+  if (id.kind === "pmid") {   // PubMed itself has no PDFs: NCBI's ID converter maps to a PMC copy or a DOI
+    const soft = e => { if (hardFail(e)) throw e; return {}; };
+    const rec = (await fetchJson(`https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=${id.value}&format=json&tool=faelights`).catch(soft)).records?.[0] || {};
+    if (!rec.pmcid && !rec.doi) {   // the converter only knows PMC articles; PubMed's own summary lists the DOI of the rest
+      const sum = (await fetchJson(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${id.value}&retmode=json&tool=faelights`)).result?.[id.value];
+      rec.doi = (sum?.articleids || []).find(a => a.idtype === "doi")?.value;
+    }
+    const pmc = rec.pmcid && parseIdentifier(rec.pmcid), viaDoi = rec.doi && parseIdentifier("doi:" + rec.doi);
+    if (pmc && pmc.kind === "pmcid") {
+      try { return await resolvePdf(pmc); } catch (e) { if (!viaDoi || hardFail(e)) throw e; }
+    }
+    if (viaDoi && viaDoi.kind === "doi") return resolvePdf(viaDoi);
+    throw new FetchFail("no-free-copy");
+  }
+  if (id.kind === "ads") {
+    const ax = /^\d{4}arXiv(\d{4})\.?(\d{4,5})[A-Z.]$/.exec(id.value);   // e.g. 2020arXiv200112345A → 2001.12345
+    if (ax) return resolvePdf({ kind: "arxiv", value: ax[1] + "." + ax[2] });
+    // ADS's link gateway redirects to the e-print, the publisher's PDF or ADS's own scan; no API token needed
+    let big = null;
+    for (const t of ["EPRINT_PDF", "PUB_PDF", "ADS_PDF"]) {
+      try { return await pdfFrom(`https://ui.adsabs.harvard.edu/link_gateway/${encodeURIComponent(id.value)}/${t}`, 1); }
+      catch (e) { if (hardFail(e)) throw e; if (e.reason === "too-large") big = e; }
+    }
+    throw big || new FetchFail("paywalled");
+  }
+  if (id.kind === "isbn") {   // only public-domain scans on Open Library / Internet Archive are free to download
+    const docs = (await fetchJson(`https://openlibrary.org/search.json?isbn=${id.value}&fields=key,title,ia,ebook_access`)).docs || [];
+    const book = docs.find(d => d.ebook_access === "public" && Array.isArray(d.ia) && d.ia.length);
+    // a work lists every scan, some lending-only: try a few until one serves its PDF
+    for (const ia of (book ? book.ia : []).filter(x => /^[\w.-]+$/.test(x)).slice(0, 5)) {
+      try {
+        sendProgress({ stage: "download" });
+        const r = await fetchUrl(`https://archive.org/download/${ia}/${ia}.pdf`, "application/pdf", MAX_PDF);
+        if (isPdf(r.buf)) return { ...r, title: typeof book.title === "string" ? book.title.slice(0, 500) : null };
+      } catch (e) { if (hardFail(e) || e.reason === "too-large") throw e; }
+    }
+    throw new FetchFail("no-free-copy");
   }
   if (id.kind !== "doi") return pdfFrom(id.url);
   try { return await pdfFrom("https://doi.org/" + id.value.split("/").map(encodeURIComponent).join("/").replace(/%2F/g, "/")); }
@@ -338,6 +383,7 @@ ipcMain.handle("pdf:fetch", async (_e, text) => {
 });
 ipcMain.handle("pdf:fetchCancel", () => { if (fetchCtl) fetchCtl.abort(); return true; });
 ipcMain.handle("id:parse", (_e, text) => { const id = parseIdentifier(text); return id && { ...id, label: describe(id) }; });
+ipcMain.handle("id:parseMany", (_e, text) => parseIdentifiers(text).slice(0, 200).map(({ text, id }) => ({ text, id: id && { ...id, label: describe(id) } })));
 ipcMain.handle("app:openExternal", (_e, url) => {
   let u; try { u = new URL(String(url)); } catch (_) { return false; }
   if (u.protocol !== "http:" && u.protocol !== "https:") return false;
@@ -400,12 +446,44 @@ ipcMain.handle("export:file", async (_e, { name, text }) => {
   if (r.canceled || !r.filePath) return null;
   await fsp.writeFile(r.filePath, text, "utf8"); return r.filePath;
 });
-ipcMain.handle("export:folder", async (_e, { folderName, files }) => {
+// Write then rename, so a failed export never leaves a half-written file behind
+async function writeAtomic(p, data) {
+  await fsp.mkdir(path.dirname(p), { recursive: true });
+  const tmp = p + "." + crypto.randomBytes(4).toString("hex") + ".tmp";
+  try { await fsp.writeFile(tmp, data, typeof data === "string" ? "utf8" : undefined); await fsp.rename(tmp, p); }
+  catch (err) { try { await fsp.unlink(tmp); } catch (_) {} throw err; }
+}
+const EXPORT_FILTERS = {
+  md: { name: "Markdown", extensions: ["md"] }, txt: { name: "Text", extensions: ["txt"] }, html: { name: "HTML", extensions: ["html", "htm"] }
+};
+// One exported file plus binary assets (images) in a sibling "<file base> images" folder.
+// `dirToken` (optional) stands for that folder's name in `text` and asset paths; `encode: "url"` for Markdown links.
+ipcMain.handle("export:bundle", async (_e, { name, text, assets, dirToken, encode }) => {
+  if (typeof name !== "string" || typeof text !== "string" || (assets != null && !Array.isArray(assets))) throw new Error("Invalid export");
+  if (dirToken != null && !exportPaths.isToken(dirToken)) throw new Error("Invalid export");
+  const ext = path.extname(name).slice(1).toLowerCase();
+  const r = await dialog.showSaveDialog(win, { title: "Export highlights", defaultPath: name, filters: EXPORT_FILTERS[ext] ? [EXPORT_FILTERS[ext]] : [] });
+  if (r.canceled || !r.filePath) return null;
+  const dir = path.dirname(r.filePath), imgDir = exportPaths.imagesDirFor(r.filePath);
+  const list = (assets || []).map(a => ({ path: exportPaths.fillToken(a && a.path, dirToken, imgDir), bytes: a && a.bytes }));
+  const plan = exportPaths.planAssets(dir, list);   // throws, rejecting the whole export, on any unsafe path
+  const body = exportPaths.fillToken(text, dirToken, encode === "url" ? exportPaths.mdSeg(imgDir) : imgDir);
+  for (const a of plan) await writeAtomic(a.abs, a.bytes);
+  await writeAtomic(r.filePath, body);
+  return r.filePath;
+});
+// A folder per library: text files (+ optional binary assets); every name must stay inside that folder
+ipcMain.handle("export:folder", async (_e, { folderName, files, assets }) => {
+  if (exportPaths.pathProblem(folderName) || /[\\/]/.test(folderName) || !Array.isArray(files)) throw new Error("Invalid export folder");
+  for (const f of files) if (!f || exportPaths.pathProblem(f.name) || typeof f.text !== "string") throw new Error("Invalid export file");
   const r = await dialog.showOpenDialog(win, { title: "Choose where to export (e.g. your Obsidian vault)", properties: ["openDirectory", "createDirectory"] });
   if (r.canceled || !r.filePaths[0]) return null;
   const dir = path.join(r.filePaths[0], folderName);
+  const plan = exportPaths.planAssets(dir, assets);
+  const texts = files.map(f => ({ abs: exportPaths.resolveInside(dir, f.name), text: f.text }));
   await fsp.mkdir(dir, { recursive: true });
-  for (const f of files) await fsp.writeFile(path.join(dir, f.name), f.text, "utf8");
+  for (const a of plan) await writeAtomic(a.abs, a.bytes);
+  for (const f of texts) await writeAtomic(f.abs, f.text);
   return dir;
 });
 ipcMain.handle("export:openFolder", async (_e, p) => { shell.openPath(p); return true; });

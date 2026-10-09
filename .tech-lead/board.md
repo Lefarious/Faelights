@@ -32,9 +32,34 @@ Polish (reported by user):
 | item-actions | Themed in-app action menu (icons, groups, danger item, keyboard, ARIA) for library + PDF actions, opened by right-click or a ⋯ button | renderer/app.js (menus, navItem, doc cards, reader library picker), renderer/styles.css (own block) | — | M | 1 | merged f576105 (F-010) |
 | add-by-identifier | Add PDFs from a DOI, arXiv id, article page URL or direct PDF URL; main process downloads; clean failures with "Open in browser" | src/main.js, src/preload.js, new src/identify.js, renderer/app.js (add flow, drop/paste), renderer/styles.css (own block), test/identify.test.js | — | M | 1 | merged c5c0dbe (F-011) |
 | test-harness | `npm test` via node:test; smoke tests for core.js analyzePdf on renderer/sample.pdf | package.json (scripts only), test/core.test.js, test/helpers | — | S | 1 | merged c6748e9 (F-012) |
-| meta-enrich | Fill/augment doc metadata from CrossRef (DOI) and arXiv API, on add-by-identifier and on demand from the Info card | src/main.js, src/preload.js, renderer/app.js (readMeta/loadMeta/infoEl) | add-by-identifier | M | 2 | todo |
+| meta-enrich | Fill/augment doc metadata from CrossRef (DOI) and arXiv API, on add-by-identifier and on demand from the Info card | src/main.js, src/preload.js, renderer/app.js (readMeta/loadMeta/infoEl) | add-by-identifier | M | 2 | todo (left out of Sprint 2 by user) |
+| add-ids | "Add by identifier" dialog: ISBN, DOI, PMID, PMCID, arXiv, ADS Bibcode, links; several at once; ISBN = free copy via Open Library/Internet Archive else explain | src/identify.js, src/main.js (resolve/pdf:fetch), renderer/app.js (add dialog), styles.css (addid block), test/identify.test.js | — | M | 1 | wave 1 |
+| image-box | Capture-image tool in viewer: thin coloured outline Square annotation, recolour/note/delete/undo | renderer/annotator.js, styles.css (.pv block) | — | M | 1 | wave 1 |
+| image-extract | core.js reads Square annots → result.images {id,n,page,rect,color,comment,at,topic}; image inside a fact sorts before it | renderer/core.js, test/core.test.js, test/fixtures/ | — | M | 1 | wave 1 |
+| image-view | "With images" reader toggle, centred crops interleaved by `at`; images in colour filter | renderer/app.js (reader), styles.css (reader block) | image-extract, images.js scaffold | M | 1 | wave 2 |
+| image-export | Export formats: Markdown+images folder, Obsidian, HTML (self-contained), plain; doc + library | renderer/app.js (export), src/main.js (export:bundle), src/preload.js | image-extract, images.js scaffold | M | 1 | wave 2 |
 
 ## Sprints
+
+### Sprint 2 — running (user scope: add-ids + image capture only; meta-enrich left out)
+- Backup: `backup/sprint-2-pre-20261009` · Tag: `sprint-2-start` (44379a0) · Baseline: `npm test` 23/23 green
+- Merge flow: waves merge into `feature/s2-integration`; user tries the combined build (gate 1) before anything reaches main, push = gate 2
+- Scaffold (tech lead): `renderer/images.js` (`Images.crop/png/forget`) + script tag, so image-view and image-export run in parallel
+- Wave 1: add-ids, image-box, image-extract (no shared files except separate styles.css blocks)
+- Wave 2: image-view, image-export (both need result.images; app.js different regions). Started in parallel with wave 1 against the fixed contract (5 agents in flight); merges still one at a time in dependency order: image-extract → image-box → add-ids → image-view → image-export
+- Known textual overlaps to resolve at merge: renderReader toolbar block (image-view toggle vs image-export fmt/eb lines), index.html script lines (order.js, exportfmt.js), preload.js wrappers (add-ids, image-export), styles.css appended blocks; image-export's local merge helper to be swapped for image-view's
+- Decisions: ISBN = free copy (Open Library / Internet Archive) else explain + Open in browser / Add from file. Image colours join the existing colour filter (no group-by-colour).
+- Merge log (into feature/s2-integration):
+  | order | id | merge sha | conflicts | tests after |
+  |---|---|---|---|---|
+  | 1 | image-box | 7963874 | none | 23/23 |
+  | 2 | image-extract | 207c7d7 | none (ANALYZER_VERSION → 3) | 34/34 |
+  | 3 | image-view | 96051c7 | none (styles.css auto-merged) | 44/44 |
+  | 4 | image-export | d62427f | index.html script tags (kept order.js + exportfmt.js); swapped local exportItems for Order.withImages; Copy uses filteredImages | 57/57 |
+  | 5 | add-ids | 96e2507 | main.js require lines (kept parseIdentifiers + exportPaths) | 63/63 |
+- 2026-10-09: all 5 merged on feature/s2-integration @ 96e2507, 63/63 green; app launched from integration — awaiting user gate 1
+- Contract `result.images[]`: `{id, n, page, rect:[x1,y1,x2,y2] PDF user space normalised, color:[r,g,b] 0-255, comment, at, topic}`; sorted by `at`; consumers put an image before entry e when `img.at <= e.at`
+
 
 ### Between sprints — fix (2026-10-09)
 - `fix/list-add-and-reader-tools` (F-013): Add PDFs + add-by-link buttons in the PDF list header; reader toolbar left-aligned (spacer removed). Small, so built directly without sub-agents.
@@ -69,6 +94,10 @@ Polish (reported by user):
 | 2026-10-09 | c5c0dbe (sprint close) | 23/23 | none |
 
 ## Proposed (recommendations awaiting user approval)
+- [Risk] PMC now serves a bot-check page instead of PDFs, so PMCID (and PMIDs that resolve to PMC) may fail; try Europe PMC render endpoint / Unpaywall fallback · S · sprint 2
+- [Risk] ISBN → Open Library picks a scan from any edition of the work; show the edition title in the result row (or prefer exact-ISBN editions) · XS · sprint 2
+- [Feature] Move / resize image boxes in the viewer (today: delete and redraw) · S · sprint 2
+- [Optimization] `ckey` duplicated in order.js and app.js; `groupsOf` (exportfmt.js) and `Order.groupItems` overlap — fold into order.js · XS · sprint 2
 - [Risk] `ERR_NAME_NOT_RESOLVED` maps to "offline", so a mistyped hostname says "You're offline" — check navigator.onLine before choosing offline vs "couldn't reach site" · S · sprint 1
 - [Risk] Some publishers (nature.com) serve a bot challenge to Chromium's network stack, so even open-access DOIs can fail — fall back to Unpaywall/CrossRef link lookup (fits meta-enrich) · S · sprint 1
 - [Feature] Second test-fixture PDF covering underline/strike/squiggly, bookmark and wording-based topics, marks with no text — sample.pdf only covers highlights + font-size headings · S · sprint 1
