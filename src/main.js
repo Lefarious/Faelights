@@ -305,7 +305,12 @@ async function resolvePdf(id) {
     catch (err) { if (err.reason !== "not-pdf") throw err; return pdfFrom("https://arxiv.org/pdf/" + aid, 0); }
   }
   if (id.kind === "pmid") {   // PubMed itself has no PDFs: NCBI's ID converter maps to a PMC copy or a DOI
-    const rec = (await fetchJson(`https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=${id.value}&format=json&tool=faelights`)).records?.[0] || {};
+    const soft = e => { if (hardFail(e)) throw e; return {}; };
+    const rec = (await fetchJson(`https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=${id.value}&format=json&tool=faelights`).catch(soft)).records?.[0] || {};
+    if (!rec.pmcid && !rec.doi) {   // the converter only knows PMC articles; PubMed's own summary lists the DOI of the rest
+      const sum = (await fetchJson(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${id.value}&retmode=json&tool=faelights`)).result?.[id.value];
+      rec.doi = (sum?.articleids || []).find(a => a.idtype === "doi")?.value;
+    }
     const pmc = rec.pmcid && parseIdentifier(rec.pmcid), viaDoi = rec.doi && parseIdentifier("doi:" + rec.doi);
     if (pmc && pmc.kind === "pmcid") {
       try { return await resolvePdf(pmc); } catch (e) { if (!viaDoi || hardFail(e)) throw e; }
