@@ -1,5 +1,5 @@
 # Module: renderer-ui
-> Path: renderer/ (app.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: c5c0dbe · Related features: F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008, F-009, F-010, F-011
+> Path: renderer/ (app.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: e4be24f · Related features: F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008, F-009, F-010, F-011, F-013
 
 ## Purpose
 This is the whole user interface plus the splash page and brand artwork. It holds app state (`S`), renders the three panes (library sidebar, PDF list, extract reader) and the search view, and formats exports. It drives PDF import, rescan and analysis by combining `window.fl` (OS access) with `analyzePdf` (extraction). It does not touch the filesystem directly.
@@ -30,7 +30,7 @@ graph TD
 - **doc actions:** `removeDoc`, `setMine(d, on)`, `docMenu(d, at?, opts?)` (themed menu with icons; adds Mark as my publication / Remove from My publications, Annotate, Save PDF copy / Save annotated PDF, Discard annotations made here), `moveDoc`, `annotate(d, page?)`, `savePdfCopy(d)`, `useOriginal(d)`, `relink`
 - **export:** `wrapHl`, `entryLines`, `groupsOf`, `docText`, `safeName`, `exportDoc`, `exportLibrary`
 - **layout:** `PANES` (min/max/default widths), `STRIP`, `READER_MIN`, `layout()` (normalises `settings.layout` in place), `applyLayout()`, `togglePane(k, open?)`, `resetLayout()`, `paneBtn(k)`, `strip(k, label?)`, `resizer(k)`, `syncResizer(h)`, `resizerKey(e, h)`, window `pointerdown`/`dblclick`/`resize` listeners
-- **render:** `renderSide`/`themeSwitch`/`navItem`/`go`, `renderList`/`renderDocs`/`visibleDocs`/`renderProgress`, `openDoc`, `renderReader`/`infoEl`/`infoRows`/`fmtDate`/`quoteEl`/`markEl`/`appendHits`/`TOPIC_SOURCE`/`filtered`/`renderBlank`, `renderSearch`/`renderResults`, `renderAll`
+- **render:** `renderSide`/`themeSwitch`/`navItem`/`go`, `renderList` (header `.head-acts`: Add PDFs, add-by-link, hide pane)/`renderDocs`/`visibleDocs`/`renderProgress`, `openDoc`, `renderReader`/`infoEl`/`infoRows`/`fmtDate`/`quoteEl`/`markEl`/`appendHits`/`TOPIC_SOURCE`/`filtered`/`renderBlank`, `renderSearch`/`renderResults`, `renderAll`
 - **add from DOI / link:** `addIdBtn(compact)`, `openAddId(prefill?)` (dialog; prefills from the clipboard when parseable), `closeAddId`, `addIdHint` (live `fl.parseId` label + Offline pill from `navigator.onLine`), `addIdBusy`, `addIdFail(reason, landingUrl)` (Open in browser / Add PDFs from file…), `submitAddId` (offline short-circuit → `fl.fetchPdf` → duplicate check by `origin` or `hash` → `addImported`), `fl.onFetchProgress` handler
 - **input:** `chooseAndAdd`, `addSample`, window drag/drop (a dropped `text/uri-list` opens the add-from-link dialog), `paste` (parseable text outside inputs opens it), keydown, `fl.onMenu`, `fl.onOpenFiles`, `fl.onTheme`, `boot()` (ends with `fl.ready()`)
 

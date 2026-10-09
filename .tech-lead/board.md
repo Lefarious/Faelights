@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-09 · Current sprint: 2 (not started) · main: green 23/23 @ c5c0dbe (local, not pushed)_
+_Last updated: 2026-10-09 · Current sprint: 2 (not started) · main: green 23/23 @ e4be24f (pushed)_
 
 ## Settings
 - Capacity: 3 parallel features per sprint
@@ -31,6 +31,10 @@ Proposals waiting for approval (each can join Sprint 2):
 | meta-enrich | Fill/augment doc metadata from CrossRef (DOI) and arXiv API, on add-by-identifier and on demand from the Info card | src/main.js, src/preload.js, renderer/app.js (readMeta/loadMeta/infoEl) | add-by-identifier | M | 2 | todo |
 
 ## Sprints
+
+### Between sprints — fix (2026-10-09)
+- `fix/list-add-and-reader-tools` (F-013): Add PDFs + add-by-link buttons in the PDF list header; reader toolbar left-aligned (spacer removed). Small, so built directly without sub-agents.
+- Tests: 23/23 on branch and on main (e4be24f). User OK on branch (gate 1) and main (gate 2); pushed 57deb0f..e4be24f.
 
 ### Sprint 2 — planned
 - Features: meta-enrich (depends on F-011, now merged). Capacity left: could add approved proposals below.

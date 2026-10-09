@@ -1,5 +1,5 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-09 · Synced at commit: c5c0dbe
+> Last synced: 2026-10-09 · Synced at commit: e4be24f
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
@@ -54,7 +54,7 @@ One deliberate two-way edge: renderer-ui ↔ annotator (app.js opens/mounts the 
 ## Key flows (code-level traces)
 
 ### Add a PDF (button, drag/drop, menu, or "Open with")
-`chooseAndAdd()` / window `drop` / `fl.onOpenFiles` / `boot()` pending → `app.js addPaths(paths)` →
+`chooseAndAdd()` (sidebar Add PDFs, list-header + button, empty state, menu) / window `drop` / `fl.onOpenFiles` / `boot()` pending → `app.js addPaths(paths)` →
 existing `sourcePath` match? → `rescan()` (see below) ; else
 `fl.importPdf(p)` → IPC `pdf:import` → `main.js` reads file, SHA-1 hash, writes `userData/library/files/<id>.pdf` → returns `{id, hash, storedPath, mtime…}` →
 `fl.readPdf({...d, sourcePath:null})` → IPC `pdf:read` (reads stored copy) →
@@ -62,7 +62,7 @@ existing `sourcePath` match? → `rescan()` (see below) ; else
 `summary()` adds `count`, `colours` → pushed to `S.db.docs` → `save()` (250 ms debounce) → `fl.saveDb` → IPC `db:save` → `main.js saveDb()` atomic tmp+rename write of `faelights.json`.
 
 ### Add by DOI / arXiv ID / link
-Sidebar link button / empty-state button / File → "Add from DOI or Link…" (`menu` `add-id`) / Ctrl+V outside inputs / dropped `text/uri-list` → `app.js openAddId(prefill)` → typing → `addIdHint()` → `fl.parseId` → IPC `id:parse` → `identify.parseIdentifier` + `describe` → hint ("Offline" pill when `navigator.onLine` is false) →
+Sidebar link button / list-header link button / empty-state button / File → "Add from DOI or Link…" (`menu` `add-id`) / Ctrl+V outside inputs / dropped `text/uri-list` → `app.js openAddId(prefill)` → typing → `addIdHint()` → `fl.parseId` → IPC `id:parse` → `identify.parseIdentifier` + `describe` → hint ("Offline" pill when `navigator.onLine` is false) →
 `submitAddId()` → offline? fail at once with `offline` ; else `fl.fetchPdf(text)` → IPC `pdf:fetch` → `resolvePdf(id)` (`fetch-progress` `find` → `download`) → `fetchUrl` on the `faelights-fetch` session → `isPdf` / `findPdfLink` (citation_pdf_url) / CrossRef fallback → temp file → `importPdf()` (`import`) → `{ok, info, origin, title}` →
 duplicate by `origin` or `hash`? open the existing doc + toast, `fl.removeStored(new copy)` ; else `addImported(info, target, {origin, title})` → `analyzeBytes` → `S.db.docs` → `save()`. Failures → `addIdFail(reason)` (Open in browser via `fl.openExternal` → IPC `app:openExternal`; Add PDFs from file… → `chooseAndAdd`).
 
@@ -90,7 +90,7 @@ Pointer down on a `.resizer[data-pane]` (window-level listener in `app.js`) → 
 Reader `.info-btn` (left of the Full sentence / Highlights only switch) → toggles `settings.info` → `save()` + `renderReader()` → `infoEl(d)` prepended to `.r-main` → renders `d.meta` via `infoRows()`; if `d.meta` is missing → `loadMeta(d)` → `fl.readPdf({...d, sourcePath:null})` → `readMeta()` → `d.meta` → `save()` → `renderReader()`. `rescan()` also refreshes `d.meta`.
 
 ### Annotate a PDF
-Reader toolbar "View" button (left of Info) / doc menu "Annotate" / clicking an extract's `p. N` → `app.js annotate(d, page)` → `Annot.open(d, page)` → `fl.readPdf(d)` (stored copy if `d.annotated`) → pdf.js doc + `PDFDocument.load` (pdf-lib, in the background) → `renderReader()` → `Annot.mount(#reader)` → pages drawn lazily (`drawPage`: canvas with `AnnotationMode.ENABLE` + `renderTextLayer`).
+Reader toolbar "View" button (first in the left-aligned `.r-tools`, before Info) / doc menu "Annotate" / clicking an extract's `p. N` → `app.js annotate(d, page)` → `Annot.open(d, page)` → `fl.readPdf(d)` (stored copy if `d.annotated`) → pdf.js doc + `PDFDocument.load` (pdf-lib, in the background) → `renderReader()` → `Annot.mount(#reader)` → pages drawn lazily (`drawPage`: canvas with `AnnotationMode.ENABLE` + `renderTextLayer`).
 Edit (text selection + tool/popover, note click, ink drag, recolour, note, delete) → `edit(pages, fn)` on a serial queue → pdf-lib mutation (`addAnnot` / `recolorAnnot` / `setNote` / `deleteAnnot`, each writing an `/AP` stream) → `lib.save()` → push `{bytes, pages}` on `undo` → `swap()`: new pdf.js doc, bump `pageVer` for those pages, redraw them → `persist()`: `d.annotated = true`, `fl.writeStored(d.storedPath, bytes)` → IPC `pdf:writeStored` (atomic write inside `FILES_DIR`) + `save()`.
 Undo/redo → `history()` swaps byte snapshots (pdf-lib doc reloaded lazily). "Download PDF" → `fl.savePdfAs` → IPC `pdf:saveAs`.
 Leave (back button / Esc / another doc / search) → `Annot.close()` → after `queue` + `writing` settle → `rescan(d)` → `pdf:read` returns the stored copy → `analyzePdf` → new marks appear as extracts. Doc menu "Discard annotations made here…" → `useOriginal(d)`: `annotated=false`, `scannedMtime=0`, `rescan` → `pdf:read` re-copies the original over the stored copy.
