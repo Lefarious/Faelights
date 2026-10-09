@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-09 · Last logged commit: 5a2c5e0 · Version: 1.0.0 (unreleased changes on main)
+> Last updated: 2026-10-09 · Last logged commit: 312784a · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), and a light/dark/system theme toggle (F-004). There are no automated tests, and installers are built in CI but not published.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005, on branch `feature/resizable-columns`). There are no automated tests, and installers are built in CI but not published.
 
 ## 2. Vision & scope
 - **Goals:**
@@ -63,7 +63,7 @@ flowchart LR
 - **Library:** a named container. `inbox` is a built-in system library that can't be deleted.
 - **Doc:** one imported PDF. It belongs to exactly one library and carries tags, a star, its original path, the path of its stored copy, the last-scanned mtime, and the cached extraction `result`.
 - **Result:** entries (sentence + highlighted spans + topic), loose marks, and topics. It is cached so the UI never re-parses the PDF unless a rescan is triggered.
-- **Settings:** view mode, export format and list sort (in the DB). The theme is stored separately in `theme.json`, owned by the main process (→ D-005).
+- **Settings:** view mode, export format, list sort and column layout (widths + hidden state per column) in the DB. The theme is stored separately in `theme.json`, owned by the main process (→ D-005).
 
 ### Key flows
 - **Add:** the PDF is copied into the library, analysed in the renderer, and its result is saved into the JSON DB.
@@ -99,12 +99,12 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Brand:** a lowercase "faelights" wordmark (Young Serif) next to the **mark** (a highlight stroke plus a glowing mote). The **mote** alone is used for small accents. Every asset has light and dark variants in `renderer/assets/brand/`. The app icon is the mark on a dark rounded tile.
 - **Screen map:**
   ```
-  Window (3-pane grid)
+  Window (3-pane grid; every column resizable by drag and hideable to a slim labelled strip)
   Splash (frameless 440×280): mark + wordmark + "Gathering your highlights…"
   ├── Sidebar: brand (mark + wordmark) · Add PDFs · Search / All PDFs / Starred · Libraries (+ new) · Tags · footer (stale count, Rescan · theme icon switch)
   ├── List: view title · filter box · sort · progress meter · PDF cards (marks, pages, colour swatches, Changed / Original moved)
   └── Reader: title (click to rename) · library/star/tags · Full/Only toggle · format select · Copy · Export
-               ├── Rail: colour filter chips · Topics TOC
+               ├── Rail (own scroll, resizable, hideable): colour filter chips · Topics TOC
                └── Groups by topic → extracts (page, quote, notes, copy-one)
   Search view (list pane hidden): query · library scope · mode toggle → results by PDF, click to jump
   Empty states: mote + onboarding with "Try a sample PDF" + shortcut legend
@@ -113,10 +113,26 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **State:** one global state object, re-rendered fully on each change. Persistence is debounced (250 ms) and saves the whole DB.
 - **Interaction:** native context menus (library, doc), drag PDFs from the OS onto the window or onto a library, drag docs between libraries, keyboard (↑↓/J K, Delete, Ctrl/⌘ shortcuts from the app menu).
 - **Accessibility:** ARIA labels on icon buttons and inputs, `aria-current`/`aria-pressed` states, `:focus-visible` outlines, and a `role=status` toast.
-- **Responsive:** minimum window 900×560. Columns narrow below 1100 px.
+- **Layout:** the sidebar, PDF list and topics rail can each be resized by dragging the handle at their right edge and hidden with a panel button (or Ctrl+B / Ctrl+Shift+B / Ctrl+Alt+B, View menu). A hidden column becomes a 34 px strip with a vertical label that reopens it. Dragging below the minimum snaps the column shut. Double-click a handle to reset it; View → Reset Column Widths resets all. Handles are focusable separators (←/→ resize, Enter toggles).
+- **Scrollbars:** slim rounded thumbs in the muted tone that firm up when their pane is hovered and turn accent while dragged.
+- **Responsive:** minimum window 900×560. On narrow windows the list, then the sidebar, give up width so the reader keeps at least 420 px; the topics rail hides when the reader is under 600 px.
 - **Motion:** the brand SVGs pulse and the splash fades in; both stop under `prefers-reduced-motion`.
 
 ## 7. Feature log (newest first)
+### F-005 · Resizable, collapsible columns and better scrollbars · 2026-10-09 · shipped (on branch)
+- **Why:** fixed column widths wasted space on wide screens and crowded the reader on small ones; long topic lists in the sticky rail were cut off; default scrollbars looked heavy.
+- **How:**
+  - Column widths and hidden flags live in `settings.layout` and are applied as CSS variables and classes on the app grid. Toggling a column only flips a class, so nothing re-renders and scroll positions survive.
+  - Drag handles sit between columns; a hidden column keeps its content in the DOM and shows a strip instead.
+  - The reader body is split into an independently scrolling rail and extracts area.
+  - View menu items with accelerators send `pane:*` / `layout-reset` to the renderer.
+  - Global WebKit scrollbar styling driven by the theme tokens.
+- **Touched:** [renderer-ui](atlas/modules/renderer-ui.md), [main-process](atlas/modules/main-process.md)
+- **Added:** `settings.layout`; menu channels `pane:side`, `pane:list`, `pane:rail`, `layout-reset`. No dependencies.
+- **Trade-offs:** layout is stored in the library DB (saved on drag end), not a separate file like the theme, since it isn't needed before first render (→ D-007). The 1100 px / 1250 px media queries were replaced by a width-borrowing rule and a container query.
+- **Verified:** over DevTools Protocol in an isolated user-data dir: drag resize, drag-to-collapse (reopens at the previous width), strip and hide buttons with focus handoff, keyboard resize/toggle, double-click reset, search view hiding the list handle, persistence across reload. The menu accelerators weren't exercised (synthetic key events don't reach the native menu).
+- **Commit range:** 312784a (branch `feature/resizable-columns`)
+
 ### F-004 · Light / dark / system theme toggle · 2026-10-09 · shipped
 - **Why:** let users override the OS appearance, for example reading in light mode on a dark-themed system.
 - **How:**
@@ -189,6 +205,9 @@ Context: the user wanted a light/dark toggle, but all styling already keys off `
 ### D-006 · Splash as a separate window, gated on renderer ready · 2026-10-08
 Context: the app needed a branded launch screen. Options: an overlay inside `index.html`, or a separate frameless window. Decision: a separate window, shown immediately, while the main window stays hidden until the renderer sends `app:ready` after its first render. It stays on screen at least 0.9 s, and an 8 s fallback forces the main window. Consequences: there is no flash of an empty UI, but startup now depends on the renderer reporting ready.
 
+### D-007 · Column layout as CSS variables from one settings object · 2026-10-09
+Context: columns needed to be resized and hidden without breaking the immediate-mode renderer. Options: re-render panes on every change; or a layout layer that only writes CSS variables and classes on `#app`. Decision: the latter, with collapsed panes keeping their DOM and showing a strip via CSS, and state in `settings.layout` in the DB. Consequences: drags are cheap and don't disturb scroll position; every pane renderer must append its strip; layout data rides along in whole-DB saves.
+
 ## 9. Roadmap & deployment plan
 No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
 ### Now
@@ -200,6 +219,7 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - DB schema versioning and migrations, and per-doc result storage if the library grows large.
 - Move analysis off the UI thread (worker).
 ### Done
+- Resizable, collapsible columns + scrollbars · 2026-10-09 · F-005
 - Theme toggle · 2026-10-09 · F-004
 - Brand icons, logo, splash · 2026-10-08 · F-003
 - Abstract group + topic fallbacks · 2026-10-08 · F-002

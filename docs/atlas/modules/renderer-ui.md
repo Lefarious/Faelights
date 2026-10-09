@@ -1,11 +1,11 @@
 # Module: renderer-ui
-> Path: renderer/ (app.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: 5a2c5e0 · Related features: F-001, F-002, F-003, F-004
+> Path: renderer/ (app.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: 312784a · Related features: F-001, F-002, F-003, F-004, F-005
 
 ## Purpose
 This is the whole user interface plus the splash page and brand artwork. It holds app state (`S`), renders the three panes (library sidebar, PDF list, extract reader) and the search view, and formats exports. It drives PDF import, rescan and analysis by combining `window.fl` (OS access) with `analyzePdf` (extraction). It does not touch the filesystem directly.
 
 ## Public interface
-None. This is the top of the stack. It reacts to DOM events, `fl.onMenu` and `fl.onOpenFiles`.
+None. This is the top of the stack. It reacts to DOM events, `fl.onMenu` (including `pane:side|list|rail` and `layout-reset`) and `fl.onOpenFiles`.
 
 ## Dependencies
 - **Uses:** preload-bridge (`fl.*`), extraction-core (`analyzePdf`), pdfjs-dist (`pdfjsLib` global, worker at `../node_modules/pdfjs-dist/build/pdf.worker.min.js`), @fontsource (Figtree, Newsreader, Young Serif through CSS `@import`)
@@ -28,6 +28,7 @@ graph TD
 - **libraries:** `newLibrary`, `deleteLibrary`, `libraryMenu`
 - **doc actions:** `removeDoc`, `docMenu`, `moveDoc`, `relink`
 - **export:** `wrapHl`, `entryLines`, `groupsOf`, `docText`, `safeName`, `exportDoc`, `exportLibrary`
+- **layout:** `PANES` (min/max/default widths), `STRIP`, `READER_MIN`, `layout()` (normalises `settings.layout` in place), `applyLayout()`, `togglePane(k, open?)`, `resetLayout()`, `paneBtn(k)`, `strip(k, label?)`, `resizer(k)`, `syncResizer(h)`, `resizerKey(e, h)`, window `pointerdown`/`dblclick`/`resize` listeners
 - **render:** `renderSide`/`themeSwitch`/`navItem`/`go`, `renderList`/`renderDocs`/`visibleDocs`/`renderProgress`, `openDoc`, `renderReader`/`quoteEl`/`markEl`/`appendHits`/`TOPIC_SOURCE`/`filtered`/`renderBlank`, `renderSearch`/`renderResults`, `renderAll`
 - **input:** `chooseAndAdd`, `addSample`, window drag/drop, keydown, `fl.onMenu`, `fl.onOpenFiles`, `fl.onTheme`, `boot()` (ends with `fl.ready()`)
 
@@ -35,7 +36,7 @@ graph TD
 - `S` (in memory): `db` (the mirror of `faelights.json`), `view` (`{kind: library|all|starred|tag|search, id?, tag?}`), `docId`, `docQuery`, `searchQuery`, `searchLib`, `off` (hidden colour keys), `busy` (progress), `renaming`, `editingTitle`, `jumpTo`, `theme` (a mirror of the main-process theme)
 - Doc record fields it writes: `id, libraryId, title, fileName, sourcePath, storedPath, hash, addedAt, tags[], starred, scannedMtime, scannedAt, result, pages, count, colours[]`
 - Library record: `{id, name, createdAt, system?}`
-- `S.db.settings.mode | fmt | sort`
+- `S.db.settings.mode | fmt | sort | layout` (`layout` = `{side,list,rail: {w, closed}}`)
 
 ## Files
 
@@ -44,7 +45,7 @@ graph TD
 - **Exports:** none (browser script; all functions are globals in the page)
 - **Imports (internal):** globals `fl` (preload), `analyzePdf` + `ANALYZER_VERSION` (core.js), `pdfjsLib`
 - **Used by:** `index.html`
-- **Side effects:** every persistence and OS call goes through `fl.*`. It sets `pdfjsLib.GlobalWorkerOptions.workerSrc`, and registers window `dragenter/dragleave/dragover/drop/keydown` listeners.
+- **Side effects:** every persistence and OS call goes through `fl.*`. It sets `pdfjsLib.GlobalWorkerOptions.workerSrc`, and registers window `dragenter/dragleave/dragover/drop/keydown/pointerdown/dblclick/resize` listeners. `boot()` appends the sidebar and list `.resizer` handles to `#app`; `renderReader` adds the rail one.
 - **Change impact:** export output format (`docText`, `entryLines`) is what users paste into Notion and Obsidian. `ckey()` colour bucketing (rounded to multiples of 24) drives both list swatches and reader colour filters. DB field renames need a migration in `main.js loadDb`.
 
 ### `renderer/index.html`
@@ -53,7 +54,7 @@ graph TD
 - **Change impact:** script order matters: `pdf.min.js` → `core.js` → `app.js`.
 
 ### `renderer/styles.css`
-- **Role:** all styling. Design tokens on `:root` with a dark override, the three-column grid `.app` (`.wide` hides the list during search), and component classes used by `app.js` (`.nav`, `.doc`, `.r-head`, `.group`, `.ex`, `mark.u`/`mark.s`, `.chip`, `.s-hit`, `.toast`, `.drop`…)
+- **Role:** all styling. Design tokens on `:root` with a dark override, the three-column grid `.app` sized by `--side-w`/`--list-w` (`.wide` hides the list during search), column handles `.resizer`, collapsed `.strip`s and `*-closed` classes, `.pane-btn`, the reader split `.r-body` → `.rail-pane` + `.r-main` (each scrolls on its own; rail hidden by a `@container` query under 600 px), global `::-webkit-scrollbar` styling, and component classes used by `app.js` (`.nav`, `.doc`, `.r-head`, `.group`, `.ex`, `mark.u`/`mark.s`, `.chip`, `.s-hit`, `.toast`, `.drop`…)
 - **Imports:** `@fontsource` CSS from `../node_modules/…`
 - **Change impact:** class names are string-coupled to `el(tag, cls)` calls in `app.js`. Highlight colour reaches CSS as the `--mc` custom property (`"r g b"`).
 
@@ -82,4 +83,8 @@ graph TD
 - `openDoc` also rescans quietly when `outdated(d)` (result from an older `ANALYZER_VERSION`) and toasts "Topics refreshed".
 - Extracts before the first topic are labelled `PRE_TOPIC` ("Abstract") in the reader, the topics rail and exports.
 - The theme switch (sidebar footer, a `role=radiogroup` of three icon buttons) only asks main to change the theme. The page reacts through `prefers-color-scheme`; `S.theme` just marks which icon is `aria-checked`.
+- A closed pane keeps its DOM; CSS hides every child except `.strip`, so toggling never re-renders or loses scroll position. Each pane renderer must append its `strip()` as a direct child.
+- `layout()` must mutate the pane objects in place: the drag handler holds a reference to `layout()[k]` across `applyLayout()` calls.
+- Drag handlers filter by `pointerId`, so stray events from another pointer don't end a drag.
+- Shortcuts Ctrl+B / Ctrl+Shift+B / Ctrl+Alt+B come from the main menu, not a renderer keydown; `PANES[k].key` only labels tooltips.
 - `addSample` turns the `file:` URL into a path and strips the leading `/` for Windows drive letters.
