@@ -29,3 +29,15 @@ To run one file: `node --test test/core.test.js`.
 ## Snapshot in `core.test.js`
 
 `core.test.js` checks the exact current output of `analyzePdf` on `renderer/sample.pdf`: page count, mark count, every entry's spans, colours, comments and sentence, and the detected topics. If you change extraction on purpose, check that the new output is better, update the expected values in the test, and bump `ANALYZER_VERSION` in `renderer/core.js`.
+
+## Fixtures
+
+`test/fixtures/images.pdf` is a generated 2-page document with headings, highlighted sentences and Square "image capture" boxes (between paragraphs, inside a merged multi-sentence fact, in the right column of a two-column block, a side-by-side pair, and one with a comment). `images.test.js` checks `result.images` on it: rects, colours, comments, sort order and placement relative to facts.
+
+It is built with pdf-lib by `test/fixtures/make-images-pdf.js` (the layout is described at the top of that script). Both files are committed. To regenerate after changing the script:
+
+```
+node test/fixtures/make-images-pdf.js
+```
+
+The output is byte-stable (fixed dates), so an unchanged script gives an unchanged PDF. Fixture scripts must not end in `.test.js`, or `npm test` would run them.
