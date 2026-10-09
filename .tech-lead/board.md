@@ -55,6 +55,9 @@ Polish (reported by user):
   | 1 | image-box | 7963874 | none | 23/23 |
   | 2 | image-extract | 207c7d7 | none (ANALYZER_VERSION → 3) | 34/34 |
   | 3 | image-view | 96051c7 | none (styles.css auto-merged) | 44/44 |
+  | 4 | image-export | d62427f | index.html script tags (kept order.js + exportfmt.js); swapped local exportItems for Order.withImages; Copy uses filteredImages | 57/57 |
+  | 5 | add-ids | 96e2507 | main.js require lines (kept parseIdentifiers + exportPaths) | 63/63 |
+- 2026-10-09: all 5 merged on feature/s2-integration @ 96e2507, 63/63 green; app launched from integration — awaiting user gate 1
 - Contract `result.images[]`: `{id, n, page, rect:[x1,y1,x2,y2] PDF user space normalised, color:[r,g,b] 0-255, comment, at, topic}`; sorted by `at`; consumers put an image before entry e when `img.at <= e.at`
 
 
@@ -91,6 +94,10 @@ Polish (reported by user):
 | 2026-10-09 | c5c0dbe (sprint close) | 23/23 | none |
 
 ## Proposed (recommendations awaiting user approval)
+- [Risk] PMC now serves a bot-check page instead of PDFs, so PMCID (and PMIDs that resolve to PMC) may fail; try Europe PMC render endpoint / Unpaywall fallback · S · sprint 2
+- [Risk] ISBN → Open Library picks a scan from any edition of the work; show the edition title in the result row (or prefer exact-ISBN editions) · XS · sprint 2
+- [Feature] Move / resize image boxes in the viewer (today: delete and redraw) · S · sprint 2
+- [Optimization] `ckey` duplicated in order.js and app.js; `groupsOf` (exportfmt.js) and `Order.groupItems` overlap — fold into order.js · XS · sprint 2
 - [Risk] `ERR_NAME_NOT_RESOLVED` maps to "offline", so a mistyped hostname says "You're offline" — check navigator.onLine before choosing offline vs "couldn't reach site" · S · sprint 1
 - [Risk] Some publishers (nature.com) serve a bot challenge to Chromium's network stack, so even open-access DOIs can fail — fall back to Unpaywall/CrossRef link lookup (fits meta-enrich) · S · sprint 1
 - [Feature] Second test-fixture PDF covering underline/strike/squiggly, bookmark and wording-based topics, marks with no text — sample.pdf only covers highlights + font-size headings · S · sprint 1
