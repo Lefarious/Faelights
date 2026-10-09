@@ -9,7 +9,7 @@
 const Tour = (() => {
   const MOD = typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent) ? "⌘" : "Ctrl";
 
-  // {sel, title, body, keys?, action?}; no sel = centred card
+  // {sel, first?, title, body, keys?}; no sel = centred card; first: spotlight only the first match (one extract, not all)
   const CHAPTERS = {
     app: [
       { title: "Welcome to Faelights", body: "Faelights pulls the highlights, underlines and notes out of your annotated PDFs and lists them in reading order, grouped by topic. This short tour shows what each button does. You can replay it any time from Help › Show Tour." },
@@ -34,7 +34,8 @@ const Tour = (() => {
       { sel: "#fmt, [data-tour=copy], [data-tour=export]", title: "Copy and export", body: "Choose a format (Markdown, Obsidian, HTML or plain text). Copy puts the extracts on the clipboard; Export saves them to a file, with images if you like.", keys: `${MOD} E` },
       { sel: ".rail .chips", title: "Colour filter", body: "Click a colour to hide or show the marks made in it." },
       { sel: ".rail .toc", title: "Topics", body: "The PDF's headings. Click one to jump to its extracts." },
-      { sel: ".r-main .ex", title: "An extract", body: "Click the page number to open that page in the viewer, or the copy icon to copy just this extract." }
+      { sel: ".r-main .ex", first: true, title: "An extract", body: "Each highlight in its sentence, under the topic it sits in. Click the page number to open that page in the viewer." },
+      { sel: ".r-main .ex .copy1", first: true, title: "Copy one extract", body: "Copies just this extract, in the format you picked above. It appears when you point at an extract." }
     ],
     viewer: [
       { sel: ".pv-seg", title: "Annotation tools", body: "Select, Highlight, Underline, Strike through, Note, Draw and Capture image. Pick a tool, then select text or drag on the page. Each tool has a one-letter key." },
@@ -71,8 +72,14 @@ const Tour = (() => {
   const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
   const targets = sel => [...document.querySelectorAll(sel)].filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
   const has = sel => targets(sel).length > 0;
-  function rectOf(sel) {
-    const els = targets(sel); if (!els.length) return null;
+  const stepEls = s => { const els = targets(s.sel); return s.first ? els.slice(0, 1) : els; };
+  // the spotlit elements get .tour-target, so buttons that only show on hover (.copy1) are visible
+  function mark(els) {
+    for (const e of document.querySelectorAll(".tour-target")) if (!els.includes(e)) e.classList.remove("tour-target");
+    for (const e of els) e.classList.add("tour-target");
+  }
+  function rectOf(els) {
+    if (!els.length) return null;
     const rs = els.map(e => e.getBoundingClientRect());
     const left = Math.min(...rs.map(r => r.left)), top = Math.min(...rs.map(r => r.top));
     const right = Math.max(...rs.map(r => r.right)), bottom = Math.max(...rs.map(r => r.bottom));
@@ -133,7 +140,7 @@ const Tour = (() => {
     const nx = mk("button", "btn primary", last ? "Done" : "Next"); nx.onclick = () => go(1); row.append(nx);
     if (last) skip.hidden = true;
     pop.append(row);
-    if (s.sel) targets(s.sel)[0]?.scrollIntoView({ block: "nearest" });
+    if (s.sel) stepEls(s)[0]?.scrollIntoView({ block: "nearest" });
     place(); nx.focus();
   }
 
@@ -141,7 +148,9 @@ const Tour = (() => {
     if (!T || T.i < 0) return;
     const s = T.steps[T.i], { ring, pop, back } = T;
     if (s.sel && !has(s.sel)) return go(1);   // target vanished (re-render, pane hidden): move on
-    const r = s.sel && rectOf(s.sel);
+    const els = s.sel ? stepEls(s) : [];
+    mark(els);
+    const r = rectOf(els);
     ring.hidden = !r; back.style.clipPath = "none";
     const pw = pop.offsetWidth, ph = pop.offsetHeight, gap = 14, pad = 6, M = 8;
     let x, y;
@@ -167,7 +176,7 @@ const Tour = (() => {
     if (!T) return;
     const t = T; T = null;
     clearInterval(t.timer); removeEventListener("keydown", t.keys, true); removeEventListener("resize", place);
-    t.shield.remove(); t.back.remove(); t.ring.remove(); t.pop.remove();
+    mark([]); t.shield.remove(); t.back.remove(); t.ring.remove(); t.pop.remove();
     if (t.last && document.contains(t.last)) t.last.focus?.();
     if (!quiet && t.onEnd) t.onEnd(t.name, !!skipped);
   }

@@ -429,6 +429,7 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 .tour-acts .sp { flex: 1; }
 .tour-acts .linkbtn { padding-left: 0; color: var(--muted); font-weight: 500; }
 .tour-acts .linkbtn:hover { color: var(--ink); }
+.copy1.tour-target { opacity: 1; }
 @keyframes tour-in { from { opacity: 0; transform: translateY(4px); } }
 @media (prefers-color-scheme: dark) { .tour-back { background: rgb(0 0 0 / .55); } }
 @media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-pop { animation: none; } }
