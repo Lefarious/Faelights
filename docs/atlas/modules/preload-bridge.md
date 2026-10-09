@@ -1,5 +1,5 @@
 # Module: preload-bridge
-> Path: src/preload.js · Last synced commit: a6750ae · Related features: F-003, F-004, F-007
+> Path: src/preload.js · Last synced commit: c5c0dbe · Related features: F-003, F-004, F-007, F-011
 
 ## Purpose
 This is the only channel between the sandboxed renderer and the main process. It exposes `window.fl` with one thin wrapper per IPC channel and holds no logic of its own, apart from `pathFor`.
@@ -14,9 +14,11 @@ This is the only channel between the sandboxed renderer and the main process. It
 | `openPdf(doc)` / `revealPdf(doc)` / `relinkPdf(doc)` / `removeStored(p)` | `pdf:open` / `pdf:reveal` / `pdf:relink` / `pdf:removeStored` |
 | `writeStored(storedPath, bytes)` / `savePdfAs(name, bytes)` | `pdf:writeStored` / `pdf:saveAs` |
 | `exportFile(name, text)` / `exportFolder(folderName, files)` / `openFolder(p)` | `export:file` / `export:folder` / `export:openFolder` |
-| `copy(text)` / `popup(items)` / `confirm(message, detail, ok)` | `clip:write` / `menu:popup` / `ask:confirm` |
+| `copy(text)` / `popup(items)` / `confirm(message, detail, ok)` | `clip:write` / `menu:popup` (unused since F-010) / `ask:confirm` |
+| `parseId(text)` / `fetchPdf(text)` / `cancelFetch()` | `id:parse` / `pdf:fetch` / `pdf:fetchCancel` |
+| `openExternal(url)` / `readClipboardText()` | `app:openExternal` / `clip:read` |
 | `pathFor(file)` | none: `webUtils.getPathForFile`, falling back to `file.path` |
-| `onMenu(fn)` / `onOpenFiles(fn)` / `onTheme(fn)` | listens on `menu` / `open-files` / `theme` |
+| `onMenu(fn)` / `onOpenFiles(fn)` / `onTheme(fn)` / `onFetchProgress(fn)` | listens on `menu` / `open-files` / `theme` / `fetch-progress` |
 
 ## Dependencies
 - **Uses:** electron `contextBridge`, `ipcRenderer`, `webUtils`

@@ -1,11 +1,11 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-09 · Synced at commit: c6424a0
+> Last synced: 2026-10-09 · Synced at commit: c5c0dbe
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
 History, rationale and roadmap live in [../PROJECT_COMPASS.md](../PROJECT_COMPASS.md), not here.
 
-Faelights is an Electron 31 desktop app with no bundler, no framework and no tests. The renderer is plain browser scripts loaded by `<script>` tags in order; the main process is a single CommonJS file.
+Faelights is an Electron 31 desktop app with no bundler and no framework. Tests are `node:test` files under `test/` (`npm test`). The renderer is plain browser scripts loaded by `<script>` tags in order; the main process is a single CommonJS file.
 
 ## Entry points
 | Entry | File | What starts here |
@@ -17,6 +17,7 @@ Faelights is an Electron 31 desktop app with no bundler, no framework and no tes
 | Renderer boot | `renderer/app.js` `boot()` IIFE | Loads DB + theme, renders UI, sends `app:ready`, consumes pending "Open with" files |
 | CLI / OS file open | `src/main.js` `pdfArgs()`, `second-instance`, `open-file` | PDFs passed on argv or macOS "Open with" |
 | CI build | `.github/workflows/build.yml` | On `v*` tag: `electron-builder` for win/mac/linux |
+| Tests | `npm test` → `node --test "test/**/*.test.js"` | `test/core.test.js` (extraction on `sample.pdf`), `test/identify.test.js` |
 
 ## Module map
 ```mermaid
@@ -33,18 +34,22 @@ graph LR
   ANN -->|render + text layer| PDFJS
   UI -->|pdfjsLib global| PDFJS[(pdfjs-dist 3.11.174)]
   CORE -.->|pdf proxy objects| PDFJS
+  MAIN -->|require| ID[identify.js]
+  TEST[tests<br/>test/] -.->|require| CORE & ID
+  TEST -.->|legacy build| PDFJS
   PKG[packaging<br/>package.json, CI] -.->|bundles| MAIN & UI & PDFJS
 ```
 One deliberate two-way edge: renderer-ui ↔ annotator (app.js opens/mounts the viewer; annotator calls app.js helpers and `rescan` at call time). `core.js` has no imports; it only operates on the pdf.js document object passed to it.
 
 | Module | Path | Responsibility | Depends on | Used by | Doc |
 |---|---|---|---|---|---|
-| main-process | `src/main.js` | Library JSON + PDF copies on disk, splash/main windows, theme, dialogs, menus, shell, clipboard | electron, node fs/path/crypto | preload-bridge (IPC) | [main-process.md](modules/main-process.md) |
+| main-process | `src/main.js`, `src/identify.js` | Library JSON + PDF copies on disk, splash/main windows, theme, dialogs, menus, shell, clipboard, PDF download by DOI/arXiv/link (the only network use) | electron (incl. `net`, `session`), node fs/path/crypto | preload-bridge (IPC), tests (`identify.js`) | [main-process.md](modules/main-process.md) |
 | preload-bridge | `src/preload.js` | Maps `window.fl.*` → IPC channels | electron `contextBridge`, `ipcRenderer`, `webUtils` | renderer-ui | [preload-bridge.md](modules/preload-bridge.md) |
 | extraction-core | `renderer/core.js` | Turns a pdf.js document into entries (sentences + highlight spans), topics, loose marks | pdf.js document API (passed in) | renderer-ui | [extraction-core.md](modules/extraction-core.md) |
 | annotator | `renderer/annotator.js` | In-app PDF viewer; writes Highlight/Underline/StrikeOut/Text/Ink annotations with pdf-lib into the library copy; undo/redo | pdf-lib, pdfjs-dist, preload-bridge, extraction-core, renderer-ui helpers | renderer-ui | [annotator.md](modules/annotator.md) |
 | renderer-ui | `renderer/app.js`, `index.html`, `splash.html`, `styles.css`, `assets/brand/*`, `sample.pdf` | State, three-pane UI, splash page, brand artwork, theme button, search, export formatting, drag/drop, keyboard | preload-bridge, extraction-core, pdfjs-dist, @fontsource | — (top of stack) | [renderer-ui.md](modules/renderer-ui.md) |
 | packaging | `package.json`, `.github/workflows/build.yml` | Dependencies, scripts, electron-builder config, CI release builds | electron-builder | — | [packaging.md](modules/packaging.md) |
+| tests | `test/` | `node:test` suites: extraction snapshot on `sample.pdf`, identifier parsing and offline mapping | extraction-core, `src/identify.js`, pdfjs-dist legacy build | `npm test` | [tests.md](modules/tests.md) |
 
 ## Key flows (code-level traces)
 
@@ -55,6 +60,14 @@ existing `sourcePath` match? → `rescan()` (see below) ; else
 `fl.readPdf({...d, sourcePath:null})` → IPC `pdf:read` (reads stored copy) →
 `app.js analyzeBytes()` → `pdfjsLib.getDocument` → `readMeta(pdf)` (`getMetadata` XMP + Info, page-1 text for DOI/arXiv) → `core.js analyzePdf(pdf)` → `{entries, loose, topics, topicSource, pages, count}` →
 `summary()` adds `count`, `colours` → pushed to `S.db.docs` → `save()` (250 ms debounce) → `fl.saveDb` → IPC `db:save` → `main.js saveDb()` atomic tmp+rename write of `faelights.json`.
+
+### Add by DOI / arXiv ID / link
+Sidebar link button / empty-state button / File → "Add from DOI or Link…" (`menu` `add-id`) / Ctrl+V outside inputs / dropped `text/uri-list` → `app.js openAddId(prefill)` → typing → `addIdHint()` → `fl.parseId` → IPC `id:parse` → `identify.parseIdentifier` + `describe` → hint ("Offline" pill when `navigator.onLine` is false) →
+`submitAddId()` → offline? fail at once with `offline` ; else `fl.fetchPdf(text)` → IPC `pdf:fetch` → `resolvePdf(id)` (`fetch-progress` `find` → `download`) → `fetchUrl` on the `faelights-fetch` session → `isPdf` / `findPdfLink` (citation_pdf_url) / CrossRef fallback → temp file → `importPdf()` (`import`) → `{ok, info, origin, title}` →
+duplicate by `origin` or `hash`? open the existing doc + toast, `fl.removeStored(new copy)` ; else `addImported(info, target, {origin, title})` → `analyzeBytes` → `S.db.docs` → `save()`. Failures → `addIdFail(reason)` (Open in browser via `fl.openExternal` → IPC `app:openExternal`; Add PDFs from file… → `chooseAndAdd`).
+
+### Item action menu
+Right-click / ⋯ (`moreBtn`) / Shift+F10 or ContextMenu (`menuKey`) on a library row (`navItem` `onMenu`) or PDF card (`.doc-row`) → `libraryMenu(id, at, opts)` / `docMenu(d, at, opts)` → `openMenu(at, items, opts)` builds `.amenu` panels on `document.body` → the choice resolves the Promise → same action handlers as before (`exportLibrary`, `deleteLibrary`, `annotate`, `setMine`, `moveDoc`, `removeDoc`…). The reader's library button uses `openMenu` with a "Move to" heading.
 
 ### Startup + staleness detection
 `main.js whenReady` → `loadTheme()` reads `userData/theme.json` → `nativeTheme.themeSource` → `createSplash()` (shown on `ready-to-show`) + `createWindow()` (hidden) →
@@ -92,8 +105,14 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | IPC invoke | `pdf:choose`, `pdf:import`, `pdf:read`, `pdf:stat`, `pdf:open`, `pdf:reveal`, `pdf:relink`, `pdf:removeStored`, `pdf:writeStored`, `pdf:saveAs` | `preload.js` | `main.js` |
 | IPC invoke | `export:file`, `export:folder`, `export:openFolder`, `clip:write`, `menu:popup`, `ask:confirm` | `preload.js` | `main.js` |
 | IPC invoke | `theme:get`, `theme:set` | `preload.js` | `main.js` |
+| IPC invoke | `id:parse`, `pdf:fetch`, `pdf:fetchCancel`, `app:openExternal`, `clip:read` | `preload.js` | `main.js` |
+| IPC push | `fetch-progress` (`{stage}`) | `main.js sendProgress` | `app.js fl.onFetchProgress` |
+| Network | arxiv.org, doi.org (+ publisher redirects), api.crossref.org — only from `pdf:fetch` | `main.js fetchUrl` | — |
+| Session partition | `faelights-fetch` (in-memory) | `main.js fetchUrl` | — |
+| Temp file | `<temp>/faelights-<random>.pdf` (deleted after import) | `main.js` `pdf:fetch` | `importPdf` |
+| Doc field | `origin` `{kind, value, url}` | `app.js addImported` (from `pdf:fetch`) | `app.js submitAddId` duplicate check |
 | IPC send (renderer → main) | `app:ready` | `app.js boot()` via `fl.ready()` | `main.js revealMain()` |
-| IPC push | `menu` (payloads: `add`, `new-library`, `export-doc`, `export-library`, `rescan-all`, `search`, `toggle-mode`, `pane:side`, `pane:list`, `pane:rail`, `layout-reset`) | `main.js buildAppMenu()` | `app.js fl.onMenu` handler |
+| IPC push | `menu` (payloads: `add`, `add-id`, `new-library`, `export-doc`, `export-library`, `rescan-all`, `search`, `toggle-mode`, `pane:side`, `pane:list`, `pane:rail`, `layout-reset`) | `main.js buildAppMenu()` | `app.js fl.onMenu` handler |
 | IPC push | `open-files` | `main.js` `second-instance` / `open-file` | `app.js fl.onOpenFiles` → `addPaths` |
 | IPC push | `theme` (`system`/`light`/`dark`) | `main.js applyTheme()` | `app.js fl.onTheme` |
 | Persisted file | `userData/theme.json` (`{theme}`) | `main.js applyTheme` | `main.js loadTheme` at startup |
@@ -145,8 +164,13 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | `renderer/sample.pdf` | renderer-ui |
 | `renderer/splash.html` | renderer-ui |
 | `renderer/styles.css` | renderer-ui |
+| `src/identify.js` | main-process |
 | `src/main.js` | main-process |
 | `src/preload.js` | preload-bridge |
+| `test/README.md` | tests |
+| `test/core.test.js` | tests |
+| `test/helpers/pdf.js` | tests |
+| `test/identify.test.js` | tests |
 
 ## Excluded
 `node_modules/`, `dist/` (gitignored build output), `package-lock.json`, `README.md`, `.gitignore`.

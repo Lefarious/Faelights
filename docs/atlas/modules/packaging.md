@@ -1,11 +1,12 @@
 # Module: packaging
-> Path: package.json, .github/workflows/build.yml · Last synced commit: c6424a0 · Related features: F-001, F-003, F-007, F-008
+> Path: package.json, .github/workflows/build.yml · Last synced commit: c5c0dbe · Related features: F-001, F-003, F-007, F-008, F-012
 
 ## Purpose
 This module covers dependency declarations, npm scripts, the electron-builder configuration and the CI release workflow. It decides which files ship inside the installed app.
 
 ## Public interface
 - `npm start` runs `electron .`
+- `npm test` runs `node --test "test/**/*.test.js"` (the glob needs Node 21 or newer; see [tests](tests.md))
 - `npm run dist:win | dist:mac | dist:linux` runs `electron-builder` for that platform
 - CI builds all three when a `v*` tag is pushed (or on manual dispatch) and uploads `.exe/.zip/.dmg/.AppImage` as run artifacts. It does not publish them.
 

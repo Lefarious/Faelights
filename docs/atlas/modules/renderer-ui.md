@@ -1,11 +1,11 @@
 # Module: renderer-ui
-> Path: renderer/ (app.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: c6424a0 · Related features: F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008, F-009
+> Path: renderer/ (app.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: c5c0dbe · Related features: F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008, F-009, F-010, F-011
 
 ## Purpose
 This is the whole user interface plus the splash page and brand artwork. It holds app state (`S`), renders the three panes (library sidebar, PDF list, extract reader) and the search view, and formats exports. It drives PDF import, rescan and analysis by combining `window.fl` (OS access) with `analyzePdf` (extraction). It does not touch the filesystem directly.
 
 ## Public interface
-None. This is the top of the stack. It reacts to DOM events, `fl.onMenu` (including `pane:side|list|rail` and `layout-reset`) and `fl.onOpenFiles`.
+None. This is the top of the stack. It reacts to DOM events, `fl.onMenu` (including `pane:side|list|rail`, `layout-reset` and `add-id`), `fl.onOpenFiles` and `fl.onFetchProgress`.
 
 ## Dependencies
 - **Uses:** preload-bridge (`fl.*`), extraction-core (`analyzePdf`), annotator (`Annot.open/close/mount/key/isOpen/docId`), pdfjs-dist (`pdfjsLib` global, worker at `../node_modules/pdfjs-dist/build/pdf.worker.min.js`), @fontsource (Figtree, Newsreader, Young Serif through CSS `@import`)
@@ -24,17 +24,19 @@ graph TD
 
 `app.js` sections:
 - **state:** `S`, `save()`, lookups `doc()` / `lib()`, `PRE_TOPIC`, `outdated(d)`, `THEMES`, `brandImg(name, cls)`
-- **analysis:** `cleanTitle`, `DOI_RE`, `ARXIV_RE`, `pdfDate`, `readMeta(pdf)` (XMP dc/prism → Info dict → DOI/arXiv regex on page 1), `analyzeBytes` (returns `{title, meta, result}`), `loadMeta(d)` (lazy metadata for older docs), `summary`, `addPaths`, `rescan`, `rescanAll`
-- **libraries:** `newLibrary`, `deleteLibrary`, `libraryMenu`
-- **doc actions:** `removeDoc`, `setMine(d, on)`, `docMenu` (adds Mark as my publication / Remove from My publications, Annotate, Save PDF copy / Save annotated PDF, Discard annotations made here), `moveDoc`, `annotate(d, page?)`, `savePdfCopy(d)`, `useOriginal(d)`, `relink`
+- **analysis:** `cleanTitle`, `DOI_RE`, `ARXIV_RE`, `pdfDate`, `readMeta(pdf)` (XMP dc/prism → Info dict → DOI/arXiv regex on page 1), `analyzeBytes` (returns `{title, meta, result}`), `loadMeta(d)` (lazy metadata for older docs), `summary`, `addImported(info, target, opts)` (analyses an already-imported PDF and pushes the doc; `opts.origin`, `opts.title` fallback, `opts.sample`), `addPaths` (disk files → `fl.importPdf` → `addImported`), `rescan`, `rescanAll`
+- **libraries:** `newLibrary`, `deleteLibrary`, `libraryMenu(id, at?, opts?)`
+- **action menu:** `openMenu(at, items, opts)` → Promise of the chosen id or `null` (themed `.amenu` popover; `at` = element (opens below) or `{x,y}`; items `{id,label,icon,hint,danger,disabled,checked,submenu}`, separators and headings; keyboard, type-ahead, submenus, ARIA `menu`/`menuitem(checkbox)`), `closeMenu()`, `MENU` (open menu or `null`), `kbdNav`, `keyHint(k, shift)`, `moreBtn(label)` (⋯ trigger), `menuKey(e, open)` (Shift+F10 / ContextMenu)
+- **doc actions:** `removeDoc`, `setMine(d, on)`, `docMenu(d, at?, opts?)` (themed menu with icons; adds Mark as my publication / Remove from My publications, Annotate, Save PDF copy / Save annotated PDF, Discard annotations made here), `moveDoc`, `annotate(d, page?)`, `savePdfCopy(d)`, `useOriginal(d)`, `relink`
 - **export:** `wrapHl`, `entryLines`, `groupsOf`, `docText`, `safeName`, `exportDoc`, `exportLibrary`
 - **layout:** `PANES` (min/max/default widths), `STRIP`, `READER_MIN`, `layout()` (normalises `settings.layout` in place), `applyLayout()`, `togglePane(k, open?)`, `resetLayout()`, `paneBtn(k)`, `strip(k, label?)`, `resizer(k)`, `syncResizer(h)`, `resizerKey(e, h)`, window `pointerdown`/`dblclick`/`resize` listeners
 - **render:** `renderSide`/`themeSwitch`/`navItem`/`go`, `renderList`/`renderDocs`/`visibleDocs`/`renderProgress`, `openDoc`, `renderReader`/`infoEl`/`infoRows`/`fmtDate`/`quoteEl`/`markEl`/`appendHits`/`TOPIC_SOURCE`/`filtered`/`renderBlank`, `renderSearch`/`renderResults`, `renderAll`
-- **input:** `chooseAndAdd`, `addSample`, window drag/drop, keydown, `fl.onMenu`, `fl.onOpenFiles`, `fl.onTheme`, `boot()` (ends with `fl.ready()`)
+- **add from DOI / link:** `addIdBtn(compact)`, `openAddId(prefill?)` (dialog; prefills from the clipboard when parseable), `closeAddId`, `addIdHint` (live `fl.parseId` label + Offline pill from `navigator.onLine`), `addIdBusy`, `addIdFail(reason, landingUrl)` (Open in browser / Add PDFs from file…), `submitAddId` (offline short-circuit → `fl.fetchPdf` → duplicate check by `origin` or `hash` → `addImported`), `fl.onFetchProgress` handler
+- **input:** `chooseAndAdd`, `addSample`, window drag/drop (a dropped `text/uri-list` opens the add-from-link dialog), `paste` (parseable text outside inputs opens it), keydown, `fl.onMenu`, `fl.onOpenFiles`, `fl.onTheme`, `boot()` (ends with `fl.ready()`)
 
 ## Data & state owned
 - `S` (in memory): `db` (the mirror of `faelights.json`), `view` (`{kind: library|all|starred|mine|tag|search, id?, tag?}`), `docId`, `docQuery`, `searchQuery`, `searchLib`, `off` (hidden colour keys), `busy` (progress), `renaming`, `editingTitle`, `jumpTo`, `theme` (a mirror of the main-process theme)
-- Doc record fields it writes: `id, libraryId, title, fileName, sourcePath, storedPath, hash, addedAt, tags[], starred, scannedMtime, scannedAt, meta, result, pages, count, colours[]`, `annotated` (cleared by `useOriginal`; set by annotator), and `mine` (boolean, "My publications"; set by `setMine`)
+- Doc record fields it writes: `origin` (`{kind: doi|arxiv|pmcid|url, value, url}`, only on docs added by DOI/link, which have `sourcePath: null`), `id, libraryId, title, fileName, sourcePath, storedPath, hash, addedAt, tags[], starred, scannedMtime, scannedAt, meta, result, pages, count, colours[]`, `annotated` (cleared by `useOriginal`; set by annotator), and `mine` (boolean, "My publications"; set by `setMine`)
 - `meta` (optional; missing on docs scanned before F-006): `{title, authors[], abstract, publication, volume, issue, pages, date, doi, arxiv, issn, isbn, publisher, url, rights, keywords[], creator, producer, created, modified, pdfVersion}`. Empty fields are omitted; a failed lazy read leaves `{}` in memory only
 - Library record: `{id, name, createdAt, system?}`
 - `S.db.settings.mode | fmt | sort | layout | info | annotColor` (`info` = boolean, Info card shown; `layout` = `{side,list,rail: {w, closed}}`; `annotColor` written by annotator)
@@ -55,7 +57,7 @@ graph TD
 - **Change impact:** script order matters: `pdf.min.js` → `pdf-lib.min.js` → `core.js` → `annotator.js` → `app.js`. `annotator.js` must come before `app.js` because `boot()` can resume between scripts.
 
 ### `renderer/styles.css`
-- **Role:** all styling. Design tokens on `:root` with a dark override, the three-column grid `.app` sized by `--side-w`/`--list-w` (`.wide` hides the list during search), column handles `.resizer`, collapsed `.strip`s and `*-closed` classes, `.pane-btn`, the reader split `.r-body` → `.rail-pane` + `.r-main` (each scrolls on its own; rail hidden by a `@container` query under 600 px), global `::-webkit-scrollbar` styling, and component classes used by `app.js` (`.nav`, `.doc`, `.r-head`, `.group`, `.ex`, `mark.u`/`mark.s`, `.chip`, `.info`/`.info-grid`/`.info-btn`, `.s-hit`, `.toast`, `.drop`…), and the annotator's `.pv*` classes plus a trimmed copy of pdf.js's `.textLayer` rules. `.pg` is now a `button` (page number opens the viewer)
+- **Role:** all styling. Design tokens on `:root` with a dark override, the three-column grid `.app` sized by `--side-w`/`--list-w` (`.wide` hides the list during search), column handles `.resizer`, collapsed `.strip`s and `*-closed` classes, `.pane-btn`, the reader split `.r-body` → `.rail-pane` + `.r-main` (each scrolls on its own; rail hidden by a `@container` query under 600 px), global `::-webkit-scrollbar` styling, and component classes used by `app.js` (`.amenu*` action menu, `.row-more` ⋯ triggers, `.doc-row` card wrapper, the add-from-link dialog block at the end, `.nav`, `.doc`, `.r-head`, `.group`, `.ex`, `mark.u`/`mark.s`, `.chip`, `.info`/`.info-grid`/`.info-btn`, `.s-hit`, `.toast`, `.drop`…), and the annotator's `.pv*` classes plus a trimmed copy of pdf.js's `.textLayer` rules. `.pg` is now a `button` (page number opens the viewer)
 - **Imports:** `@fontsource` CSS from `../node_modules/…`
 - **Change impact:** class names are string-coupled to `el(tag, cls)` calls in `app.js`. Highlight colour reaches CSS as the `--mc` custom property (`"r g b"`).
 
@@ -93,3 +95,9 @@ graph TD
 - `addSample` turns the `file:` URL into a path and strips the leading `/` for Windows drive letters.
 - While the annotator is open, `renderReader()` re-mounts it instead of rebuilding the reader, and closes it once its doc is no longer the current, visible one (search view, another doc, filtered out). The window keydown handler offers keys to `Annot.key(e)` first, so Delete and ↑↓/J/K don't remove or switch docs while annotating.
 - Docs with `annotated: true` show an "Annotated" pill in the list.
+- Library rows are an `<li>` wrapping the nav `<button>` and a sibling ⋯ (`.row-more`); the `<li>` is the drop target. PDF cards are a `div.doc-row` wrapping `button.doc` and its ⋯, because buttons can't nest. Drag, click and `aria-current` stay on the inner button.
+- `openMenu` swallows the click that follows a pointerdown on the open menu's own trigger (`openMenu.skip`, 600 ms), so clicking ⋯ again closes it.
+- `docMenu` / `libraryMenu` with no anchor open below `document.activeElement` (the reader's ⋯ button relies on this).
+- Shortcut hints in menus are shown only on the current doc or library, where the main-menu accelerator actually applies.
+- `addImported` uses `opts.title` (the landing page's `citation_title`) only when the PDF itself yields no title.
+- Ctrl/⌘+V and link drops call `fl.parseId` over IPC before opening the dialog; text pasted into inputs is left alone.
