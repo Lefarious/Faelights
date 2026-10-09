@@ -465,71 +465,91 @@ async function relink(d) {
 }
 
 /* ---------------- export ---------------- */
-function wrapHl(t, fmt) { t = t.trim(); if (!t) return ""; return fmt === "md" ? `**${t}**` : fmt === "obsidian" ? `==${t}==` : t; }
-function entryLines(e, fmt, mode) {
-  const ids = new Set(e.spans.map(s => s.id));
-  let body;
-  if (mode === "full") {
-    body = e.segs.map(s => {
-      if (s.hl === -1 || !ids.has(s.hl) || fmt === "plain") return s.t;
-      return s.t.match(/^\s*/)[0] + wrapHl(s.t, fmt) + s.t.match(/\s*$/)[0];
-    }).join("").replace(/\s{2,}/g, " ").trim();
-  } else body = e.spans.map(s => s.text).join(" … ");
-  const lines = [`- ${body} (p. ${e.page})`];
-  for (const s of e.spans) if (s.comment && s.comment !== s.text) lines.push(`  - Note: ${s.comment}`);
-  return lines;
+// Text builders live in exportfmt.js (pure, unit-tested); these names stay for the rest of app.js
+const wrapHl = ExportFmt.wrapHl, entryLines = ExportFmt.entryLines, groupsOf = ExportFmt.groupsOf;
+const exportOpts = d => ({ mode: S.db.settings.mode, libraryName: (lib(d.libraryId) || {}).name || "", preTopic: PRE_TOPIC });
+// images (optional): image boxes to interleave — with `path` they link to a file, without it they become "[Image, p. N]"
+function docText(d, fmt, frontmatter, entries, images) {
+  return ExportFmt.docText(d, { ...exportOpts(d), fmt, frontmatter, entries, images });
 }
-function groupsOf(entries) {
-  const gs = [];
-  for (const e of entries) {
-    const key = e.topic ? e.topic.at + "|" + e.topic.title : "none";
-    let g = gs[gs.length - 1];
-    if (!g || g.key !== key) { g = { key, topic: e.topic, items: [] }; gs.push(g); }
-    g.items.push(e);
-  }
-  return gs;
-}
-function docText(d, fmt, frontmatter, entries) {
-  const mode = S.db.settings.mode;
-  entries = entries || d.result.entries;
-  const out = [];
-  if (frontmatter) {
-    out.push("---", `title: "${d.title.replace(/"/g, '\\"')}"`, `source: "${(d.sourcePath || d.fileName).replace(/\\/g, "/").replace(/"/g, '\\"')}"`,
-      `library: "${(lib(d.libraryId) || {}).name || ""}"`, `pages: ${d.pages}`, `highlights: ${d.count}`,
-      `tags: [${d.tags.map(t => JSON.stringify(t)).join(", ")}]`, `exported: ${new Date().toISOString().slice(0, 10)}`, "---", "");
-  }
-  out.push(fmt === "plain" ? d.title : `# ${d.title}`, "");
-  const done = new Set();
-  for (const g of groupsOf(entries)) {
-    const path = g.topic ? g.topic.path : [PRE_TOPIC];
-    path.forEach((t, i) => {
-      const key = path.slice(0, i + 1).join("\u0001");
-      if (i < path.length - 1 && done.has(key)) return;
-      done.add(key);
-      out.push(fmt === "plain" ? t.toUpperCase() : "#".repeat(Math.min(i + 2, 6)) + " " + t, "");
-    });
-    for (const e of g.items) out.push(...entryLines(e, fmt, mode));
-    out.push("");
-  }
-  if (d.result.loose.length) out.push(`(${plural(d.result.loose.length, "mark")} on pages without text: ${[...new Set(d.result.loose.map(l => l.page))].join(", ")})`);
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
-}
+const docHtml = (d, images) => ExportFmt.docHtml(d, { ...exportOpts(d), images });
 const safeName = s => s.replace(/[\\/:*?"<>|#^[\]]/g, "").replace(/\s+/g, " ").trim().slice(0, 120) || "Untitled";
-async function exportDoc(d) {
-  const fmt = S.db.settings.fmt;
-  const p = await fl.exportFile(safeName(d.title) + (fmt === "plain" ? ".txt" : ".md"), docText(d, fmt, fmt !== "plain"));
-  if (p) toast("Exported to " + p.split(/[\\/]/).pop());
+// safeName that Windows also accepts as a file/folder name (exports with assets are path-checked in main.js)
+const exportFileBase = s => {
+  const n = safeName(s).replace(/[\u0000-\u001f]/g, "").replace(/[. ]+$/, "") || "Untitled";
+  return /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(n) ? "_" + n : n;
+};
+const exportImageList = d => (d.result && d.result.images) || [];
+const exportWithImages = d => !!S.db.settings.images && exportImageList(d).length > 0;
+// Render a doc's image boxes for export. html → embedded data URLs; others → PNG assets under `dir`.
+// A crop that fails becomes a placeholder line instead of failing the export.
+async function exportImages(d, fmt, dir, tick) {
+  const refs = [], assets = [];
+  for (const img of exportImageList(d)) {
+    tick();
+    try {
+      if (fmt === "html") { const c = await Images.crop(d, img); refs.push({ ...img, url: c.url, width: c.width, height: c.height }); }
+      else { const path = dir + "/" + ExportFmt.imageFile(img); assets.push({ path, bytes: await Images.png(d, img) }); refs.push({ ...img, path }); }
+    } catch (err) { console.error("image export failed", err); refs.push({ ...img, failed: true }); }
+  }
+  return { refs, assets };
+}
+const exportProgress = total => { let k = 0; return () => toast(`Preparing images… ${++k}/${total}`); };
+async function exportDoc(d, fmt = S.db.settings.fmt) {
+  const imgs = exportWithImages(d);
+  if (fmt !== "html" && !imgs) {   // text only: unchanged path
+    const p = await fl.exportFile(safeName(d.title) + (fmt === "plain" ? ".txt" : ".md"), docText(d, fmt, fmt !== "plain"));
+    if (p) toast("Exported to " + p.split(/[\\/]/).pop());
+    return;
+  }
+  try {
+    const name = exportFileBase(d.title) + ExportFmt.extOf(fmt), tick = exportProgress(exportImageList(d).length);
+    let p;
+    if (fmt === "html") p = await fl.exportBundle(name, docHtml(d, imgs ? (await exportImages(d, fmt, null, tick)).refs : []));
+    else {
+      // the images folder is named after the file picked in the save dialog; main.js swaps the token for it
+      const token = "FLIMG" + [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, "0")).join("");
+      const { refs, assets } = await exportImages(d, fmt, token, tick);
+      p = await fl.exportBundle(name, docText(d, fmt, fmt !== "plain", null, refs), assets, { dirToken: token, encode: fmt === "md" ? "url" : "raw" });
+    }
+    if (p) toast("Exported to " + p.split(/[\\/]/).pop());
+  } catch (err) { console.error(err); toast("Couldn't export: " + (err.message || err).toString().replace(/^Error invoking remote method '[^']+': (Error: )?/, "")); }
+}
+// Reader "Export" button: pick a format (remembered as settings.fmt) and whether to include images
+async function exportMenu(d, at) {
+  for (;;) {
+    const fmt = S.db.settings.fmt, rect = at instanceof Element ? at.getBoundingClientRect() : null;
+    const items = [{ type: "heading", label: "Export as" }, ...ExportFmt.FORMATS.map(([v, t]) => ({ id: "fmt:" + v, label: t, checked: fmt === v }))];
+    if (exportImageList(d).length) items.push({ type: "separator" }, { id: "images", label: "Include images", checked: !!S.db.settings.images });
+    const r = await openMenu(at, items, { label: "Export" });
+    if (!r) return;
+    if (r === "images") {   // toggle, then reopen where the menu was (the reader re-renders its toolbar)
+      S.db.settings.images = !S.db.settings.images; save(); renderReader();
+      if (rect) at = { x: rect.left, y: rect.bottom + 4 };
+      continue;
+    }
+    S.db.settings.fmt = r.slice(4); save(); renderReader();
+    return exportDoc(d, S.db.settings.fmt);
+  }
 }
 async function exportLibrary(id) {
   const docs = S.db.docs.filter(d => d.libraryId === id);
   if (!docs.length) { toast("This library has no PDFs to export"); return; }
-  const fmt = S.db.settings.fmt, used = new Set();
-  const files = docs.map(d => {
-    let n = safeName(d.title), k = 2; while (used.has(n.toLowerCase())) n = safeName(d.title) + " " + k++; used.add(n.toLowerCase());
-    return { name: n + (fmt === "plain" ? ".txt" : ".md"), text: docText(d, fmt, fmt !== "plain") };
-  });
-  const dir = await fl.exportFolder(safeName(lib(id).name), files);
-  if (dir) { toast(`Exported ${plural(files.length, "file")}`); fl.openFolder(dir); }
+  const fmt = S.db.settings.fmt, used = new Set(), files = [], assets = [];
+  const tick = exportProgress(docs.reduce((n, d) => n + (exportWithImages(d) ? exportImageList(d).length : 0), 0));
+  try {
+    for (const d of docs) {
+      let n = exportFileBase(d.title), k = 2; while (used.has(n.toLowerCase())) n = exportFileBase(d.title) + " " + k++; used.add(n.toLowerCase());
+      const name = n + ExportFmt.extOf(fmt);
+      if (fmt === "html") files.push({ name, text: docHtml(d, exportWithImages(d) ? (await exportImages(d, fmt, null, tick)).refs : []) });
+      else if (exportWithImages(d)) {
+        const r = await exportImages(d, fmt, n + " images", tick);
+        assets.push(...r.assets); files.push({ name, text: docText(d, fmt, fmt !== "plain", null, r.refs) });
+      } else files.push({ name, text: docText(d, fmt, fmt !== "plain") });
+    }
+    const dir = await fl.exportFolder(exportFileBase(lib(id).name), files, assets.length ? assets : undefined);
+    if (dir) { toast(`Exported ${plural(files.length, "file")}`); fl.openFolder(dir); }
+  } catch (err) { console.error(err); toast("Couldn't export the library"); }
 }
 
 /* ---------------- layout: resizable, collapsible columns ---------------- */
@@ -984,10 +1004,10 @@ function renderReader() {
     imgb.onclick = () => { S.db.settings.images = !S.db.settings.images; save(); renderReader(); };
   }
   const fmt = el("select", "btn"); fmt.id = "fmt"; fmt.title = "Format used when copying or exporting"; fmt.setAttribute("aria-label", "Copy format");
-  for (const [v, t] of [["md", "Markdown"], ["obsidian", "Obsidian"], ["plain", "Plain text"]]) { const o = el("option", null, t); o.value = v; fmt.append(o); }
+  for (const [v, t] of ExportFmt.FORMATS) { const o = el("option", null, t); o.value = v; fmt.append(o); }
   fmt.value = S.db.settings.fmt; fmt.onchange = () => { S.db.settings.fmt = fmt.value; save(); };
-  const cb = btn("", "Copy", "copy"); cb.onclick = () => copyText(docText(d, S.db.settings.fmt, false, filtered(d)), "Extracts");
-  const eb = btn("", "Export", "export"); eb.onclick = () => exportDoc(d);
+  const cb = btn("", "Copy", "copy"); cb.onclick = () => copyText(docText(d, S.db.settings.fmt, false, filtered(d), exportWithImages(d) ? filteredImages(d) : undefined), "Extracts");
+  const eb = btn("", "Export", "export"); eb.onclick = () => exportMenu(d, eb);
   const vb = btn("", "View", "view", "View and annotate the PDF"); vb.onclick = () => annotate(d);
   tools.append(vb, ib, seg); if (imgb) tools.append(imgb); tools.append(fmt, cb, eb); head.append(meta, tools);
   r.append(head);
