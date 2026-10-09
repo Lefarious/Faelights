@@ -20,6 +20,7 @@ const ICON = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>',
   moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/>',
+  pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
   paneClose: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M16 15l-3-3 3-3"/>',
   paneOpen: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M14 9l3 3-3 3"/>'
@@ -225,6 +226,7 @@ async function libraryMenu(id) {
 async function removeDoc(d) {
   const ok = await fl.confirm(`Remove “${d.title}” from Faelights?`, "Its highlights and the library's copy are removed. Your original PDF is not touched.", "Remove");
   if (!ok) return;
+  if (Annot.docId() === d.id) await Annot.close({ discard: true });
   await fl.removeStored(d.storedPath);
   S.db.docs = S.db.docs.filter(x => x.id !== d.id);
   if (S.docId === d.id) S.docId = null;
@@ -233,6 +235,7 @@ async function removeDoc(d) {
 async function docMenu(d) {
   const libs = S.db.libraries.map(l => ({ id: "move:" + l.id, label: l.name, checked: l.id === d.libraryId }));
   const items = [
+    { id: "annotate", label: "Annotate" },
     { id: "open", label: "Open PDF" },
     { id: "reveal", label: process_platform() === "darwin" ? "Show in Finder" : "Show in folder" },
     { id: "rescan", label: "Rescan highlights" },
@@ -241,12 +244,17 @@ async function docMenu(d) {
     { id: "star", label: d.starred ? "Remove star" : "Star" },
     { label: "Move to", submenu: libs },
     { id: "export", label: "Export as Markdown…" },
+    { id: "pdf", label: d.annotated ? "Save annotated PDF…" : "Save PDF copy…" },
     { id: "copy", label: "Copy all extracts" },
+    ...(d.annotated && d.sourcePath && !d.sourceMissing ? [{ id: "original", label: "Discard annotations made here…" }] : []),
     { type: "separator" },
     { id: "remove", label: "Remove from Faelights…" }
   ];
   const r = await fl.popup(items);
   if (!r) return;
+  if (r === "annotate") annotate(d);
+  if (r === "pdf") savePdfCopy(d);
+  if (r === "original") useOriginal(d);
   if (r === "open") { const e = await fl.openPdf(d); if (e !== true) toast("Couldn't open the PDF"); }
   if (r === "reveal") fl.revealPdf(d);
   if (r === "rescan") { await rescan(d); renderAll(); }
@@ -263,6 +271,25 @@ function moveDoc(d, libId) {
   d.libraryId = libId; save();
   toast(`Moved to ${lib(libId).name}`);
   renderAll();
+}
+function annotate(d, page) {
+  if (S.docId !== d.id) { S.docId = d.id; S.off = new Set(); renderAll(); }
+  Annot.open(d, page);
+}
+async function savePdfCopy(d) {
+  try {
+    const { bytes } = await fl.readPdf(d);
+    const p = await fl.savePdfAs(safeName(d.title) + ".pdf", bytes);
+    if (p) toast("Saved " + p.split(/[\\/]/).pop());
+  } catch (err) { console.error(err); toast("Couldn't read the PDF"); }
+}
+// Throw away in-app annotations: the library copy is refreshed from the original file
+async function useOriginal(d) {
+  const ok = await fl.confirm("Discard the annotations made in Faelights?", "The library's copy is replaced by your original PDF and its highlights are read again. Save the annotated PDF first if you want to keep it.", "Discard annotations");
+  if (!ok) return;
+  if (Annot.docId() === d.id) await Annot.close({ discard: true });
+  d.annotated = false; d.scannedMtime = 0;
+  await rescan(d); renderAll();
 }
 async function relink(d) {
   const p = await fl.relinkPdf(d); if (!p) return;
@@ -611,6 +638,7 @@ function renderDocs() {
     if (S.view.kind !== "library") m.append(el("span", null, lib(d.libraryId)?.name || ""));
     if (d.sourceMissing) m.append(el("span", "pill warn", "Original moved"));
     else if (d.stale) m.append(el("span", "pill", "Changed"));
+    if (d.annotated) m.append(el("span", "pill", "Annotated"));
     b.append(t, m);
     if (d.tags && d.tags.length) { const tg = el("div", "tags-inline"); for (const x of d.tags) tg.append(el("span", null, x)); b.append(tg); }
     b.onclick = () => openDoc(d.id);
@@ -621,6 +649,7 @@ function renderDocs() {
 }
 
 async function openDoc(id, entryIdx) {
+  if (Annot.isOpen() && Annot.docId() !== id) Annot.close();
   S.docId = id; S.off = new Set(); S.editingTitle = false; S.jumpTo = entryIdx ?? null;
   const d = doc(id);
   if (S.view.kind === "search") S.view = { kind: "library", id: d.libraryId };
@@ -705,10 +734,14 @@ function infoEl(d) {
 }
 
 function renderReader() {
-  const r = $("reader"); r.replaceChildren();
+  const r = $("reader");
+  const d = S.view.kind !== "search" && S.docId && doc(S.docId);
+  const shown = d && visibleDocs().some(x => x.id === d.id);
+  // the viewer keeps its canvases across re-renders; it closes once its doc is no longer on screen
+  if (Annot.isOpen()) { if (shown && Annot.docId() === d.id) return Annot.mount(r); Annot.close(); }
+  r.replaceChildren();
   if (S.view.kind === "search") return renderSearch(r);
-  const d = S.docId && doc(S.docId);
-  if (!d || !visibleDocs().some(x => x.id === d.id)) return renderBlank(r);
+  if (!shown) return renderBlank(r);
   r.classList.toggle("only", S.db.settings.mode === "only");
 
   // header
@@ -721,9 +754,10 @@ function renderReader() {
     tt.append(inp); setTimeout(() => { inp.focus(); inp.select(); }, 0);
   } else { const h = el("h2", null, d.title); h.title = "Click to rename"; h.onclick = () => { S.editingTitle = true; renderReader(); }; tt.append(h); }
   const acts = el("div", "r-actions");
-  const ob = btn("icon", null, "open", "Open PDF"); ob.onclick = async () => { const e = await fl.openPdf(d); if (e !== true) toast("Couldn't open the PDF"); };
+  const ab = btn("", "Annotate", "pen"); ab.title = "View and annotate the PDF"; ab.onclick = () => annotate(d);
+  const ob = btn("icon", null, "open", "Open PDF in your PDF app"); ob.onclick = async () => { const e = await fl.openPdf(d); if (e !== true) toast("Couldn't open the PDF"); };
   const mb = btn("icon", null, "more", "More actions"); mb.onclick = () => docMenu(d);
-  acts.append(ob, mb); tt.append(acts); head.append(tt);
+  acts.append(ab, ob, mb); tt.append(acts); head.append(tt);
 
   const meta = el("div", "r-meta");
   const lb = el("button", "lib"); lb.append(svg(lib(d.libraryId)?.system ? ICON.inbox : ICON.lib), document.createTextNode(lib(d.libraryId)?.name || "Inbox"));
@@ -804,7 +838,8 @@ function renderReader() {
     const n = g.items.reduce((a, e) => a + e.spans.length, 0); h.append(el("small", null, plural(n, "extract"))); gh.append(h); sec.append(gh);
     for (const e of g.items) {
       const row = el("article", "ex"); row.id = "e" + e.n;
-      row.append(el("div", "pg", "p. " + e.page), quoteEl(e, S.db.settings.mode, ""));
+      const pg = el("button", "pg", "p. " + e.page); pg.title = "Show page " + e.page + " in the viewer"; pg.onclick = () => annotate(d, e.page);
+      row.append(pg, quoteEl(e, S.db.settings.mode, ""));
       const c = el("button", "copy1"); c.append(svg(ICON.copy)); c.title = "Copy this extract"; c.setAttribute("aria-label", "Copy this extract");
       c.onclick = () => copyText(entryLines(e, S.db.settings.fmt, S.db.settings.mode).join("\n"), "Extract"); row.append(c);
       for (const s of e.spans) if (s.comment && s.comment !== s.text) { const p = el("p", "note"); p.append(el("b", null, "Note"), document.createTextNode(s.comment)); row.append(p); }
@@ -919,6 +954,7 @@ addEventListener("drop", e => { e.preventDefault(); hideDrop(); const files = [.
 addEventListener("keydown", e => {
   if (e.target.matches("input, select, textarea")) return;
   if (e.target.matches(".resizer")) return resizerKey(e, e.target);
+  if (Annot.key(e)) return;
   const docs = S.view.kind === "search" ? [] : visibleDocs();
   const i = docs.findIndex(d => d.id === S.docId);
   if ((e.key === "ArrowDown" || e.key === "j") && docs.length) { e.preventDefault(); openDoc(docs[Math.min(docs.length - 1, i + 1)].id); }

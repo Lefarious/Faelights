@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-09 · Last logged commit: 8d525a2 · Version: 1.0.0 (unreleased changes on main)
+> Last updated: 2026-10-09 · Last logged commit: a6750ae · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. There are no automated tests, and installers are built in CI but not published.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. There are no automated tests, and installers are built in CI but not published.
 
 ## 2. Vision & scope
 - **Goals:**
@@ -14,7 +14,7 @@ Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pull
   - Highlights survive the original PDF moving or being deleted.
 - **Non-goals:**
   - Cloud sync, accounts or any network service. Nothing in the code makes network calls.
-  - Annotating or editing PDFs inside the app.
+  - ~~Annotating or editing PDFs inside the app.~~ Revised 2026-10-09: annotating is now in scope (F-007). Editing page content (text, images, page order) is still out of scope, and the user's original PDF is still never written.
   - OCR. Marks over scanned pages are listed as "loose" and the user is told to OCR the file outside the app.
 - **Success criteria (unverified):** highlights from common readers (Acrobat, Preview, Zotero and similar) extract correctly; exports drop into Obsidian without cleanup.
 
@@ -26,7 +26,10 @@ flowchart LR
   subgraph Renderer [Renderer · sandboxed]
     UI[renderer-ui<br/>state + views + export] --> CORE[extraction-core]
     UI --> PDFJS[pdf.js 3.11.174<br/>+ web worker]
+    UI --> ANN[annotator<br/>viewer + pdf-lib 1.17.1]
+    ANN --> PDFJS
   end
+  ANN -- writeStored / saveAs --> MAIN
   UI -- window.fl / IPC --> MAIN
   subgraph Main [Main process]
     MAIN[main-process] --> FS[(userData/library<br/>faelights.json + files/*.pdf)]
@@ -36,7 +39,7 @@ flowchart LR
   end
   OSOPEN[OS 'Open with' / argv] --> MAIN
   MAIN --> SRC[(Original PDFs on disk)]
-  MAIN --> EXPORT[(Export folder e.g. Obsidian vault)]
+  MAIN --> EXPORT[(Export folder e.g. Obsidian vault<br/>or annotated PDF copy)]
 ```
 
 ### Components
@@ -46,6 +49,7 @@ flowchart LR
 | Preload bridge | Narrow `window.fl` API from renderer to main | `contextBridge` | [preload-bridge](atlas/modules/preload-bridge.md) |
 | Extraction core | PDF text stream, annotation hit-testing, sentence and topic grouping | Plain JS over pdf.js | [extraction-core](atlas/modules/extraction-core.md) |
 | Renderer UI | Three-pane UI, search, export formatting | Vanilla JS + CSS, no framework | [renderer-ui](atlas/modules/renderer-ui.md) |
+| Annotator | In-app PDF viewer; writes highlight/underline/strike/note/ink annotations into the library copy | pdf.js render + text layer, pdf-lib | [annotator](atlas/modules/annotator.md) |
 | Packaging | Installers and CI builds | electron-builder, GitHub Actions | [packaging](atlas/modules/packaging.md) |
 
 ### Tech stack
@@ -53,6 +57,7 @@ flowchart LR
 |---|---|---|---|
 | Shell | Electron | ^31 | Cross-platform desktop with filesystem access (→ D-001) |
 | PDF parsing | pdfjs-dist | 3.11.174 (pinned) | Exposes text content and annotation geometry (→ D-003) |
+| PDF writing | pdf-lib | 1.17.1 (pinned) | Pure-JS UMD build, no `eval` (CSP-safe), low-level object access to add/remove annotations (→ D-008) |
 | UI | Vanilla JS / DOM, immediate-mode re-render | — | No build step (→ D-004) |
 | Storage | Single JSON file + copied PDFs | — | Local-first, inspectable (→ D-002) |
 | Fonts | @fontsource Figtree, Newsreader, Young Serif | ^5 | Bundled offline fonts |
@@ -61,7 +66,7 @@ flowchart LR
 
 ### Data model (high level)
 - **Library:** a named container. `inbox` is a built-in system library that can't be deleted.
-- **Doc:** one imported PDF. It belongs to exactly one library and carries tags, a star, its original path, the path of its stored copy, the last-scanned mtime, and the cached extraction `result`.
+- **Doc:** one imported PDF. It belongs to exactly one library and carries tags, a star, its original path, the path of its stored copy, the last-scanned mtime, and the cached extraction `result`. An `annotated` flag marks docs edited in the annotator: their stored copy becomes the source of truth and the original is no longer followed (→ D-008).
 - **Result:** entries (sentence + highlighted spans + topic), loose marks, and topics. It is cached so the UI never re-parses the PDF unless a rescan is triggered.
 - **Settings:** view mode, export format, list sort and column layout (widths + hidden state per column) in the DB. The theme is stored separately in `theme.json`, owned by the main process (→ D-005).
 
@@ -71,6 +76,7 @@ flowchart LR
 - **Startup:** a splash window shows the logo while the main window loads, and is swapped out once the library has rendered (→ D-006).
 - **Search:** in-memory AND-match over sentence, highlight, note and topic text across all cached results.
 - **Export:** one note per PDF, with optional YAML frontmatter, written to a file or to a folder per library.
+- **Annotate:** open a doc in the viewer, mark text or draw; each change is written into the library copy immediately; leaving the viewer re-extracts so new highlights and notes show up as extracts. "Download PDF" saves the annotated file anywhere.
 
 ## 4. External services & integrations
 | Service | Purpose | Where configured | Env var NAMES | Limits / cost | If it fails… |
@@ -103,10 +109,13 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
   Splash (frameless 440×280): mark + wordmark + "Gathering your highlights…"
   ├── Sidebar: brand (mark + wordmark) · Add PDFs · Search / All PDFs / Starred · Libraries (+ new) · Tags · footer (stale count, Rescan · theme icon switch)
   ├── List: view title · filter box · sort · progress meter · PDF cards (marks, pages, colour swatches, Changed / Original moved)
-  └── Reader: title (click to rename) · library/star/tags · Info toggle · Full/Only toggle · format select · Copy · Export
+  └── Reader: title (click to rename) · Annotate · open-in-app · ⋯ · library/star/tags · Info toggle · Full/Only toggle · format select · Copy · Export
                ├── Rail (own scroll, resizable, hideable): colour filter chips · Topics TOC
                ├── Info card (when toggled on): Zotero-style fields (type, title, authors, abstract, publication, DOI/arXiv links…) + File details
-               └── Groups by topic → extracts (page, quote, notes, copy-one)
+               └── Groups by topic → extracts (page → opens viewer at that page, quote, notes, copy-one)
+  Annotator (replaces the reader while open): ← Highlights · title · page box · zoom −/%/+/fit · undo/redo · Download PDF
+               tools: Select · Highlight · Underline · Strike · Note · Draw  +  5 colour swatches · save status
+               pages (continuous scroll, lazy-rendered) · popovers: selection (colours, underline, strike, note, copy) / mark (recolour, note, delete) / note editor
   Search view (list pane hidden): query · library scope · mode toggle → results by PDF, click to jump
   Empty states: mote + onboarding with "Try a sample PDF" + shortcut legend
   Topics: extracts before the first topic sit under "Abstract"
@@ -118,8 +127,25 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Scrollbars:** slim rounded thumbs in the muted tone that firm up when their pane is hovered and turn accent while dragged.
 - **Responsive:** minimum window 900×560. On narrow windows the list, then the sidebar, give up width so the reader keeps at least 420 px; the topics rail hides when the reader is under 600 px.
 - **Motion:** the brand SVGs pulse and the splash fades in; both stop under `prefers-reduced-motion`.
+- **Annotator keys:** V/H/U/S/N/D pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
+### F-007 · PDF viewer and annotator · 2026-10-09 · shipped (merged to main from `feature/pdf-annotator`)
+- **Why:** the user wanted to view PDFs and add annotations inside Faelights, then export or download the annotated PDF, rather than switching to another reader to highlight.
+- **How:**
+  - A viewer replaces the reader pane: pdf.js draws each page to a canvas (existing annotations included) with a selectable text layer. Pages render lazily as they scroll into view, and are dropped again when far away.
+  - Tools: Highlight, Underline, Strike through (from a text selection), Note (a sticky note placed on the page), Draw (freehand ink), and Select (a popover on selected text; clicking a mark lets you recolour it, add or edit its note, or delete it). There are five colours.
+  - Edits are written as real PDF annotations with pdf-lib, each with its own appearance stream so other readers draw them too. Quads cover the text box so extraction-core's hit test picks up new marks; a note on a highlight becomes the extract's note.
+  - Each edit saves the whole PDF and reloads it, so undo/redo is a stack of byte snapshots (up to 40). The bytes are written to the library's copy straight away (atomic write), so nothing can be left unsaved. Leaving the viewer rescans the doc.
+  - "Download PDF" (viewer) and "Save PDF copy… / Save annotated PDF…" (doc menu) write the PDF wherever the user picks. "Discard annotations made here…" restores the original file.
+- **Touched:** [annotator](atlas/modules/annotator.md) (new), [renderer-ui](atlas/modules/renderer-ui.md), [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [packaging](atlas/modules/packaging.md)
+- **Added:** dependency `pdf-lib` 1.17.1 (shipped through `build.files`); IPC `pdf:writeStored`, `pdf:saveAs`; doc fields `annotated`, `annotatedAt`; setting `settings.annotColor`; "Annotated" list pill; doc menu items; clickable page numbers on extracts. No migration: missing fields read as false/default.
+- **Trade-offs:** annotations go into the library copy, never the original (keeps the guardrail; → D-008). Once a doc is annotated, later edits to the original aren't followed until the user discards the annotations. Every edit re-serialises the whole PDF: simple and exact, but slower on very large files. pdf.js 3.11's own editor layer was rejected because it has no highlight tool and would mean adopting the full viewer bundle.
+- **Verified:** over DevTools Protocol in an isolated user-data dir, on `sample.pdf`: highlight (popover colour and tool), underline, strike (keyboard shortcut), ink, a sticky note with Unicode text, a note on a highlight, recolour, delete (Delete key, and a bare Delete doesn't remove the doc), undo ×2 / redo, zoom and anchor, page jump, Esc chain, and the rescan on close (the new highlight appeared as an extract with its note; underline and strike were extracted). The written annotations were re-read with pdf.js, and the AP streams were checked with pdf-lib.
+- **Not verified:** the Download / Save dialogs (native dialogs can't be driven over CDP), the "Discard annotations" flow, encrypted or malformed PDFs (read-only fallback), rotated pages, large PDFs (performance), opening the output in Acrobat or Preview.
+- **Known limits / follow-ups:** no typed text boxes (FreeText), shapes or eraser; Ink and Text notes aren't extracted (core.js reads markup only); no "save back to original"; undo history is lost when the viewer closes; the green swatch buckets separately from the sample's green in the colour filter.
+- **Commit range:** a6750ae (branch `feature/pdf-annotator`)
+
 ### F-006 · PDF info panel (Zotero-style metadata) · 2026-10-09 · shipped (merged to main 8d525a2)
 - **Why:** users wanted to see a paper's bibliographic details (authors, DOI, publication, dates) next to its highlights, like Zotero's Info pane, without leaving the app.
 - **How:**
@@ -222,6 +248,9 @@ Context: the app needed a branded launch screen. Options: an overlay inside `ind
 ### D-007 · Column layout as CSS variables from one settings object · 2026-10-09
 Context: columns needed to be resized and hidden without breaking the immediate-mode renderer. Options: re-render panes on every change; or a layout layer that only writes CSS variables and classes on `#app`. Decision: the latter, with collapsed panes keeping their DOM and showing a strip via CSS, and state in `settings.layout` in the DB. Consequences: drags are cheap and don't disturb scroll position; every pane renderer must append its strip; layout data rides along in whole-DB saves.
 
+### D-008 · Annotations via pdf-lib into the library copy, byte-snapshot undo · 2026-10-09
+Context: F-007 needs to add annotations that other readers and our own extractor both see, without breaking "never modify the original". Options: pdf.js's built-in editor layer (v3.11: FreeText/Ink/Stamp only, needs the full viewer); upgrading to pdf.js v4+ (risky for extraction, D-003); pdf-lib writing annotation dicts directly. Decision: pdf-lib, writing our own appearance streams, applied to the stored copy, which then becomes the doc's source of truth (`annotated` flag). Each edit re-saves the whole file and is re-rendered by pdf.js, so the screen always shows what's in the file and undo is a list of byte snapshots. Consequences: a second PDF library to keep; edit latency grows with file size; annotated docs stop following their original until reverted.
+
 ## 9. Roadmap & deployment plan
 No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
 ### Now
@@ -233,7 +262,9 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - DB schema versioning and migrations, and per-doc result storage if the library grows large.
 - Move analysis off the UI thread (worker).
 - Online metadata lookup (CrossRef / arXiv) and editable Info fields; metadata in export frontmatter (follow-up to F-006).
+- Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
+- PDF viewer and annotator · 2026-10-09 · F-007
 - PDF info panel · 2026-10-09 · F-006
 - Resizable, collapsible columns + scrollbars · 2026-10-09 · F-005
 - Theme toggle · 2026-10-09 · F-004
@@ -249,6 +280,7 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - Any `node_modules` file the renderer references must also be listed in `package.json build.files`.
 - Keep the CSP in `index.html` strict: no inline scripts and no remote origins.
 - Changing the DB or `result` shape requires a load-time repair or migration in `main.js loadDb`, or a bump of `ANALYZER_VERSION` in `core.js` so docs rescan.
+- PDF bytes are written only to the stored copy or a path the user picks in a save dialog. Annotated docs read only their stored copy.
 - Theming goes only through `nativeTheme.themeSource`. CSS reacts to `prefers-color-scheme`; never add per-page theme classes.
 - Brand artwork lives in `renderer/assets/brand/` with `-light`/`-dark` variants.
 
@@ -262,11 +294,13 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 | DB `version` field unused | No migration path | F-001 | Add version-based migrations in `loadDb` |
 | Wording-based headings can misfire on short numbered lists | Odd topics in some PDFs | F-002 | Require a numbering sequence, or check for bold fonts |
 | Theme colours duplicated in `styles.css`, `splash.html` and `main.js themeBg()` | Palette edits must touch 3 places | F-003/F-004 | Share a tokens file |
+| Annotator re-serialises the whole PDF on every edit | Slow edits on very large PDFs | F-007 | pdf-lib incremental update, or batch edits |
+| `annotator.js` relies on many `app.js` globals | Hidden coupling; load order matters | F-007 | A small shared helpers script, or modules when a bundler arrives |
 | Open question: target audience and distribution channel (GitHub only?) | Affects signing and auto-update priority | — | Ask the owner |
 
 ## 12. Resume checklist
 1. Read this file, then [docs/atlas/ATLAS.md](atlas/ATLAS.md).
-2. `npm install && npm start` (Node 18+). Try "Try a sample PDF" on an empty library.
+2. `npm install && npm start` (Node 18+). Try "Try a sample PDF" on an empty library, then "Annotate". When launching from a VS Code terminal, unset `ELECTRON_RUN_AS_NODE` first.
 3. Tests: none yet.
 4. Build: `npm run dist:win|mac|linux`, or push a `v*` tag for CI.
 5. User data lives at `<userData>/library` (*File → Show Library Folder*).

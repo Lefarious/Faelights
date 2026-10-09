@@ -255,3 +255,67 @@ kbd { font-family: var(--font-ui); font-size: 11.5px; border: 1px solid var(--li
 .info-grid dd { margin: 0; overflow-wrap: anywhere; user-select: text; }
 .info-grid dd.abstract { font-family: var(--font-read); font-size: 15px; line-height: 1.55; max-height: 9.3em; overflow-y: auto; }
 .info-grid a { color: var(--accent); text-underline-offset: 2px; }
+
+/* ---------- PDF viewer / annotator (annotator.js) ---------- */
+button.pg { border: 0; background: none; font: inherit; font-size: 12px; text-align: left; align-self: start; cursor: pointer; border-radius: 5px; margin: 0 0 0 -5px; padding: 4px 5px 2px; }
+button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel) 60%, transparent); }
+.pv { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pv-head { padding: 12px 20px 10px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+.pv-row { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; min-width: 0; }
+.pv-title { flex: 1; min-width: 120px; margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-ib { border: 0; background: none; color: var(--ink); padding: 6px; border-radius: 7px; cursor: pointer; display: grid; place-items: center; }
+.pv-ib:hover:not(:disabled) { background: var(--sel); }
+.pv-ib:disabled { opacity: .35; cursor: default; }
+.pv-ib .ico { width: 16px; height: 16px; }
+.pv-ib.danger { color: var(--danger); }
+.pv-page-box { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pv-pin { width: 44px; text-align: center; border: 1px solid var(--line); border-radius: 7px; padding: 3px 4px; background: var(--surface); }
+.pv-zoom { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 1px 3px; background: var(--surface); }
+.pv-zoom .pv-ib { padding: 4px; border-radius: 999px; }
+.pv-zl { border: 0; background: none; min-width: 46px; font-size: 12.5px; font-variant-numeric: tabular-nums; cursor: pointer; padding: 3px 2px; }
+.pv-tools .sp { flex: 1; }
+.pv-seg button { display: inline-flex; align-items: center; gap: 6px; }
+.pv-seg button[aria-checked="true"] { background: var(--ink); color: var(--bg); }
+.pv-seg button:disabled { opacity: .4; cursor: default; }
+.pv-seg .ico { width: 14px; height: 14px; }
+@container (max-width: 760px) { .pv-seg span { display: none; } .pv-seg button { padding: 5px 9px; } }
+.pv-swatches, .pv-dots { display: inline-flex; gap: 4px; align-items: center; }
+.pv-sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; background: var(--sw) content-box; padding: 2px; cursor: pointer; }
+.pv-sw:hover { border-color: color-mix(in srgb, var(--muted) 50%, transparent); }
+.pv-sw[aria-checked="true"] { border-color: var(--ink); }
+.pv-status { color: var(--muted); font-size: 12.5px; }
+
+.pv-scroll { flex: 1; min-height: 0; overflow: auto; background: color-mix(in srgb, var(--pane) 70%, var(--bg)); overscroll-behavior: contain; outline: none; }
+.pv-pages { position: relative; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 20px 24px 60px; width: max-content; min-width: 100%; }
+.pv-loading { color: var(--muted); margin: 40px auto; }
+.pv-page { position: relative; flex: none; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .18), 0 6px 18px rgb(0 0 0 / .08); }
+.pv-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.pv-over { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.pv[data-tool="draw"] .pv-page, .pv[data-tool="note"] .pv-page { cursor: crosshair; }
+.pv[data-tool="draw"] .textLayer, .pv[data-tool="note"] .textLayer { pointer-events: none; user-select: none; }
+.pv[data-tool="draw"] .pv-page { touch-action: none; }
+.pv-ink { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.pv-selbox { position: absolute; border: 2px solid var(--accent); border-radius: 4px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.pv-noteicon { position: absolute; width: 20px; height: 20px; color: #E8B020; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .35)); }
+.pv-noteicon .ico { width: 20px; height: 20px; fill: currentColor; stroke: #3a3340; stroke-width: 1.4; }
+
+/* pdf.js text layer: invisible text over the canvas, there to be selected */
+.textLayer { position: absolute; inset: 0; overflow: hidden; line-height: 1; text-align: initial; z-index: 2; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; }
+.textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+.textLayer span.markedContent { top: 0; height: 0; }
+.textLayer ::selection { background: rgb(40 110 230 / .3); }
+.textLayer br::selection { background: transparent; }
+.textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: -1; cursor: default; user-select: none; }
+.textLayer .endOfContent.active { top: 0; }
+
+.pv-pop { position: fixed; z-index: 25; display: grid; gap: 8px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 28px rgb(0 0 0 / .22); max-width: min(360px, calc(100vw - 16px)); }
+.pv-pop:not(.pv-noteed) { grid-auto-flow: column; align-items: center; gap: 2px; }
+.pv-pop:has(.pv-comment) { grid-auto-flow: row; }
+.pv-poprow { display: flex; align-items: center; gap: 2px; }
+.pv-poprow.end { justify-content: flex-end; gap: 6px; }
+.pv-div { width: 1px; align-self: stretch; margin: 3px 4px; background: var(--line); }
+.pv-comment { margin: 2px 6px; max-height: 9em; overflow-y: auto; font-family: var(--font-read); font-size: 15px; line-height: 1.45; white-space: pre-wrap; user-select: text; }
+.pv-ro { color: var(--muted); font-size: 12.5px; padding: 4px 6px; }
+.pv-noteed { width: 300px; padding: 10px; }
+.pv-noteed textarea { width: 100%; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); font-family: var(--font-read); font-size: 15px; line-height: 1.45; }
+.pv-noteed textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
