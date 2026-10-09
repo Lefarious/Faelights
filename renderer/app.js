@@ -989,7 +989,7 @@ function renderReader() {
   ti.onkeydown = e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); const v = ti.value.trim().replace(/^#/, ""); if (v && !d.tags.includes(v)) { d.tags.push(v); save(); renderAll(); setTimeout(() => $("tagin")?.focus(), 0); } } };
   tagedit.append(ti); meta.append(tagedit);
 
-  const ib = btn("icon info-btn", null, "info", "Show info"); ib.setAttribute("aria-pressed", !!S.db.settings.info);
+  const ib = btn("info-btn", "Metadata", "info", "Show the PDF's metadata"); ib.setAttribute("aria-pressed", !!S.db.settings.info);
   ib.onclick = () => { S.db.settings.info = !S.db.settings.info; save(); renderReader(); };
   const seg = el("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "What to show");
   for (const [m, label] of [["full", "Full sentence"], ["only", "Highlights only"]]) {
