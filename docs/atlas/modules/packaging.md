@@ -18,7 +18,10 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 ## Files
 
 ### `build/icon.png`
-- **Role:** 1024 px app icon: `renderer/assets/brand/mark-dark.svg` on a rounded `#1F1C2A` tile with transparent corners and the halo frozen at mid-glow. It is the source for `.ico`/`.icns`.
+- **Role:** 1024 px app icon: `renderer/assets/brand/mark-dark.svg` on a rounded `#1F1C2A` tile (~2% transparent margin) with transparent corners and the halo frozen at mid-glow. Source for the mac/linux icons.
+
+### `build/icon.ico`
+- **Role:** Windows build icon (`build.win.icon`): the same tile as separate 16/20/24/32/40/48/64/128/256 px PNG frames, so the taskbar and Explorer pick a sharp frame instead of scaling one image.
 
 
 ### `package.json`
@@ -32,6 +35,6 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 - **Steps:** checkout → setup-node → `npm ci || npm install` → `npm run <script> -- --publish never` → upload-artifact
 
 ## Gotchas
-- `build/icon.png` is the single icon source for win/mac/linux (`directories.buildResources: build`). electron-builder converts it to `.ico`/`.icns`.
+- Windows uses `build/icon.ico` (`build.win.icon`); mac/linux use `build/icon.png`. The runtime window icon is a separate copy in `renderer/assets/brand/` (`app-icon.ico`/`.png`); regenerate both sets together, keeping the tile margin small (~2%) or the taskbar icon looks smaller than other apps'.
 - The pdfjs-dist version is pinned exactly, and `core.js` relies on its annotation object shape.
 - There are no code signing or notarisation steps.

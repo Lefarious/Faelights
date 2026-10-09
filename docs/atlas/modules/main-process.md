@@ -34,7 +34,7 @@ Pushes to the renderer: `menu` (channel strings; File menu adds `add-id` on CmdO
 ## Dependencies
 - **Uses:** electron (`app`, `BrowserWindow`, `ipcMain`, `dialog`, `shell`, `Menu`, `clipboard`, `nativeTheme`, `session`, `net`), node `fs`, `path`, `crypto`; internal `./identify`
 - **Used by:** preload-bridge (all channels)
-- **Loads:** `src/preload.js`, `renderer/index.html`, `renderer/splash.html`, `renderer/assets/brand/app-icon.png` (window icon)
+- **Loads:** `src/preload.js`, `renderer/index.html`, `renderer/splash.html`, `renderer/assets/brand/app-icon.ico` (window icon on Windows) or `app-icon.png` (other platforms)
 
 ## Data & state owned
 - `app.getPath("userData")/library/faelights.json` is the single JSON DB `{version:1, libraries[], docs[], settings{mode,fmt,sort}}`

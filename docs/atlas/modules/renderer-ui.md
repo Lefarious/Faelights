@@ -9,7 +9,7 @@ None. This is the top of the stack. It reacts to DOM events, `fl.onMenu` (includ
 
 ## Dependencies
 - **Uses:** preload-bridge (`fl.*`), extraction-core (`analyzePdf`, `result.images`), annotator (`Annot.open/close/mount/key/isOpen/docId`), pdfjs-dist (`pdfjsLib` global, worker at `../node_modules/pdfjs-dist/build/pdf.worker.min.js`), @fontsource (Figtree, Newsreader, Young Serif through CSS `@import`)
-- **Used by:** `main.js` loads `splash.html` and `assets/brand/app-icon.png`; annotator calls back into `rescan`, `renderAll`, `renderReader`, `save`, `S` and the DOM helpers (`el`, `svg`, `btn`, `toast`, `copyText`, `plural`, `safeName`)
+- **Used by:** `main.js` loads `splash.html` and `assets/brand/app-icon.ico` (Windows) / `app-icon.png`; annotator calls back into `rescan`, `renderAll`, `renderReader`, `save`, `S` and the DOM helpers (`el`, `svg`, `btn`, `toast`, `copyText`, `plural`, `safeName`)
 
 ## Internal structure
 ```mermaid
@@ -92,7 +92,7 @@ graph TD
 - **Change impact:** the colours duplicate `styles.css` `--bg/--ink/--muted` and `main.js themeBg()`.
 
 ### `renderer/assets/brand/`
-- **Role:** brand files: `mark-light|dark.svg` (ring of dots + mote with pulsing halo), `splash-light|dark.svg` (animated mark + outlined wordmark lockup, 1176×303), `mote-light|dark.svg` (dot), `favicon-light|dark.ico`, and `app-icon.png` (256 px window icon, rendered from `mark-dark.svg` on a `#1F1C2A` tile)
+- **Role:** brand files: `mark-light|dark.svg` (ring of dots + mote with pulsing halo), `splash-light|dark.svg` (animated mark + outlined wordmark lockup, 1176×303), `mote-light|dark.svg` (dot), `favicon-light|dark.ico`, `app-icon.png` (256 px window icon, rendered from `mark-dark.svg` on a `#1F1C2A` tile filling ~96% of the canvas) and `app-icon.ico` (the same tile at 16/20/24/32/40/48/64/128/256 px, used for the window on Windows)
 - **Used by:** `app.js brandImg()` (sidebar mark, empty-state mote), `index.html` (drop overlay, favicons), `splash.html`, `main.js ICON`
 - **Change impact:** the SVGs carry their own CSS animation, which honours `prefers-reduced-motion`.
 
