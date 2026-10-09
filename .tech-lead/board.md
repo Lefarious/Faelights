@@ -4,7 +4,7 @@ _Last updated: 2026-10-09 · Current sprint: 3 (not planned) · main: green 63/6
 
 ## Settings
 - Capacity: 3 parallel features per sprint · minor bugs/polish (XS/S) are exempt and don't count
-- Todo ids: `T-NNN`, next free: T-012 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Todo ids: `T-NNN`, next free: T-013 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
@@ -13,9 +13,10 @@ _Last updated: 2026-10-09 · Current sprint: 3 (not planned) · main: green 63/6
 
 Every todo has a todo id (`T-NNN`, never reused) and a type: `feature`, `enhancement`, `bug` or `polish`. The type is the branch prefix: `<type>/<todo-id>-<slug>`, e.g. `feature/T-001-meta-enrich`. Minor bugs and polish (size XS or S) don't count toward the sprint cap.
 
-**Next sprint (Sprint 3):** T-001 meta-enrich, which fills in paper details from CrossRef and arXiv, stays optional, and keeps working offline. Any of the proposals below can join it if you approve them.
+**Next sprint (Sprint 3):** T-001 meta-enrich, which fills in paper details from CrossRef and arXiv, stays optional, and keeps working offline; and T-012 copy-image, which copies a captured image from the extract to the clipboard. Any of the proposals below can join it if you approve them.
 
 - [ ] **T-001 meta-enrich** (feature · M, depends on F-011 ✓): fill and refresh Info fields from CrossRef (DOI) and the arXiv API. Runs when a paper is added by DOI/link and on demand from the Info card. Never blocks adding or opening a PDF; results are saved in `meta`, so they still show offline.
+- [ ] **T-012 copy-image** (enhancement · S · Sprint 3, requested by user 2026-10-09): each image in the extract (reader "With images") can be copied to the clipboard as a PNG at full crop resolution, from a Copy button on the figure and from right-click. Shows a short "Copied" confirmation; works offline. Acceptance: pasting into Word, Paint or Obsidian gives the image.
 
 Proposals waiting for approval (each can join Sprint 3; "exempt" = doesn't count toward the cap):
 
@@ -40,6 +41,7 @@ Polish (reported by user):
 | add-by-identifier | Add PDFs from a DOI, arXiv id, article page URL or direct PDF URL; main process downloads; clean failures with "Open in browser" | src/main.js, src/preload.js, new src/identify.js, renderer/app.js (add flow, drop/paste), renderer/styles.css (own block), test/identify.test.js | — | M | 1 | merged c5c0dbe (F-011) |
 | test-harness | `npm test` via node:test; smoke tests for core.js analyzePdf on renderer/sample.pdf | package.json (scripts only), test/core.test.js, test/helpers | — | S | 1 | merged c6748e9 (F-012) |
 | T-001 meta-enrich | Fill/augment doc metadata from CrossRef (DOI) and arXiv API, on add-by-identifier and on demand from the Info card | src/main.js, src/preload.js, renderer/app.js (readMeta/loadMeta/infoEl) | add-by-identifier | M | 2 | todo (left out of Sprint 2 by user) |
+| T-012 copy-image | Copy an extract image to the clipboard as PNG (button on figure + right-click), "Copied" toast | renderer/app.js (figureEl), src/main.js (`clip:image` via clipboard.writeImage + nativeImage), src/preload.js, renderer/styles.css (fig block) | image-view ✓ | S | 1 | todo · Sprint 3 |
 | add-ids | "Add by identifier" dialog: ISBN, DOI, PMID, PMCID, arXiv, ADS Bibcode, links; several at once; ISBN = free copy via Open Library/Internet Archive else explain | src/identify.js, src/main.js (resolve/pdf:fetch), renderer/app.js (add dialog), styles.css (addid block), test/identify.test.js | — | M | 1 | merged 40bb2c7 |
 | image-box | Capture-image tool in viewer: thin coloured outline Square annotation, recolour/note/delete/undo | renderer/annotator.js, styles.css (.pv block) | — | M | 1 | merged 40bb2c7 |
 | image-extract | core.js reads Square annots → result.images {id,n,page,rect,color,comment,at,topic}; image inside a fact sorts before it | renderer/core.js, test/core.test.js, test/fixtures/ | — | M | 1 | merged 40bb2c7 |
