@@ -28,7 +28,7 @@ graph TD
 - **libraries:** `newLibrary`, `deleteLibrary`, `libraryMenu`
 - **doc actions:** `removeDoc`, `docMenu`, `moveDoc`, `relink`
 - **export:** `wrapHl`, `entryLines`, `groupsOf`, `docText`, `safeName`, `exportDoc`, `exportLibrary`
-- **render:** `renderSide`/`themeButton`/`navItem`/`go`, `renderList`/`renderDocs`/`visibleDocs`/`renderProgress`, `openDoc`, `renderReader`/`quoteEl`/`markEl`/`appendHits`/`TOPIC_SOURCE`/`filtered`/`renderBlank`, `renderSearch`/`renderResults`, `renderAll`
+- **render:** `renderSide`/`themeSwitch`/`navItem`/`go`, `renderList`/`renderDocs`/`visibleDocs`/`renderProgress`, `openDoc`, `renderReader`/`quoteEl`/`markEl`/`appendHits`/`TOPIC_SOURCE`/`filtered`/`renderBlank`, `renderSearch`/`renderResults`, `renderAll`
 - **input:** `chooseAndAdd`, `addSample`, window drag/drop, keydown, `fl.onMenu`, `fl.onOpenFiles`, `fl.onTheme`, `boot()` (ends with `fl.ready()`)
 
 ## Data & state owned
@@ -81,5 +81,5 @@ graph TD
 - Pressing Delete with the list focused removes the selected doc (after a confirm). The handler ignores keys typed in inputs, selects and textareas.
 - `openDoc` also rescans quietly when `outdated(d)` (result from an older `ANALYZER_VERSION`) and toasts "Topics refreshed".
 - Extracts before the first topic are labelled `PRE_TOPIC` ("Abstract") in the reader, the topics rail and exports.
-- The theme button only asks main to change the theme. The page reacts through `prefers-color-scheme`; `S.theme` just picks the button icon (sun/moon/monitor).
+- The theme switch (sidebar footer, a `role=radiogroup` of three icon buttons) only asks main to change the theme. The page reacts through `prefers-color-scheme`; `S.theme` just marks which icon is `aria-checked`.
 - `addSample` turns the `file:` URL into a path and strips the leading `/` for Windows drive letters.

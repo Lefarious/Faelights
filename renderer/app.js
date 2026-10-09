@@ -302,7 +302,7 @@ function navItem({ icon, name, count, current, onClick, onContext, onDrop, editi
 }
 function renderSide() {
   const side = $("side"); side.replaceChildren();
-  const brand = el("div", "brand"); brand.append(brandImg("mark", "brand-mark"), el("h1", null, "faelights"), themeButton()); brand.setAttribute("aria-label", "Faelights");
+  const brand = el("div", "brand"); brand.append(brandImg("mark", "brand-mark"), el("h1", null, "faelights")); brand.setAttribute("aria-label", "Faelights");
   const add = btn("primary add", "Add PDFs", "add"); add.onclick = chooseAndAdd;
   side.append(brand, add);
   const sc = el("div", "side-scroll");
@@ -350,20 +350,23 @@ function renderSide() {
   side.append(sc);
 
   const stale = S.db.docs.filter(d => d.stale).length;
-  const foot = el("div", "side-foot");
-  foot.append(el("span", null, stale ? plural(stale, "PDF") + " changed" : plural(S.db.docs.length, "PDF")));
-  const rb = el("button", "linkbtn", stale ? "Rescan" : "Rescan all"); rb.onclick = rescanAll; if (S.db.docs.length) foot.append(rb);
+  const foot = el("div", "side-foot"), status = el("div", "foot-row");
+  status.append(el("span", null, stale ? plural(stale, "PDF") + " changed" : plural(S.db.docs.length, "PDF")));
+  const rb = el("button", "linkbtn", stale ? "Rescan" : "Rescan all"); rb.onclick = rescanAll; if (S.db.docs.length) status.append(rb);
+  foot.append(status, themeSwitch());
   side.append(foot);
 }
 
-function themeButton() {
-  const [, label, icon] = THEMES.find(t => t[0] === S.theme) || THEMES[0];
-  const b = btn("icon theme-btn", null, icon, `Theme: ${label}`); b.setAttribute("aria-haspopup", "menu");
-  b.onclick = async () => {
-    const r = await fl.popup(THEMES.map(([id, l]) => ({ id, label: l, checked: id === S.theme })));
-    if (r) { S.theme = await fl.setTheme(r); renderSide(); }
-  };
-  return b;
+// One icon per theme; clicking an icon applies it straight away
+function themeSwitch() {
+  const seg = el("div", "theme-seg"); seg.setAttribute("role", "radiogroup"); seg.setAttribute("aria-label", "Theme");
+  for (const [id, label, icon] of THEMES) {
+    const b = el("button"); b.append(svg(ICON[icon])); b.title = label;
+    b.setAttribute("role", "radio"); b.setAttribute("aria-label", label); b.setAttribute("aria-checked", id === S.theme);
+    b.onclick = async () => { if (id !== S.theme) { S.theme = await fl.setTheme(id); renderSide(); } };
+    seg.append(b);
+  }
+  return seg;
 }
 
 function go(view) {

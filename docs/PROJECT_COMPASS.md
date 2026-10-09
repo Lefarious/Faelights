@@ -101,7 +101,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
   ```
   Window (3-pane grid)
   Splash (frameless 440×280): mark + wordmark + "Gathering your highlights…"
-  ├── Sidebar: brand (mark + wordmark + theme button) · Add PDFs · Search / All PDFs / Starred · Libraries (+ new) · Tags · footer (stale count, Rescan)
+  ├── Sidebar: brand (mark + wordmark) · Add PDFs · Search / All PDFs / Starred · Libraries (+ new) · Tags · footer (stale count, Rescan · theme icon switch)
   ├── List: view title · filter box · sort · progress meter · PDF cards (marks, pages, colour swatches, Changed / Original moved)
   └── Reader: title (click to rename) · library/star/tags · Full/Only toggle · format select · Copy · Export
                ├── Rail: colour filter chips · Topics TOC
@@ -120,7 +120,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 ### F-004 · Light / dark / system theme toggle · 2026-10-09 · shipped
 - **Why:** let users override the OS appearance, for example reading in light mode on a dark-themed system.
 - **How:**
-  - A sun/moon/monitor button in the sidebar header opens System / Light / Dark. The same choice is under View → Theme.
+  - A segmented icon switch (monitor = match system, sun = light, moon = dark) sits at the bottom of the sidebar; one click applies a theme. The same choice is under View → Theme.
   - The main process sets `nativeTheme.themeSource`, which flips `prefers-color-scheme` in every window. The existing CSS tokens, the splash, and the light/dark brand `<picture>`s all follow it with no CSS changes.
   - The choice is saved to `userData/theme.json` and applied before the splash window is created.
 - **Touched:** [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [renderer-ui](atlas/modules/renderer-ui.md)
@@ -128,6 +128,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Trade-offs:** no theme class in CSS, and the theme isn't stored in the library DB (→ D-005).
 - **Verified:** over DevTools Protocol, each mode switched the colour scheme, background and logo variant; with a saved Light theme on a dark OS the splash rendered light.
 - **Commit range:** 5a2c5e0 (branch `feature/theme-toggle`)
+- **Revised 2026-10-09:** the first version used a header button that opened a text menu (Match system / Light / Dark). At the user's request it was replaced by the icon switch in the sidebar footer, because three icons don't fit beside the wordmark.
 
 ### F-003 · Brand icons, logo and splash screen · 2026-10-08 · shipped
 - **Why:** give the app its own identity in place of the placeholder icon, and a polished launch instead of a blank window.
