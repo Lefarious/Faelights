@@ -130,7 +130,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Annotator keys:** V/H/U/S/N/D pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
-### F-008 · "My publications" section · 2026-10-09 · built on branch `feature/my-publications` (not merged)
+### F-008 · "My publications" section · 2026-10-09 · shipped (merged to main from `feature/my-publications`)
 - **Why:** the user wanted a sidebar section for their own papers, under Starred.
 - **How:** a `mine` flag on each doc, working like the star. "My publications" sits in the sidebar under Starred, with a count, and shows only those docs. A PDF is marked from a reader-header toggle ("Mark as mine" / "My publication"), from its ⋯ menu, or by dragging it onto the sidebar item. The section has its own empty state.
 - **Touched:** [renderer-ui](atlas/modules/renderer-ui.md)
@@ -285,7 +285,7 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
 - Brand refresh (dot-ring mark, icon, animated splash) · 2026-10-09 · F-008
-- My publications section · 2026-10-09 · F-008 (branch, pending merge)
+- My publications section · 2026-10-09 · F-008
 - PDF viewer and annotator · 2026-10-09 · F-007
 - PDF info panel · 2026-10-09 · F-006
 - Resizable, collapsible columns + scrollbars · 2026-10-09 · F-005
