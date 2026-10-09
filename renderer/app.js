@@ -146,6 +146,40 @@ async function loadMeta(d) {
   if (S.docId === d.id) renderReader();
 }
 loadMeta.busy = new Set();
+
+/* Online details (T-001): CrossRef for a DOI, the arXiv API for an arXiv id. Network only on user action: right after
+   adding a paper by DOI/arXiv link, or "Look up details" on the Info card. Kept in d.lookup (not d.meta, which a
+   rescan rebuilds from the PDF), so they survive rescans and show offline. Never blocks adding or opening a PDF. */
+const LOOKUP_SOURCE = { crossref: "CrossRef", arxiv: "arXiv" };
+const metaOf = d => d.lookup ? { ...d.meta, ...d.lookup.meta } : d.meta;
+function lookupQuery(d) {
+  const m = d.meta || {}, o = d.origin && /^(doi|arxiv)$/.test(d.origin.kind) ? { kind: d.origin.kind, value: d.origin.value } : null;
+  return m.doi || m.arxiv || o ? { doi: m.doi || "", arxiv: m.arxiv || "", origin: o } : null;
+}
+async function lookUp(d, quiet) {
+  const q = lookupQuery(d);
+  if (!q || lookUp.busy.has(d.id)) return;
+  if (!navigator.onLine) { if (!quiet) toast("You're offline. Looking up details needs a connection."); return; }
+  lookUp.busy.add(d.id); if (S.docId === d.id) renderReader();
+  let r;
+  try { r = await fl.lookupMeta(q); } catch (err) { console.error(err); r = { ok: false, reason: "network" }; }
+  lookUp.busy.delete(d.id);
+  if (!doc(d.id)) return;                                     // removed meanwhile
+  if (r.ok) {
+    d.lookup = { source: r.source, id: r.id, at: Date.now(), meta: r.meta };
+    // a title from the record beats a file name, but never one the user typed
+    if (!d.titleEdited && !cleanTitle(d.meta && d.meta.title) && cleanTitle(r.meta.title)) d.title = cleanTitle(r.meta.title);
+    save(); renderAll();
+    if (!quiet) toast("Details updated from " + LOOKUP_SOURCE[r.source]);
+    return;
+  }
+  if (S.docId === d.id) renderReader();
+  if (quiet) return;
+  toast(r.reason === "offline" ? "You're offline. Looking up details needs a connection."
+    : r.reason === "not-found" ? "CrossRef and arXiv have no record of this paper"
+    : "Couldn't reach the metadata service. Try again later.");
+}
+lookUp.busy = new Set();
 function summary(result) {
   const colours = new Map();
   for (const e of result.entries) for (const s of e.spans) colours.set(ckey(s.color), s.color);
@@ -163,7 +197,9 @@ async function addImported(info, target, opts = {}) {
   const { bytes } = await fl.readPdf({ ...d, sourcePath: null });
   const { title, meta, result } = await analyzeBytes(bytes, (pg, n) => { if (S.busy) { S.busy.page = `page ${pg} of ${n}`; renderProgress(); } });
   Object.assign(d, { title: title || opts.title || info.fileName.replace(/\.pdf$/i, ""), meta, result, pages: result.pages, scannedAt: Date.now(), ...summary(result) });
-  S.db.docs.push(d); return d;
+  S.db.docs.push(d);
+  if (opts.origin) lookUp(d, true);                           // added by DOI / arXiv link: fill in details in the background
+  return d;
 }
 
 async function addPaths(paths, opts = {}) {
@@ -906,11 +942,18 @@ function infoRows(rows) {
 }
 function infoEl(d) {
   const sec = el("section", "group info");
-  const head = el("div", "group-head"); head.append(el("h3", null, "Info")); sec.append(head);
+  const head = el("div", "group-head info-head"); head.append(el("h3", null, "Info")); sec.append(head);
   if (!d.meta) { loadMeta(d); sec.append(el("p", "loose", "Reading metadata…")); return sec; }
-  const m = d.meta;
+  if (lookupQuery(d)) {
+    const busy = lookUp.busy.has(d.id), L = d.lookup;
+    const src = el("p", "info-src", busy ? "Looking up details…" : L ? `Details from ${LOOKUP_SOURCE[L.source]} · ${fmtDate(L.at)}` : "Only what the PDF itself says.");
+    const lb = btn("", busy ? "Looking up…" : L ? "Refresh details" : "Look up details", "refresh", L ? "Fetch the details again from " + LOOKUP_SOURCE[L.source] : "Fill in title, authors, journal and more from CrossRef or arXiv");
+    lb.disabled = busy; lb.onclick = () => lookUp(d);
+    head.append(src, lb);
+  }
+  const m = metaOf(d);
   sec.append(infoRows([
-    ["Item Type", m.isbn ? "Book" : m.publication || m.volume || m.issn ? "Journal Article" : m.arxiv ? "Preprint" : "Document"],
+    ["Item Type", m.itemType || (m.isbn ? "Book" : m.publication || m.volume || m.issn ? "Journal Article" : m.arxiv ? "Preprint" : "Document")],
     ["Title", cleanTitle(m.title) || d.title],
     ...(m.authors || []).map(a => ["Author", a]),
     ["Abstract", m.abstract, { cls: "abstract" }],
@@ -956,7 +999,7 @@ function renderReader() {
   const tt = el("div", "r-title");
   if (S.editingTitle) {
     const inp = el("input"); inp.value = d.title; inp.setAttribute("aria-label", "Title");
-    const done = ok => { if (inp.dataset.done) return; inp.dataset.done = 1; if (ok && inp.value.trim()) d.title = inp.value.trim(); S.editingTitle = false; save(); renderAll(); };
+    const done = ok => { if (inp.dataset.done) return; inp.dataset.done = 1; if (ok && inp.value.trim()) { d.title = inp.value.trim(); d.titleEdited = true; } S.editingTitle = false; save(); renderAll(); };
     inp.onkeydown = e => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); }; inp.onblur = () => done(true);
     tt.append(inp); setTimeout(() => { inp.focus(); inp.select(); }, 0);
   } else { const h = el("h2", null, d.title); h.title = "Click to rename"; h.onclick = () => { S.editingTitle = true; renderReader(); }; tt.append(h); }
