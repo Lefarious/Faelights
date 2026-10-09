@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-09 · Current sprint: 3 (planned: T-001, T-012) · main: green 63/63 @ f541b3f (local, not pushed)_
+_Last updated: 2026-10-09 · Current sprint: 3 (in progress: T-012 + T-001 on feature/s3-integration, 69/69) · main: green 63/63 @ eb99c96 (local, not pushed)_
 
 ## Settings
 - Capacity: 3 parallel features per sprint · minor bugs/polish (XS/S) are exempt and don't count
@@ -13,10 +13,10 @@ _Last updated: 2026-10-09 · Current sprint: 3 (planned: T-001, T-012) · main: 
 
 Every todo has a todo id (`T-NNN`, never reused) and a type: `feature`, `enhancement`, `bug` or `polish`. The type is the branch prefix: `<type>/<todo-id>-<slug>`, e.g. `feature/T-001-meta-enrich`. Minor bugs and polish (size XS or S) don't count toward the sprint cap.
 
-**Next sprint (Sprint 3):** T-001 meta-enrich, which fills in paper details from CrossRef and arXiv, stays optional, and keeps working offline; and T-012 copy-image, which copies a captured image from the extract to the clipboard. Any of the proposals below can join it if you approve them.
+**Current sprint (Sprint 3, in progress):** T-001 meta-enrich, which fills in paper details from CrossRef and arXiv, stays optional, and keeps working offline; and T-012 copy-image, which copies a captured image from the extract to the clipboard. Any of the proposals below can join it if you approve them.
 
-- [ ] **T-001 meta-enrich** (feature · M · Sprint 3, depends on F-011 ✓): fill and refresh Info fields from CrossRef (DOI) and the arXiv API. Runs when a paper is added by DOI/link and on demand from the Info card. Never blocks adding or opening a PDF; results are saved in `meta`, so they still show offline.
-- [ ] **T-012 copy-image** (enhancement · S · Sprint 3, requested by user 2026-10-09): each image in the extract (reader "With images") can be copied to the clipboard as a PNG at full crop resolution, from a Copy button on the figure and from right-click. Shows a short "Copied" confirmation; works offline. Acceptance: pasting into Word, Paint or Obsidian gives the image.
+- [x] **T-001 meta-enrich** (feature · M · Sprint 3 · built, on integration, depends on F-011 ✓): fill and refresh Info fields from CrossRef (DOI) and the arXiv API. Runs when a paper is added by DOI/link and on demand from the Info card. Never blocks adding or opening a PDF; results are saved in `meta`, so they still show offline.
+- [x] **T-012 copy-image** (enhancement · S · Sprint 3 · built, on integration, requested by user 2026-10-09): each image in the extract (reader "With images") can be copied to the clipboard as a PNG at full crop resolution, from a Copy button on the figure and from right-click. Shows a short "Copied" confirmation; works offline. Acceptance: pasting into Word, Paint or Obsidian gives the image.
 
 Proposals waiting for approval (each can join Sprint 3; "exempt" = doesn't count toward the cap):
 
@@ -33,7 +33,7 @@ Proposals waiting for approval (each can join Sprint 3; "exempt" = doesn't count
 Polish (reported by user):
 
 - [x] **T-007** [bug · XS · exempt] The app icon on the Windows taskbar looked a different size from other apps' icons. Fixed in 055a74f (`fix/taskbar-icon-size`).
-- [ ] **T-013** [bug · S · exempt] After installing, the Start menu and desktop shortcuts show Electron's default atom icon instead of the Faelights icon. Cause: `win.signAndEditExecutable: false` stops electron-builder from writing `build/icon.ico` into Faelights.exe (the window icon is only set at runtime). Reported by user 2026-10-09.
+- [x] **T-013** [bug · S · exempt] After installing, the Start menu and desktop shortcuts show Electron's default atom icon instead of the Faelights icon. Cause: `win.signAndEditExecutable: false` stops electron-builder from writing `build/icon.ico` into Faelights.exe (the window icon is only set at runtime). Reported by user 2026-10-09. Fixed with an afterPack rcedit hook (71571a8), merged to main eb99c96.
 
 ## Backlog
 | id | requirements (short) | footprint | depends on | size | priority | status |
@@ -41,8 +41,8 @@ Polish (reported by user):
 | item-actions | Themed in-app action menu (icons, groups, danger item, keyboard, ARIA) for library + PDF actions, opened by right-click or a ⋯ button | renderer/app.js (menus, navItem, doc cards, reader library picker), renderer/styles.css (own block) | — | M | 1 | merged f576105 (F-010) |
 | add-by-identifier | Add PDFs from a DOI, arXiv id, article page URL or direct PDF URL; main process downloads; clean failures with "Open in browser" | src/main.js, src/preload.js, new src/identify.js, renderer/app.js (add flow, drop/paste), renderer/styles.css (own block), test/identify.test.js | — | M | 1 | merged c5c0dbe (F-011) |
 | test-harness | `npm test` via node:test; smoke tests for core.js analyzePdf on renderer/sample.pdf | package.json (scripts only), test/core.test.js, test/helpers | — | S | 1 | merged c6748e9 (F-012) |
-| T-001 meta-enrich | Fill/augment doc metadata from CrossRef (DOI) and arXiv API, on add-by-identifier and on demand from the Info card | src/main.js, src/preload.js, renderer/app.js (readMeta/loadMeta/infoEl) | add-by-identifier | M | 2 | todo · Sprint 3 |
-| T-012 copy-image | Copy an extract image to the clipboard as PNG (button on figure + right-click), "Copied" toast | renderer/app.js (figureEl), src/main.js (`clip:image` via clipboard.writeImage + nativeImage), src/preload.js, renderer/styles.css (fig block) | image-view ✓ | S | 1 | todo · Sprint 3 |
+| T-001 meta-enrich | Fill/augment doc metadata from CrossRef (DOI) and arXiv API, on add-by-identifier and on demand from the Info card | src/main.js, src/preload.js, renderer/app.js (readMeta/loadMeta/infoEl) | add-by-identifier | M | 2 | merged on integration 269424f (Sprint 3) |
+| T-012 copy-image | Copy an extract image to the clipboard as PNG (button on figure + right-click), "Copied" toast | renderer/app.js (figureEl), src/main.js (`clip:image` via clipboard.writeImage + nativeImage), src/preload.js, renderer/styles.css (fig block) | image-view ✓ | S | 1 | merged on integration 9d8820f (Sprint 3) |
 | add-ids | "Add by identifier" dialog: ISBN, DOI, PMID, PMCID, arXiv, ADS Bibcode, links; several at once; ISBN = free copy via Open Library/Internet Archive else explain | src/identify.js, src/main.js (resolve/pdf:fetch), renderer/app.js (add dialog), styles.css (addid block), test/identify.test.js | — | M | 1 | merged 40bb2c7 |
 | image-box | Capture-image tool in viewer: thin coloured outline Square annotation, recolour/note/delete/undo | renderer/annotator.js, styles.css (.pv block) | — | M | 1 | merged 40bb2c7 |
 | image-extract | core.js reads Square annots → result.images {id,n,page,rect,color,comment,at,topic}; image inside a fact sorts before it | renderer/core.js, test/core.test.js, test/fixtures/ | — | M | 1 | merged 40bb2c7 |
@@ -51,7 +51,32 @@ Polish (reported by user):
 
 ## Sprints
 
-### Sprint 2 — closed (user scope: add-ids + image capture only; meta-enrich left out)
+| sprint | status | scope | result |
+|---|---|---|---|
+| 3 | **in progress**: on `feature/s3-integration`, waiting for your OK (gate 1) | T-012 copy-image, T-001 meta-enrich | 69/69 on integration |
+| 2 | **closed** 2026-10-09 (tag `sprint-2-end`, main 40bb2c7) | add-ids, image-box, image-extract, image-view, image-export | 63/63 |
+| 1 | **closed** 2026-10-09 (tag `sprint-1-end`, c5c0dbe) | item-actions, add-by-identifier, test-harness | 23/23 |
+
+Newest first. "Between sprints" entries are small fixes merged outside a sprint.
+
+### Sprint 3 — in progress (merged on integration, awaiting your OK)
+- Scope: T-012 copy-image (enhancement · S), T-001 meta-enrich (feature · M). 2 of 3 slots; third slot unused.
+- Before it: T-013 installed-app icon (bug · S · exempt) + board docs merged into main eb99c96 (user OK 2026-10-09), 63/63.
+- Backup: `backup/sprint-3-pre-20261009` · Tag: `sprint-3-start` (eb99c96) · Baseline: `npm test` 63/63 green
+- Merge flow: branches merge into `feature/s3-integration`; user tries the build (gate 1) → main; push = gate 2
+- Built directly (two features, no sub-agents), each on its own branch from main.
+- Merge log (into feature/s3-integration):
+  | order | id | merge sha | conflicts | tests after |
+  |---|---|---|---|---|
+  | 1 | T-012 copy-image | 9d8820f | none | 63/63 |
+  | 2 | T-001 meta-enrich | 269424f | none (main.js/preload.js/app.js touched in different places) | 69/69 |
+- Decision: online details are stored in `d.lookup` rather than `d.meta`, because `rescan()` rebuilds `d.meta` from the PDF; the Info card shows `d.meta` overlaid with `d.lookup.meta`.
+- Checks: clipboard round-trip of a PNG in Electron OK; parsers checked against live CrossRef (10.1038/nature14539) and arXiv (1706.03762); bad arXiv id → none; unknown DOI → 404 → "not found".
+
+### Between sprints — after Sprint 2 (2026-10-09)
+- `fix/taskbar-icon-size` (055a74f) + `feature/metadata-label` (47e8eeb, "Metadata" label on the reader's ⓘ button), built directly (XS each, no shared files). Combined on `feature/polish-integration`, 63/63; user gate 1 OK → main fast-forwarded to f541b3f, 63/63. Push awaits gate 2. Compass F-017.
+
+### Sprint 2 — closed (2026-10-09; user scope: add-ids + image capture only; meta-enrich left out)
 - Backup: `backup/sprint-2-pre-20261009` · Tag: `sprint-2-start` (44379a0) · Baseline: `npm test` 23/23 green
 - Merge flow: waves merge into `feature/s2-integration`; user tries the combined build (gate 1) before anything reaches main, push = gate 2
 - Scaffold (tech lead): `renderer/images.js` (`Images.crop/png/forget`) + script tag, so image-view and image-export run in parallel
@@ -73,17 +98,9 @@ Polish (reported by user):
 - Test rounds: 23 (baseline) → 23 → 34 → 44 → 57 → 63 (integration) → 63 (main 40bb2c7); new failures introduced: 0
 - Contract `result.images[]`: `{id, n, page, rect:[x1,y1,x2,y2] PDF user space normalised, color:[r,g,b] 0-255, comment, at, topic}`; sorted by `at`; consumers put an image before entry e when `img.at <= e.at`
 
-
-### Between sprints — polish (2026-10-09)
-- `fix/taskbar-icon-size` (055a74f) + `feature/metadata-label` (47e8eeb, "Metadata" label on the reader's ⓘ button), built directly (XS each, no shared files). Combined on `feature/polish-integration`, 63/63; user gate 1 OK → main fast-forwarded to f541b3f, 63/63. Push awaits gate 2. Compass F-017.
-
-### Between sprints — fix (2026-10-09)
+### Between sprints — after Sprint 1 (2026-10-09)
 - `fix/list-add-and-reader-tools` (F-013): Add PDFs + add-by-link buttons in the PDF list header; reader toolbar left-aligned (spacer removed). Small, so built directly without sub-agents.
 - Tests: 23/23 on branch and on main (e4be24f). User OK on branch (gate 1) and main (gate 2); pushed 57deb0f..e4be24f.
-
-### Sprint 3 — planned
-- Features: T-001 meta-enrich (feature · M, counts toward cap), T-012 copy-image (enhancement · S, counts). 2 of 3 slots used; 1 left for an approved proposal.
-- Shared files: both touch src/main.js, src/preload.js, renderer/app.js (different regions: readMeta/loadMeta/infoEl vs figureEl). Merge order: T-012 → T-001.
 
 ### Sprint 1 — closed
 - Backup: `backup/sprint-1-pre-20261009` · Tags: `sprint-1-start`, `sprint-1-end` (c5c0dbe)
