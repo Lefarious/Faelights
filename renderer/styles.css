@@ -117,6 +117,7 @@ select.btn { font-weight: 500; padding-right: 8px; }
 .list { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; background: var(--bg); }
 .list-head { padding: 16px 16px 10px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
 .head-row { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
+.head-acts { flex: none; display: flex; gap: 4px; align-items: center; }
 .list-head h2 { font-family: var(--font-display); font-weight: 400; font-size: 22px; margin: 0; line-height: 1.2; overflow-wrap: anywhere; }
 .list-head .sub { color: var(--muted); font-size: 12.5px; }
 .list-tools { display: flex; gap: 8px; }
@@ -155,7 +156,6 @@ select.btn { font-weight: 500; padding-right: 8px; }
 .r-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .r-meta .lib { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 12.5px; color: var(--ink); display: inline-flex; gap: 6px; align-items: center; }
 .r-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
-.r-tools .sp { flex: 1; }
 .tagedit { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .tagedit .tg { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; padding: 2px 4px 2px 8px; border-radius: 999px; background: var(--sel); }
 .tagedit .tg button { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 0 4px; font-size: 13px; line-height: 1; }
