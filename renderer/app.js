@@ -23,7 +23,8 @@ const ICON = {
   pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
   paneClose: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M16 15l-3-3 3-3"/>',
-  paneOpen: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M14 9l3 3-3 3"/>'
+  paneOpen: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M14 9l3 3-3 3"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'
 };
 // Brand artwork with light/dark variants (renderer/assets/brand/<name>-light|dark.svg)
 function brandImg(name, cls) {
@@ -141,6 +142,19 @@ function summary(result) {
   return { count: result.entries.reduce((n, e) => n + e.spans.length, 0) + result.loose.length, colours: [...colours.values()].slice(0, 6) };
 }
 
+// Analyse a PDF already copied into the library (fl.importPdf / fl.fetchPdf) and add it as a doc.
+// opts.origin: where a downloaded paper came from ({kind, value, url}); such docs have no original on disk.
+// opts.title: the landing page's title, used when the PDF has none of its own.
+async function addImported(info, target, opts = {}) {
+  const d = { id: info.id, libraryId: target, title: "", fileName: info.fileName, sourcePath: opts.sample ? null : info.sourcePath,
+    storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [], starred: false, scannedMtime: info.mtime };
+  if (opts.origin) d.origin = opts.origin;
+  const { bytes } = await fl.readPdf({ ...d, sourcePath: null });
+  const { title, meta, result } = await analyzeBytes(bytes, (pg, n) => { if (S.busy) { S.busy.page = `page ${pg} of ${n}`; renderProgress(); } });
+  Object.assign(d, { title: title || opts.title || info.fileName.replace(/\.pdf$/i, ""), meta, result, pages: result.pages, scannedAt: Date.now(), ...summary(result) });
+  S.db.docs.push(d); return d;
+}
+
 async function addPaths(paths, opts = {}) {
   paths = paths.filter(p => /\.pdf$/i.test(p));
   if (!paths.length) { toast("Only PDF files can be added"); return; }
@@ -152,15 +166,7 @@ async function addPaths(paths, opts = {}) {
     try {
       const existing = !opts.sample && S.db.docs.find(d => d.sourcePath === p);
       if (existing) { await rescan(existing, true); lastId = existing.id; }
-      else {
-        const info = await fl.importPdf(p);
-        const d = { id: info.id, libraryId: target, title: "", fileName: info.fileName, sourcePath: opts.sample ? null : info.sourcePath,
-          storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [], starred: false, scannedMtime: info.mtime };
-        const { bytes } = await fl.readPdf({ ...d, sourcePath: null });
-        const { title, meta, result } = await analyzeBytes(bytes, (pg, n) => { S.busy.page = `page ${pg} of ${n}`; renderProgress(); });
-        Object.assign(d, { title: title || info.fileName.replace(/\.pdf$/i, ""), meta, result, pages: result.pages, scannedAt: Date.now(), ...summary(result) });
-        S.db.docs.push(d); lastId = d.id;
-      }
+      else lastId = (await addImported(await fl.importPdf(p), target, opts)).id;
     } catch (err) { console.error(err); failed++; }
     S.busy.done++; renderProgress();
   }
@@ -488,7 +494,8 @@ function renderSide() {
   const side = $("side"); side.replaceChildren();
   const brand = el("div", "brand"); brand.append(brandImg("mark", "brand-mark"), el("h1", null, "faelights"), paneBtn("side")); brand.setAttribute("aria-label", "Faelights");
   const add = btn("primary add", "Add PDFs", "add"); add.onclick = chooseAndAdd;
-  side.append(brand, add);
+  const addRow = el("div", "add-row"); addRow.append(add, addIdBtn(true));
+  side.append(brand, addRow);
   const sc = el("div", "side-scroll");
 
   const top = el("ul", "nav");
@@ -623,7 +630,7 @@ function renderDocs() {
     if (S.docQuery) e.append(el("b", null, "No matches"), el("span", null, "No PDF titles or tags here contain that text."));
     else if (S.view.kind === "library") {
       e.append(el("b", null, "Nothing here yet"), el("span", null, "Drag PDFs onto this window, or add them from your computer. Highlights are read straight away."));
-      const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; e.append(a);
+      const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; e.append(a, addIdBtn());
       if (!S.db.docs.length) { const s = btn("", "Try a sample PDF"); s.onclick = addSample; e.append(s); }
     } else if (S.view.kind === "starred") e.append(el("b", null, "No starred PDFs"), el("span", null, "Star a PDF from its ⋯ menu to keep it here."));
     else e.append(el("b", null, "No PDFs"), el("span", null, "Add PDFs to start a library."));
@@ -879,10 +886,10 @@ function renderBlank(r) {
   if (!S.db.docs.length) {
     b.append(el("h2", null, "Your highlights, organised"), el("p", null, "Add annotated PDFs and Faelights lists every highlight in reading order, grouped by the topic it sits under. Sort PDFs into libraries, tag them, and search across all of them."));
     const row = el("div"); row.style.display = "flex"; row.style.gap = "8px"; row.style.flexWrap = "wrap";
-    const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; const s = btn("", "Try a sample PDF"); s.onclick = addSample; row.append(a, s); b.append(row);
+    const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; const s = btn("", "Try a sample PDF"); s.onclick = addSample; row.append(a, addIdBtn(), s); b.append(row);
   } else b.append(el("h2", null, "Pick a PDF"), el("p", null, "Choose a PDF from the list to read its highlights."));
   const k = el("div", "keys"); const mod = process_platform() === "darwin" ? "⌘" : "Ctrl";
-  for (const [key, what] of [[`${mod} O`, "Add PDFs"], [`${mod} F`, "Search all highlights"], [`${mod} T`, "Full sentence / highlights only"], [`${mod} E`, "Export current PDF"], [`${mod} ⇧ N`, "New library"], [`${mod} B`, "Show / hide sidebar"]]) {
+  for (const [key, what] of [[`${mod} O`, "Add PDFs"], [`${mod} ⇧ O`, "Add from DOI or link"],[`${mod} F`, "Search all highlights"], [`${mod} T`, "Full sentence / highlights only"], [`${mod} E`, "Export current PDF"], [`${mod} ⇧ N`, "New library"], [`${mod} B`, "Show / hide sidebar"]]) {
     const kk = el("span"); for (const part of key.split(" ")) { kk.append(el("kbd", null, part), document.createTextNode(" ")); } k.append(kk, el("span", null, what));
   }
   b.append(k); r.append(b);
@@ -944,14 +951,145 @@ function addSample() {
   addPaths([p], { sample: true });
 }
 
+/* ---------------- add from DOI / link ---------------- */
+// The only feature that uses the network, and only when the user submits. Everything else works offline.
+const ADD_FAIL = {
+  invalid: "That doesn't look like a DOI, arXiv ID or web link.",
+  offline: "You're offline. Connect to the internet to fetch this paper, or add a PDF from your computer.",
+  paywalled: "The publisher didn't hand over the PDF. It may need a subscription or sign-in. Open the page in your browser, download it there, then add the file.",
+  "not-pdf": "Couldn't find a PDF there. Open the page in your browser to download it, then add the file.",
+  "not-found": "Nothing was found for that. Check it for typos.",
+  network: "Couldn't reach the server, or it took too long. Try again in a moment.",
+  "too-large": "That PDF is over 150 MB, so it wasn't downloaded."
+};
+let addDlg = null;  // {back, box, input, hint, off, msg, ok, id, busy, seq, opener}
+function addIdBtn(compact) {
+  const b = compact ? btn("icon add-id", "", "link", "Add from DOI or link") : btn("", "Add from DOI or link", "link");
+  b.onclick = () => openAddId(); return b;
+}
+function sameOrigin(id) { const v = id.value.toLowerCase(); return S.db.docs.find(d => d.origin && d.origin.kind === id.kind && String(d.origin.value).toLowerCase() === v); }
+function showExisting(d) {
+  S.view = { kind: "library", id: d.libraryId }; openDoc(d.id);
+  toast(`Already in ${lib(d.libraryId)?.name || "your library"}: “${d.title}”`);
+}
+async function openAddId(prefill) {
+  if (addDlg) { if (prefill && !addDlg.busy) { addDlg.input.value = prefill; addIdHint(); } addDlg.input.focus(); return; }
+  const D = addDlg = { seq: 0, busy: false, id: null, opener: document.activeElement };
+  D.back = el("div", "addid-back");
+  D.box = el("div", "addid"); D.box.setAttribute("role", "dialog"); D.box.setAttribute("aria-modal", "true");
+  D.box.setAttribute("aria-labelledby", "addid-h"); D.box.setAttribute("aria-describedby", "addid-p");
+  const h = el("h2", null, "Add from DOI or link"); h.id = "addid-h";
+  const p = el("p", null, "Paste a DOI, an arXiv ID or a link to a paper. Faelights downloads the PDF into your library."); p.id = "addid-p";
+  D.input = el("input", "search"); D.input.placeholder = "DOI, arXiv ID or link"; D.input.setAttribute("aria-label", "DOI, arXiv ID or link");
+  D.input.spellcheck = false; D.input.autocomplete = "off"; D.input.oninput = addIdHint;
+  const line = el("div", "addid-line"); D.hint = el("span", "addid-hint"); D.hint.setAttribute("aria-live", "polite");
+  D.off = el("span", "addid-off", "Offline"); D.off.title = "No internet connection. Fetching needs one; adding PDFs from your computer works offline.";
+  line.append(D.hint, D.off);
+  D.msg = el("div", "addid-msg"); D.msg.setAttribute("role", "alert"); D.msg.hidden = true;
+  const row = el("div", "addid-row"), cancel = btn("", "Cancel"); D.ok = btn("primary", "Add");
+  cancel.onclick = closeAddId; D.ok.onclick = submitAddId; row.append(cancel, D.ok);
+  D.box.append(h, p, D.input, line, D.msg, row); D.back.append(D.box); document.body.append(D.back);
+  D.back.onmousedown = e => { if (e.target === D.back && !D.busy) closeAddId(); };
+  D.box.onkeydown = e => {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeAddId(); }
+    else if (e.key === "Enter" && e.target === D.input) { e.preventDefault(); submitAddId(); }
+    else if (e.key === "Tab") {   // keep focus inside the dialog
+      const f = [...D.box.querySelectorAll("input, button")].filter(x => !x.disabled && x.offsetParent);
+      const i = f.indexOf(document.activeElement), n = e.shiftKey ? i - 1 : i + 1;
+      e.preventDefault(); f[(n + f.length) % f.length]?.focus();
+    }
+  };
+  D.net = () => { D.off.hidden = navigator.onLine; };
+  addEventListener("online", D.net); addEventListener("offline", D.net); D.net();
+  // reading the clipboard is local; it only prefills when it holds something recognisable
+  if (prefill == null) { const clip = await fl.readClipboardText().catch(() => ""); if (addDlg === D && !D.input.value && (await fl.parseId(clip))) prefill = clip.trim(); }
+  if (addDlg !== D) return;
+  if (prefill) D.input.value = prefill;
+  addIdHint(); D.input.focus(); D.input.select();
+}
+function closeAddId() {
+  const D = addDlg; if (!D) return;
+  if (D.busy) fl.cancelFetch();
+  removeEventListener("online", D.net); removeEventListener("offline", D.net);
+  D.back.remove(); addDlg = null;
+  if (D.opener && D.opener.isConnected && D.opener.focus) D.opener.focus();
+}
+async function addIdHint() {
+  const D = addDlg; if (!D) return;
+  const v = D.input.value, s = ++D.seq;
+  const id = v.trim() ? await fl.parseId(v) : null;
+  if (addDlg !== D || s !== D.seq) return;
+  D.id = id; D.msg.hidden = true;
+  D.hint.textContent = !v.trim() ? "" : id ? id.label : "Not recognised";
+  D.hint.classList.toggle("bad", !!v.trim() && !id);
+  D.ok.disabled = !id || D.busy;
+}
+function addIdBusy(label) {
+  const D = addDlg; if (!D) return;
+  D.busy = !!label; D.input.readOnly = D.busy; D.ok.disabled = D.busy || !D.id;
+  D.box.classList.toggle("busy", D.busy); D.box.setAttribute("aria-busy", D.busy);
+  if (label) { D.msg.hidden = false; D.msg.className = "addid-msg progress"; D.msg.replaceChildren(el("span", "spin"), el("span", null, label)); }
+}
+function addIdFail(reason, landingUrl) {
+  const D = addDlg; if (!D) return;
+  D.msg.hidden = false; D.msg.className = "addid-msg err"; D.msg.replaceChildren(el("span", null, ADD_FAIL[reason] || ADD_FAIL.network));
+  const acts = el("div", "addid-acts");
+  if (landingUrl && (reason === "paywalled" || reason === "not-pdf")) { const o = btn("", "Open in browser", "open"); o.onclick = () => fl.openExternal(landingUrl); acts.append(o); }
+  if (["offline", "paywalled", "not-pdf"].includes(reason)) { const f = btn("", "Add PDFs from file…", "add"); f.onclick = () => { closeAddId(); chooseAndAdd(); }; acts.append(f); }
+  if (acts.childNodes.length) D.msg.append(acts);
+  D.input.focus();
+}
+fl.onFetchProgress(p => {
+  if (!addDlg || !addDlg.busy) return;
+  const mb = n => (n / 1048576).toFixed(1) + " MB";
+  addIdBusy(p.stage === "find" ? "Finding PDF…" : p.stage === "import" ? "Saving to your library…"
+    : p.got ? `Downloading… ${mb(p.got)}${p.total ? " of " + mb(p.total) : ""}` : "Downloading…");
+});
+async function submitAddId() {
+  const D = addDlg; if (!D || D.busy) return;
+  await addIdHint(); if (addDlg !== D || !D.id) return;
+  const id = D.id, dup = sameOrigin(id);
+  if (dup) { closeAddId(); showExisting(dup); return; }
+  if (!navigator.onLine) { addIdFail("offline"); return; }
+  addIdBusy("Finding PDF…");
+  const r = await fl.fetchPdf(D.input.value);
+  if (addDlg !== D) { if (r.ok) fl.removeStored(r.info.storedPath); return; }   // cancelled meanwhile
+  addIdBusy(null);
+  if (!r.ok) { addIdFail(r.reason, r.landingUrl); return; }
+  closeAddId();
+  const same = S.db.docs.find(d => d.hash === r.info.hash);
+  if (same) { await fl.removeStored(r.info.storedPath); showExisting(same); return; }
+  const target = S.view.kind === "library" ? S.view.id : "inbox";
+  S.busy = { label: "Adding " + id.label, done: 0, total: 1, page: "" }; renderList();
+  let d = null;
+  try { d = await addImported(r.info, target, { origin: r.origin, title: r.title }); } catch (err) { console.error(err); await fl.removeStored(r.info.storedPath); }
+  S.busy = null; save();
+  if (d) { if (S.view.kind !== "library" || S.view.id !== target) S.view = { kind: "library", id: target }; S.docId = d.id; S.off = new Set(); }
+  renderAll();
+  toast(d ? `Added “${d.title}”` : "The downloaded PDF couldn't be read. It may be damaged or password-protected.");
+}
+
 let dragDepth = 0;
 function hideDrop() { dragDepth = 0; $("drop").hidden = true; }
 addEventListener("dragenter", e => { if (e.dataTransfer.types.includes("Files")) { dragDepth++; $("drop").hidden = false; $("drop-target").textContent = "into " + (S.view.kind === "library" ? lib(S.view.id).name : "Inbox"); } });
 addEventListener("dragleave", () => { if (--dragDepth <= 0) hideDrop(); });
 addEventListener("dragover", e => e.preventDefault());
-addEventListener("drop", e => { e.preventDefault(); hideDrop(); const files = [...e.dataTransfer.files]; if (files.length) addPaths(files.map(f => fl.pathFor(f))); });
+addEventListener("drop", e => {
+  e.preventDefault(); hideDrop(); const files = [...e.dataTransfer.files]; if (files.length) return addPaths(files.map(f => fl.pathFor(f)));
+  // a dropped link (e.g. dragged from a browser) opens "Add from DOI or link" prefilled
+  if (e.dataTransfer.types.includes("application/x-faelights-doc")) return;
+  const t = (e.dataTransfer.getData("text/uri-list") || "").split(/\r?\n/).find(l => l && !l.startsWith("#")) || e.dataTransfer.getData("text/plain");
+  if (t) fl.parseId(t).then(id => { if (id) openAddId(t.trim()); });
+});
+// Ctrl/⌘+V outside a text field with a DOI, arXiv ID or link opens the dialog prefilled
+addEventListener("paste", e => {
+  if (addDlg || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+  const t = e.clipboardData?.getData("text/plain"); if (!t) return;
+  fl.parseId(t).then(id => { if (id) openAddId(t.trim()); });
+});
 
 addEventListener("keydown", e => {
+  if (addDlg) return;   // the add-from-link dialog handles its own keys
   if (e.target.matches("input, select, textarea")) return;
   if (e.target.matches(".resizer")) return resizerKey(e, e.target);
   if (Annot.key(e)) return;
@@ -965,6 +1103,7 @@ addEventListener("keydown", e => {
 fl.onMenu(ch => {
   const d = S.docId && doc(S.docId);
   if (ch === "add") chooseAndAdd();
+  if (ch === "add-id") openAddId();
   if (ch === "new-library") newLibrary();
   if (ch === "export-doc") { if (d) exportDoc(d); else toast("Open a PDF first"); }
   if (ch === "export-library") exportLibrary(S.view.kind === "library" ? S.view.id : (d ? d.libraryId : "inbox"));
