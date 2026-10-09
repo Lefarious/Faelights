@@ -22,6 +22,10 @@ Proposals waiting for approval (each can join Sprint 2):
 - [ ] [Optimization · XS] Rename "Annotate" in the PDF menu to "View"; remove the unused native-menu IPC (`menu:popup`).
 - [ ] [Risk · S] Dev-only setting for a separate library folder, so a test copy can run while the real app is open.
 
+Polish (reported by user):
+
+- [ ] [Fix · XS] The app icon on the Windows taskbar looks a different size from other apps' icons. Likely causes to check: too much padding around the artwork, or the .ico missing some sizes (16/24/32/48/256).
+
 ## Backlog
 | id | requirements (short) | footprint | depends on | size | priority | status |
 |----|----------------------|-----------|------------|------|----------|--------|
