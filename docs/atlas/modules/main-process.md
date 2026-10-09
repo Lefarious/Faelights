@@ -1,8 +1,8 @@
 # Module: main-process
-> Path: src/main.js, src/identify.js · Last synced commit: c5c0dbe · Related features: F-001, F-003, F-004, F-005, F-007, F-008, F-011
+> Path: src/main.js, src/identify.js, src/exportPaths.js · Last synced commit: 40bb2c7 · Related features: F-001, F-003, F-004, F-005, F-007, F-008, F-011, F-014, F-016
 
 ## Purpose
-This is the Electron main process. It owns the on-disk library (`faelights.json` plus copied PDFs), the splash and main windows, the theme, the native app menu, native dialogs, context-menu popups, shell actions, the clipboard, and the only network access in the app: downloading a PDF when the user submits a DOI, arXiv ID or link (`pdf:fetch`). It does not parse PDFs or hold UI state. The renderer sends the whole DB object and this module persists it as-is.
+This is the Electron main process. It owns the on-disk library (`faelights.json` plus copied PDFs), the splash and main windows, the theme, the native app menu, native dialogs, context-menu popups, shell actions, the clipboard, and the only network access in the app: downloading a PDF when the user submits an identifier (DOI, arXiv ID, PMID, PMCID, ISBN, ADS Bibcode) or a link (`pdf:fetch`). It does not parse PDFs or hold UI state. The renderer sends the whole DB object and this module persists it as-is.
 
 ## Public interface
 IPC handlers, called only through `preload.js`:
@@ -11,9 +11,10 @@ IPC handlers, called only through `preload.js`:
 - `app:pending` → drains `pendingOpen` paths
 - `pdf:choose` → multi-select open dialog → `string[]`
 - `pdf:import(srcPath)` → `importPdf(srcPath)`: copies into `files/`, returns `{id, hash, fileName, sourcePath, storedPath, mtime, size}`
-- `pdf:fetch(text)` → parses with `identify.parseIdentifier`, resolves and downloads the PDF (`resolvePdf` → `pdfFrom` → `fetchUrl`), writes a temp `faelights-*.pdf`, runs `importPdf` on it, deletes the temp file. Returns `{ok:true, info (sourcePath:null, fileName from fileNameFor), origin:{kind,value,url}, title}` or `{ok:false, reason: invalid|paywalled|not-pdf|not-found|network|too-large|offline|cancelled, landingUrl}`. A new call aborts the previous one
+- `pdf:fetch(text)` → parses with `identify.parseIdentifier`, resolves and downloads the PDF (`resolvePdf` → `pdfFrom` → `fetchUrl`), writes a temp `faelights-*.pdf`, runs `importPdf` on it, deletes the temp file. Returns `{ok:true, info (sourcePath:null, fileName from fileNameFor), origin:{kind,value,url}, title}` or `{ok:false, reason: invalid|paywalled|not-pdf|not-found|no-free-copy|network|too-large|offline|cancelled, landingUrl}`. A new call aborts the previous one
 - `pdf:fetchCancel` → aborts the in-flight fetch
 - `id:parse(text)` → `{kind, value, url, label}` or `null`
+- `id:parseMany(text)` → `[{text, id: {kind, value, url, label} | null}]` (`identify.parseIdentifiers`, capped at 200)
 - `app:openExternal(url)` → `shell.openExternal` for http(s) only, else `false`
 - `clip:read` → clipboard text (first 4096 chars)
 - `pdf:read(doc)` → `{bytes: Uint8Array, mtime, from: "source"|"copy"}`; `doc.annotated` forces the stored copy
@@ -23,7 +24,7 @@ IPC handlers, called only through `preload.js`:
 - `pdf:open(doc)` / `pdf:reveal(doc)`: `shell.openPath` / `showItemInFolder`, preferring the original file and falling back to the stored copy
 - `pdf:relink(doc)` → chosen path or `null`
 - `pdf:removeStored(storedPath)` → unlinks the file only if it is inside `FILES_DIR` (`isStored()`)
-- `export:file({name, text})`, `export:folder({folderName, files})`, `export:openFolder(path)`
+- `export:file({name, text})`, `export:folder({folderName, files, assets?})` (assets = `[{path, bytes}]` under the library folder; every name checked by `exportPaths`), `export:bundle({name, text, assets, dirToken?, encode?})` → save dialog (md/txt/html filter), writes assets under `<file base> images/` (the `dirToken` in text and asset paths is replaced by that folder name, URL-encoded when `encode: "url"`), then the text file; returns the path or `null`. `export:openFolder(path)`
 - `clip:write(text)`, `menu:popup(items)` → chosen item id, `ask:confirm({message, detail, ok})` → boolean
 - `theme:get` → `"system"|"light"|"dark"`; `theme:set(t)` → applies and returns the theme
 - `app:ready` (one-way `ipcMain.on`) → `revealMain()`
@@ -49,17 +50,23 @@ Pushes to the renderer: `menu` (channel strings; File menu adds `add-id` on CmdO
 ### `src/main.js`
 - **Role:** the entire main process
 - **Exports:** none (CommonJS entry)
-- **Key functions:** `importPdf(srcPath)`, `fetchUrl(url, accept, maxBytes)` (`net.request` with `redirect: "manual"`, ≤10 hops, each checked to be http(s); `FETCH_HEAD_MS` 15 s, `FETCH_STALL_MS` 30 s, `MAX_PDF` 150 MB, `MAX_HTML` 5 MB), `pdfFrom(url, hops)`, `resolvePdf(id)` (arXiv → `arxiv.org/abs` then `/pdf`; DOI → `doi.org` landing page → `citation_pdf_url`, then CrossRef `api.crossref.org/works/<doi>` `link[]` PDF entries; URL → as given), `FetchFail`, `sendProgress()`, `loadDb()`, `saveDb(db)`, `statOrNull(p)`, `isStored(p)`, `createSplash()`, `revealMain()`, `createWindow()`, `themeBg()`, `loadTheme()`, `applyTheme(t)`, `pdfArgs(argv)`, `buildAppMenu()`, `EMPTY_DB()`, path helpers `DATA_DIR()`, `DB_PATH()`, `FILES_DIR()`, `THEME_PATH()`; constants `ICON`, `THEMES`, `SPLASH_MIN_MS`, `SPLASH_MAX_MS`
-- **Imports (internal):** `./identify` (`parseIdentifier`, `describe`, `findPdfLink`, `isPdf`, `fileNameFor`, `fetchFailureReason`); loads `preload.js` and `index.html` by path
+- **Key functions:** `importPdf(srcPath)`, `fetchUrl(url, accept, maxBytes)` (`net.request` with `redirect: "manual"`, ≤10 hops, each checked to be http(s); `FETCH_HEAD_MS` 15 s, `FETCH_STALL_MS` 30 s, `MAX_PDF` 150 MB, `MAX_HTML` 5 MB), `pdfFrom(url, hops)`, `resolvePdf(id)` (arXiv → `arxiv.org/abs` then `/pdf`; DOI → `doi.org` landing page → `citation_pdf_url`, then CrossRef `api.crossref.org/works/<doi>` `link[]` PDF entries; PMID → NCBI ID converter (`pmc.ncbi.nlm.nih.gov/tools/idconv`) → PMCID or DOI, falling back to PubMed `eutils esummary` for the DOI, else `no-free-copy`; ADS → arXiv bibcodes to arXiv, else ADS link gateway `EPRINT_PDF` → `PUB_PDF` → `ADS_PDF`; ISBN → Open Library `search.json` public scan → `archive.org/download/<ia>/<ia>.pdf` (up to 5 scans), else `no-free-copy`; URL → as given), `fetchJson(url)`, `hardFail(e)` (cancelled/offline stop alternatives), `writeAtomic(p, data)` (tmp + rename, for exports), `EXPORT_FILTERS`, `FetchFail`, `sendProgress()`, `loadDb()`, `saveDb(db)`, `statOrNull(p)`, `isStored(p)`, `createSplash()`, `revealMain()`, `createWindow()`, `themeBg()`, `loadTheme()`, `applyTheme(t)`, `pdfArgs(argv)`, `buildAppMenu()`, `EMPTY_DB()`, path helpers `DATA_DIR()`, `DB_PATH()`, `FILES_DIR()`, `THEME_PATH()`; constants `ICON`, `THEMES`, `SPLASH_MIN_MS`, `SPLASH_MAX_MS`
+- **Imports (internal):** `./identify` (`parseIdentifier`, `parseIdentifiers`, `describe`, `findPdfLink`, `isPdf`, `fileNameFor`, `fetchFailureReason`), `./exportPaths`; loads `preload.js` and `index.html` by path
 - **Used by:** Electron runtime (`package.json` `"main"`); renderer through preload
-- **Side effects:** reads and writes the files above; network requests only inside `pdf:fetch` (arxiv.org, doi.org and publisher hosts, api.crossref.org); opens dialogs; `shell.openExternal` for http(s) links (in-window navigation away from `file:` is blocked); sets the application menu; takes the single-instance lock
+- **Side effects:** reads and writes the files above; network requests only inside `pdf:fetch` (arxiv.org, doi.org and publisher hosts, api.crossref.org, pmc.ncbi.nlm.nih.gov, eutils.ncbi.nlm.nih.gov, ui.adsabs.harvard.edu, openlibrary.org, archive.org); opens dialogs; `shell.openExternal` for http(s) links (in-window navigation away from `file:` is blocked); sets the application menu; takes the single-instance lock
 - **Change impact:** renaming an IPC channel breaks `preload.js`. Changing the DB shape affects every `S.db` reader in `app.js` and existing user data, and there is no migration besides the `loadDb` repair. Changing menu `send("…")` strings breaks the `fl.onMenu` handler in `app.js`.
 
 ### `src/identify.js`
 - **Role:** pure helpers for add-by-identifier (no electron imports; CommonJS)
-- **Exports:** `parseIdentifier(text)` → `{kind: doi|arxiv|pmcid|url, value, url}` or `null` (accepts bare, `doi:` and doi.org DOIs, new and old arXiv ids, `arXiv:` prefix, arxiv.org abs/pdf links, `PMC…` ids, other http(s) URLs; rejects other schemes, hosts without a dot, URLs with credentials); `describe(id)` (hint label); `findPdfLink(html, baseUrl)` → `{pdf, refresh, title}` from `citation_pdf_url` / meta refresh / `citation_title`; `isPdf(buf)` (`%PDF-` magic); `fileNameFor(id, pdfUrl)`; `fetchFailureReason(err)` → `offline` for DNS/connection error codes (`OFFLINE_CODES`), else `network`
+- **Exports:** `parseIdentifier(text)` → `{kind: doi|arxiv|pmcid|pmid|isbn|ads|url, value, url}` or `null` (accepts bare, `doi:` and doi.org DOIs, new and old arXiv ids, `arXiv:` prefix, arxiv.org abs/pdf links, `PMC…` ids, other http(s) URLs; rejects other schemes, hosts without a dot, URLs with credentials); `parseIdentifiers(text)` → `[{text, id}]` (splits a pasted list on newlines, whitespace, `,`/`;`; keeps `doi: 10…` / `PMID: 1` pairs and URLs whole; drops duplicates); `describe(id)` (hint label, incl. ISBN/PMID/ADS); `findPdfLink(html, baseUrl)` → `{pdf, refresh, title}` from `citation_pdf_url` / meta refresh / `citation_title`; `isPdf(buf)` (`%PDF-` magic); `fileNameFor(id, pdfUrl)`; `fetchFailureReason(err)` → `offline` for DNS/connection error codes (`OFFLINE_CODES`), else `network`
 - **Used by:** `main.js`; `test/identify.test.js`
-- **Change impact:** `parseIdentifier` decides what the renderer's hint, paste and link-drop handlers accept (through `id:parse`).
+- **Change impact:** `parseIdentifier` / `parseIdentifiers` decide what the renderer's hint, paste and link-drop handlers accept (through `id:parse` / `id:parseMany`).
+
+### `src/exportPaths.js`
+- **Role:** pure path safety for exports (CommonJS, no electron)
+- **Exports:** `MAX_ASSET_BYTES` (500 MB total), `pathProblem(rel)` (rejects absolute/UNC/drive paths, `..`/`.` segments, Windows-reserved characters and names, trailing dots/spaces), `resolveInside(dir, rel)`, `planAssets(dir, assets)` → `[{abs, bytes}]` (throws on any bad path, duplicate or size overflow), `mdSeg(name)`, `imagesDirFor(filePath)` (`<base> images`), `fillToken(text, token, value)`, `isToken(t)`
+- **Used by:** `main.js` `export:bundle` / `export:folder`; `test/export.test.js`
+- **Change impact:** loosening a check here lets renderer-supplied names write outside the chosen folder.
 
 ## Gotchas
 - `saveDb` swallows errors (`console.error` only). The renderer always sees `true`.
@@ -76,3 +83,6 @@ Pushes to the renderer: `menu` (channel strings; File menu adds `add-id` on CmdO
 - Nothing else in main touches the network; the app works offline except for `pdf:fetch`. `ERR_NAME_NOT_RESOLVED` maps to `offline`, so a mistyped hostname also reports offline.
 - Fetch uses `net.request` rather than `net.fetch`, because the latter didn't expose the post-redirect URL needed to resolve relative `citation_pdf_url`s and to record `origin.url`.
 - `menu:popup` is no longer called by the renderer (F-010 replaced it with an in-app menu) but is still exposed.
+- ISBN downloads can be a scan of a different edition: Open Library's `ia` list covers every edition of the work.
+- PMC currently answers non-browser clients with a bot-check page, so PMCID (and PMIDs that resolve to PMC) may end in `not-pdf`/`paywalled`; PMIDs then fall back to the DOI path.
+- Bare 6–8 digit numbers parse as PMIDs (shorter ones need a `PMID:` prefix); 10/13-digit numbers with a valid ISBN checksum parse as ISBNs first.

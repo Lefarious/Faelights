@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-09 · Current sprint: 2 (not started) · main: green 23/23 @ e4be24f (pushed)_
+_Last updated: 2026-10-09 · Current sprint: 3 (not planned) · main: green 63/63 @ 40bb2c7 (local, not pushed)_
 
 ## Settings
 - Capacity: 3 parallel features per sprint
@@ -33,15 +33,15 @@ Polish (reported by user):
 | add-by-identifier | Add PDFs from a DOI, arXiv id, article page URL or direct PDF URL; main process downloads; clean failures with "Open in browser" | src/main.js, src/preload.js, new src/identify.js, renderer/app.js (add flow, drop/paste), renderer/styles.css (own block), test/identify.test.js | — | M | 1 | merged c5c0dbe (F-011) |
 | test-harness | `npm test` via node:test; smoke tests for core.js analyzePdf on renderer/sample.pdf | package.json (scripts only), test/core.test.js, test/helpers | — | S | 1 | merged c6748e9 (F-012) |
 | meta-enrich | Fill/augment doc metadata from CrossRef (DOI) and arXiv API, on add-by-identifier and on demand from the Info card | src/main.js, src/preload.js, renderer/app.js (readMeta/loadMeta/infoEl) | add-by-identifier | M | 2 | todo (left out of Sprint 2 by user) |
-| add-ids | "Add by identifier" dialog: ISBN, DOI, PMID, PMCID, arXiv, ADS Bibcode, links; several at once; ISBN = free copy via Open Library/Internet Archive else explain | src/identify.js, src/main.js (resolve/pdf:fetch), renderer/app.js (add dialog), styles.css (addid block), test/identify.test.js | — | M | 1 | wave 1 |
-| image-box | Capture-image tool in viewer: thin coloured outline Square annotation, recolour/note/delete/undo | renderer/annotator.js, styles.css (.pv block) | — | M | 1 | wave 1 |
-| image-extract | core.js reads Square annots → result.images {id,n,page,rect,color,comment,at,topic}; image inside a fact sorts before it | renderer/core.js, test/core.test.js, test/fixtures/ | — | M | 1 | wave 1 |
-| image-view | "With images" reader toggle, centred crops interleaved by `at`; images in colour filter | renderer/app.js (reader), styles.css (reader block) | image-extract, images.js scaffold | M | 1 | wave 2 |
-| image-export | Export formats: Markdown+images folder, Obsidian, HTML (self-contained), plain; doc + library | renderer/app.js (export), src/main.js (export:bundle), src/preload.js | image-extract, images.js scaffold | M | 1 | wave 2 |
+| add-ids | "Add by identifier" dialog: ISBN, DOI, PMID, PMCID, arXiv, ADS Bibcode, links; several at once; ISBN = free copy via Open Library/Internet Archive else explain | src/identify.js, src/main.js (resolve/pdf:fetch), renderer/app.js (add dialog), styles.css (addid block), test/identify.test.js | — | M | 1 | merged 40bb2c7 |
+| image-box | Capture-image tool in viewer: thin coloured outline Square annotation, recolour/note/delete/undo | renderer/annotator.js, styles.css (.pv block) | — | M | 1 | merged 40bb2c7 |
+| image-extract | core.js reads Square annots → result.images {id,n,page,rect,color,comment,at,topic}; image inside a fact sorts before it | renderer/core.js, test/core.test.js, test/fixtures/ | — | M | 1 | merged 40bb2c7 |
+| image-view | "With images" reader toggle, centred crops interleaved by `at`; images in colour filter | renderer/app.js (reader), styles.css (reader block) | image-extract, images.js scaffold | M | 1 | merged 40bb2c7 |
+| image-export | Export formats: Markdown+images folder, Obsidian, HTML (self-contained), plain; doc + library | renderer/app.js (export), src/main.js (export:bundle), src/preload.js | image-extract, images.js scaffold | M | 1 | merged 40bb2c7 |
 
 ## Sprints
 
-### Sprint 2 — running (user scope: add-ids + image capture only; meta-enrich left out)
+### Sprint 2 — closed (user scope: add-ids + image capture only; meta-enrich left out)
 - Backup: `backup/sprint-2-pre-20261009` · Tag: `sprint-2-start` (44379a0) · Baseline: `npm test` 23/23 green
 - Merge flow: waves merge into `feature/s2-integration`; user tries the combined build (gate 1) before anything reaches main, push = gate 2
 - Scaffold (tech lead): `renderer/images.js` (`Images.crop/png/forget`) + script tag, so image-view and image-export run in parallel
@@ -57,7 +57,10 @@ Polish (reported by user):
   | 3 | image-view | 96051c7 | none (styles.css auto-merged) | 44/44 |
   | 4 | image-export | d62427f | index.html script tags (kept order.js + exportfmt.js); swapped local exportItems for Order.withImages; Copy uses filteredImages | 57/57 |
   | 5 | add-ids | 96e2507 | main.js require lines (kept parseIdentifiers + exportPaths) | 63/63 |
-- 2026-10-09: all 5 merged on feature/s2-integration @ 96e2507, 63/63 green; app launched from integration — awaiting user gate 1
+- 2026-10-09: all 5 merged on feature/s2-integration @ 96e2507, 63/63 green; app launched from integration
+- 2026-10-09: user gate 1 OK → merged into local main 40bb2c7 (main had moved to fb7b548, board auto-merged); 63/63 green; tag `sprint-2-end`; app relaunched from main. Push to GitHub awaits gate 2.
+- Compass: F-014 add-ids, F-015 image-box + image-extract + image-view, F-016 image-export; D-011, D-012. Atlas synced at 40bb2c7.
+- Test rounds: 23 (baseline) → 23 → 34 → 44 → 57 → 63 (integration) → 63 (main 40bb2c7); new failures introduced: 0
 - Contract `result.images[]`: `{id, n, page, rect:[x1,y1,x2,y2] PDF user space normalised, color:[r,g,b] 0-255, comment, at, topic}`; sorted by `at`; consumers put an image before entry e when `img.at <= e.at`
 
 

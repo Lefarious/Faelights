@@ -1,5 +1,5 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-09 · Synced at commit: e4be24f
+> Last synced: 2026-10-09 · Synced at commit: 40bb2c7
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
@@ -13,11 +13,11 @@ Faelights is an Electron 31 desktop app with no bundler and no framework. Tests 
 | Electron main | `src/main.js` (`package.json` → `"main"`) | Single-instance lock, theme, app menu, splash + main `BrowserWindow`, all `ipcMain` channels |
 | Splash | `renderer/splash.html` | Frameless window from `createSplash()`; destroyed by `revealMain()` |
 | Preload | `src/preload.js` | Exposes `window.fl` bridge via `contextBridge` |
-| Renderer page | `renderer/index.html` | Loads `pdf.min.js` → `pdf-lib.min.js` → `core.js` → `annotator.js` → `app.js` |
+| Renderer page | `renderer/index.html` | Loads `pdf.min.js` → `pdf-lib.min.js` → `core.js` → `annotator.js` → `images.js` → `order.js` → `exportfmt.js` → `app.js` |
 | Renderer boot | `renderer/app.js` `boot()` IIFE | Loads DB + theme, renders UI, sends `app:ready`, consumes pending "Open with" files |
 | CLI / OS file open | `src/main.js` `pdfArgs()`, `second-instance`, `open-file` | PDFs passed on argv or macOS "Open with" |
 | CI build | `.github/workflows/build.yml` | On `v*` tag: `electron-builder` for win/mac/linux |
-| Tests | `npm test` → `node --test "test/**/*.test.js"` | `test/core.test.js` (extraction on `sample.pdf`), `test/identify.test.js` |
+| Tests | `npm test` → `node --test "test/**/*.test.js"` | `test/core.test.js` (extraction on `sample.pdf`), `test/images.test.js` (image boxes on `test/fixtures/images.pdf`), `test/identify.test.js`, `test/reader-images.test.js`, `test/export.test.js` |
 
 ## Module map
 ```mermaid
@@ -35,7 +35,9 @@ graph LR
   UI -->|pdfjsLib global| PDFJS[(pdfjs-dist 3.11.174)]
   CORE -.->|pdf proxy objects| PDFJS
   MAIN -->|require| ID[identify.js]
-  TEST[tests<br/>test/] -.->|require| CORE & ID
+  MAIN -->|require| EP[exportPaths.js]
+  TEST[tests<br/>test/] -.->|require| CORE & ID & EP
+  TEST -.->|require order.js, exportfmt.js| UI
   TEST -.->|legacy build| PDFJS
   PKG[packaging<br/>package.json, CI] -.->|bundles| MAIN & UI & PDFJS
 ```
@@ -43,13 +45,13 @@ One deliberate two-way edge: renderer-ui ↔ annotator (app.js opens/mounts the 
 
 | Module | Path | Responsibility | Depends on | Used by | Doc |
 |---|---|---|---|---|---|
-| main-process | `src/main.js`, `src/identify.js` | Library JSON + PDF copies on disk, splash/main windows, theme, dialogs, menus, shell, clipboard, PDF download by DOI/arXiv/link (the only network use) | electron (incl. `net`, `session`), node fs/path/crypto | preload-bridge (IPC), tests (`identify.js`) | [main-process.md](modules/main-process.md) |
+| main-process | `src/main.js`, `src/identify.js`, `src/exportPaths.js` | Library JSON + PDF copies on disk, splash/main windows, theme, dialogs, menus, shell, clipboard, exports (text + image assets, path-checked), PDF download by identifier (DOI/arXiv/PMID/PMCID/ISBN/ADS) or link (the only network use) | electron (incl. `net`, `session`), node fs/path/crypto | preload-bridge (IPC), tests (`identify.js`) | [main-process.md](modules/main-process.md) |
 | preload-bridge | `src/preload.js` | Maps `window.fl.*` → IPC channels | electron `contextBridge`, `ipcRenderer`, `webUtils` | renderer-ui | [preload-bridge.md](modules/preload-bridge.md) |
-| extraction-core | `renderer/core.js` | Turns a pdf.js document into entries (sentences + highlight spans), topics, loose marks | pdf.js document API (passed in) | renderer-ui | [extraction-core.md](modules/extraction-core.md) |
-| annotator | `renderer/annotator.js` | In-app PDF viewer; writes Highlight/Underline/StrikeOut/Text/Ink annotations with pdf-lib into the library copy; undo/redo | pdf-lib, pdfjs-dist, preload-bridge, extraction-core, renderer-ui helpers | renderer-ui | [annotator.md](modules/annotator.md) |
-| renderer-ui | `renderer/app.js`, `index.html`, `splash.html`, `styles.css`, `assets/brand/*`, `sample.pdf` | State, three-pane UI, splash page, brand artwork, theme button, search, export formatting, drag/drop, keyboard | preload-bridge, extraction-core, pdfjs-dist, @fontsource | — (top of stack) | [renderer-ui.md](modules/renderer-ui.md) |
+| extraction-core | `renderer/core.js` | Turns a pdf.js document into entries (sentences + highlight spans), topics, loose marks and image boxes (`images`) | pdf.js document API (passed in) | renderer-ui | [extraction-core.md](modules/extraction-core.md) |
+| annotator | `renderer/annotator.js` | In-app PDF viewer; writes Highlight/Underline/StrikeOut/Text/Ink annotations and Square image boxes with pdf-lib into the library copy; undo/redo | pdf-lib, pdfjs-dist, preload-bridge, extraction-core, renderer-ui helpers | renderer-ui | [annotator.md](modules/annotator.md) |
+| renderer-ui | `renderer/app.js`, `images.js`, `order.js`, `exportfmt.js`, `index.html`, `splash.html`, `styles.css`, `assets/brand/*`, `sample.pdf` | State, three-pane UI, splash page, brand artwork, theme button, search, image crops + ordering, export formatting, drag/drop, keyboard | preload-bridge, extraction-core, pdfjs-dist, @fontsource | — (top of stack) | [renderer-ui.md](modules/renderer-ui.md) |
 | packaging | `package.json`, `.github/workflows/build.yml` | Dependencies, scripts, electron-builder config, CI release builds | electron-builder | — | [packaging.md](modules/packaging.md) |
-| tests | `test/` | `node:test` suites: extraction snapshot on `sample.pdf`, identifier parsing and offline mapping | extraction-core, `src/identify.js`, pdfjs-dist legacy build | `npm test` | [tests.md](modules/tests.md) |
+| tests | `test/` | `node:test` suites: extraction snapshot on `sample.pdf`, image boxes on `fixtures/images.pdf`, identifier parsing and offline mapping, reader ordering, export formatting and path safety | extraction-core, `src/identify.js`, pdfjs-dist legacy build | `npm test` | [tests.md](modules/tests.md) |
 
 ## Key flows (code-level traces)
 
@@ -61,10 +63,15 @@ existing `sourcePath` match? → `rescan()` (see below) ; else
 `app.js analyzeBytes()` → `pdfjsLib.getDocument` → `readMeta(pdf)` (`getMetadata` XMP + Info, page-1 text for DOI/arXiv) → `core.js analyzePdf(pdf)` → `{entries, loose, topics, topicSource, pages, count}` →
 `summary()` adds `count`, `colours` → pushed to `S.db.docs` → `save()` (250 ms debounce) → `fl.saveDb` → IPC `db:save` → `main.js saveDb()` atomic tmp+rename write of `faelights.json`.
 
-### Add by DOI / arXiv ID / link
-Sidebar link button / list-header link button / empty-state button / File → "Add from DOI or Link…" (`menu` `add-id`) / Ctrl+V outside inputs / dropped `text/uri-list` → `app.js openAddId(prefill)` → typing → `addIdHint()` → `fl.parseId` → IPC `id:parse` → `identify.parseIdentifier` + `describe` → hint ("Offline" pill when `navigator.onLine` is false) →
-`submitAddId()` → offline? fail at once with `offline` ; else `fl.fetchPdf(text)` → IPC `pdf:fetch` → `resolvePdf(id)` (`fetch-progress` `find` → `download`) → `fetchUrl` on the `faelights-fetch` session → `isPdf` / `findPdfLink` (citation_pdf_url) / CrossRef fallback → temp file → `importPdf()` (`import`) → `{ok, info, origin, title}` →
-duplicate by `origin` or `hash`? open the existing doc + toast, `fl.removeStored(new copy)` ; else `addImported(info, target, {origin, title})` → `analyzeBytes` → `S.db.docs` → `save()`. Failures → `addIdFail(reason)` (Open in browser via `fl.openExternal` → IPC `app:openExternal`; Add PDFs from file… → `chooseAndAdd`).
+### Add by identifier (DOI, arXiv, PMID, PMCID, ISBN, ADS Bibcode, link)
+Sidebar/list-header link button / empty-state button / File → "Add by Identifier…" (`menu` `add-id`) / Ctrl+V outside inputs / dropped `text/uri-list` → `app.js openAddId(prefill)` → typing in the textarea → `addIdHint()` → `fl.parseIds` → IPC `id:parseMany` → `identify.parseIdentifiers` + `describe` → hint (one label, or "N recognised · M not recognised"; "Offline" pill when `navigator.onLine` is false) →
+`submitAddId()` → offline? fail at once with `offline` ; one item → `fl.fetchPdf(text)` ; several → `addIdBatch(D)` runs the same call per item, one at a time, with a status row each (`addIdRow`) →
+IPC `pdf:fetch` → `resolvePdf(id)` (`fetch-progress` `find` → `download`): arXiv / DOI (+ CrossRef fallback) / PMID (NCBI idconv → PMCID or DOI; eutils esummary → DOI) / ADS (arXiv bibcode → arXiv; link gateway EPRINT_PDF → PUB_PDF → ADS_PDF) / ISBN (Open Library public scan → archive.org PDF) / URL → `fetchUrl` on the `faelights-fetch` session → temp file → `importPdf()` (`import`) → `{ok, info, origin, title}` →
+duplicate by `origin` or `hash`? open the existing doc (single) / "already in library" row (batch) + `fl.removeStored(new copy)` ; else `addImported(info, target, {origin, title})` → `analyzeBytes` → `S.db.docs` → `save()`. Failures → `addIdFail(reason)` / failed row (Open in browser via `fl.openExternal`; Add PDFs from file… → `chooseAndAdd`). A batch with failures keeps the dialog open; otherwise it closes with "Added N PDFs".
+
+### Capture an image box and show it
+Viewer tool "Capture image" (`I`) → `annotator.js startBox` (drag preview `.pv-boxdraw`) → `edit([page], addAnnot(lib, i, "Square", {rect, c, width: 1.5}, {BS, CA, Subj: "Image"}))` → stored copy (see "Annotate a PDF") → `Annot.close()` → `rescan(d)` → `core.js analyzePdf` collects Squares → `imgStreamAt` (reading-order position) → `imgSnapToFacts` (inside a fact → fact start) → `result.images` →
+reader "With images" (`settings.images`) → `renderReader` → `Order.groupItems(withImages(filtered(d), filteredImages(d)))` (image before entry when `img.at <= e.at`; `S.off` colour filter applies) → `figureEl(d, img)` → `Images.crop(d, img)` → `fl.readPdf({...d, sourcePath:null})` → pdf.js render of the box region with annotations disabled → PNG data URL (cached per doc version) → centred `<figure>`.
 
 ### Item action menu
 Right-click / ⋯ (`moreBtn`) / Shift+F10 or ContextMenu (`menuKey`) on a library row (`navItem` `onMenu`) or PDF card (`.doc-row`) → `libraryMenu(id, at, opts)` / `docMenu(d, at, opts)` → `openMenu(at, items, opts)` builds `.amenu` panels on `document.body` → the choice resolves the Promise → same action handlers as before (`exportLibrary`, `deleteLibrary`, `annotate`, `setMine`, `moveDoc`, `removeDoc`…). The reader's library button uses `openMenu` with a "Move to" heading.
@@ -80,8 +87,11 @@ Right-click / ⋯ (`moreBtn`) / Shift+F10 or ContextMenu (`menuKey`) on a librar
 per page: `getTextContent()` + `getAnnotations()` → keep Highlight/Underline/Squiggly/StrikeOut (`MARK_TYPES`) → `normQuads()` + `colorOf()` → build one char stream with line/paragraph breaks and de-hyphenation → per-char quad hit-test assigns annotation id → topics, first that succeeds: `resolveOutline()` (bookmarks, `topicSource:"outline"`) → font-size headings (`"headings"`) → if < 2, `patternTopics()` by wording (`"patterns"`) → `pageTopics()` one per page (`"pages"`) → snap highlight edges to whole words → `sentenceBounds()` (abbreviation-aware) → group & merge overlapping sentences → entries `{n, page, at, segs, spans, topic, sentence}`; annotations with no text hit go to `loose`. Result is stamped `v: ANALYZER_VERSION`. Entries before the first topic have `topic: null` and render under `PRE_TOPIC` ("Abstract") in `app.js`.
 
 ### Export
-Reader "Export" / menu `export-doc` → `exportDoc(d)` → `docText(d, fmt, frontmatter)` (uses `groupsOf`, `entryLines`, `settings.mode`) → `fl.exportFile` → IPC `export:file` save dialog → write.
-Library menu / menu `export-library` → `exportLibrary(id)` → per-doc `docText(..., frontmatter=true)` with de-duplicated `safeName`s → `fl.exportFolder` → IPC `export:folder` directory picker → writes `<dir>/<library name>/*.md|.txt` → `fl.openFolder`.
+Reader "Export" → `exportMenu(d, eb)` (Markdown / Obsidian / HTML / Plain text; "Include images" toggles `settings.images`) / menu `export-doc` → `exportDoc(d, fmt)`:
+no images and not html → `docText(d, fmt, frontmatter)` (`ExportFmt.docText`: `groupsOf`, `entryLines`, `settings.mode`) → `fl.exportFile` → IPC `export:file` save dialog → write (output identical to before F-016) ;
+html → `exportImages` (data URLs via `Images.crop`) → `ExportFmt.docHtml` → `fl.exportBundle` ; md/obsidian/plain with images → `exportImages` (`Images.png` per box, "Preparing images… k/n" toast, failed crop → placeholder line) → `ExportFmt.docText(…, {images})` (`exportItems` → `Order.withImages`; `imageLines` per format, paths under a random `dirToken`) → `fl.exportBundle` → IPC `export:bundle` → save dialog → `exportPaths.imagesDirFor` (`<file base> images`) → `fillToken` / `planAssets` (rejects unsafe paths) → `writeAtomic` assets, then the text file.
+Library menu / menu `export-library` → `exportLibrary(id)` → per doc the same text/html builders (images under `<doc file base> images/` when on) → `fl.exportFolder(name, files, assets)` → IPC `export:folder` (every name checked by `exportPaths`) → writes `<dir>/<library name>/…` → `fl.openFolder`.
+Copy → `docText(d, fmt, false, filtered(d), filteredImages(d) when "With images" is on)` → `[Image, p. N]` placeholders → `fl.copy`.
 
 ### Column resize / collapse
 Pointer down on a `.resizer[data-pane]` (window-level listener in `app.js`) → `pointermove` sets `layout()[pane].w` (clamped to `PANES` min/max) or `closed` when dragged below ~half the minimum → `applyLayout()` writes `--side-w/--list-w/--rail-w` and `*-closed` classes on `#app` (borrowing width from list then sidebar so the reader keeps `READER_MIN`) → `pointerup` → `save()`. Hide buttons (`paneBtn`), strips (`strip`), focused-handle keys (`resizerKey`), double-click (reset one pane) and menu `pane:*` / `layout-reset` all end in `togglePane()` / `resetLayout()` → `applyLayout()` + `save()`. No pane re-renders.
@@ -103,14 +113,14 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 |---|---|---|---|
 | IPC invoke | `db:load`, `db:save`, `app:pending` | `preload.js` | `main.js` |
 | IPC invoke | `pdf:choose`, `pdf:import`, `pdf:read`, `pdf:stat`, `pdf:open`, `pdf:reveal`, `pdf:relink`, `pdf:removeStored`, `pdf:writeStored`, `pdf:saveAs` | `preload.js` | `main.js` |
-| IPC invoke | `export:file`, `export:folder`, `export:openFolder`, `clip:write`, `menu:popup`, `ask:confirm` | `preload.js` | `main.js` |
+| IPC invoke | `export:file`, `export:folder` (+ `assets`), `export:bundle`, `export:openFolder`, `clip:write`, `menu:popup`, `ask:confirm` | `preload.js` | `main.js` |
 | IPC invoke | `theme:get`, `theme:set` | `preload.js` | `main.js` |
-| IPC invoke | `id:parse`, `pdf:fetch`, `pdf:fetchCancel`, `app:openExternal`, `clip:read` | `preload.js` | `main.js` |
+| IPC invoke | `id:parse`, `id:parseMany`, `pdf:fetch`, `pdf:fetchCancel`, `app:openExternal`, `clip:read` | `preload.js` | `main.js` |
 | IPC push | `fetch-progress` (`{stage}`) | `main.js sendProgress` | `app.js fl.onFetchProgress` |
-| Network | arxiv.org, doi.org (+ publisher redirects), api.crossref.org — only from `pdf:fetch` | `main.js fetchUrl` | — |
+| Network | arxiv.org, doi.org (+ publisher redirects), api.crossref.org, pmc.ncbi.nlm.nih.gov, eutils.ncbi.nlm.nih.gov, ui.adsabs.harvard.edu (+ redirects), openlibrary.org, archive.org — only from `pdf:fetch` | `main.js fetchUrl` / `fetchJson` | — |
 | Session partition | `faelights-fetch` (in-memory) | `main.js fetchUrl` | — |
 | Temp file | `<temp>/faelights-<random>.pdf` (deleted after import) | `main.js` `pdf:fetch` | `importPdf` |
-| Doc field | `origin` `{kind, value, url}` | `app.js addImported` (from `pdf:fetch`) | `app.js submitAddId` duplicate check |
+| Doc field | `origin` `{kind: doi|arxiv|pmcid|pmid|isbn|ads|url, value, url}` | `app.js addImported` (from `pdf:fetch`) | `app.js submitAddId` duplicate check |
 | IPC send (renderer → main) | `app:ready` | `app.js boot()` via `fl.ready()` | `main.js revealMain()` |
 | IPC push | `menu` (payloads: `add`, `add-id`, `new-library`, `export-doc`, `export-library`, `rescan-all`, `search`, `toggle-mode`, `pane:side`, `pane:list`, `pane:rail`, `layout-reset`) | `main.js buildAppMenu()` | `app.js fl.onMenu` handler |
 | IPC push | `open-files` | `main.js` `second-instance` / `open-file` | `app.js fl.onOpenFiles` → `addPaths` |
@@ -123,7 +133,13 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | Global (window) | `Annot` | `annotator.js` | `app.js renderReader`, `annotate`, `openDoc`, `removeDoc`, `useOriginal`, keydown |
 | Global (window) | `normQuads` | `core.js` | `annotator.js pickAt` (also core itself) |
 | Global (window) | `pdfjsLib` | `pdf.min.js` script tag | `app.js` (`GlobalWorkerOptions`, `getDocument`) |
-| Global (window) | `analyzePdf`, `ANALYZER_VERSION` | `core.js` (top-level) | `app.js analyzeBytes`, `outdated()` |
+| Global (window) | `analyzePdf`, `ANALYZER_VERSION` (3), `imgStreamAt`, `imgSnapToFacts` | `core.js` (top-level) | `app.js analyzeBytes`, `outdated()` |
+| Global (window) | `Images` | `images.js` | `app.js figureEl`, `exportImages`, `removeDoc`, `rescan` |
+| Global (window) | `Order` | `order.js` | `app.js renderReader` / `filteredImages` / `withImages`, `exportfmt.js` |
+| Global (window) | `ExportFmt` | `exportfmt.js` | `app.js` export section (`wrapHl`/`entryLines`/`groupsOf` are aliases) |
+| Result field | `result.images[]` `{id, n, page, rect, color, comment, at, topic}` | `core.js analyzePdf` | `order.js`, `images.js`, `exportfmt.js`, `app.js` |
+| PDF annotation | `Square` (`/Subj (Image)`, border-only) = image box | `annotator.js startBox` (or other apps) | `core.js` (`images`), `images.js` (crop by `/Rect`) |
+| Placeholder token | random `dirToken` in export text / asset paths | `app.js exportDoc` | `main.js export:bundle` (`exportPaths.fillToken`) |
 | Result version | `result.v` | `core.js analyzePdf` | `app.js outdated()` → rescan on open / Rescan all |
 | Global (window) | `fl` | `preload.js` | `app.js` everywhere |
 | Magic id | library id `"inbox"` (`system: true`) | `main.js EMPTY_DB/loadDb` | `app.js` (default target, delete fallback, boot) |
@@ -131,9 +147,10 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | Relative paths | `../node_modules/pdfjs-dist/build/*.min.js`, `../node_modules/pdf-lib/dist/pdf-lib.min.js`, `../node_modules/@fontsource/*` | `package.json build.files` | `index.html`, `app.js` worker src, `styles.css @import` |
 | Brand asset paths | `assets/brand/{mark,mote,splash}-{light,dark}.svg`, `favicon-*.ico`, `app-icon.png` | files in `renderer/assets/brand/` | `app.js brandImg()`, `index.html`, `splash.html`, `main.js ICON` |
 | Media query | `prefers-color-scheme` | `nativeTheme.themeSource` (main) | `styles.css`, `splash.html`, `<picture>` sources |
-| Settings keys | `settings.mode` (`full`/`only`), `fmt` (`md`/`obsidian`/`plain`), `sort` (`added`/`title`/`count`) | `main.js EMPTY_DB` defaults | `app.js` reader, export, list |
+| Settings keys | `settings.mode` (`full`/`only`), `fmt` (`md`/`obsidian`/`html`/`plain`), `sort` (`added`/`title`/`count`) | `main.js EMPTY_DB` defaults | `app.js` reader, export, list |
 | Doc flag | `mine` ("My publications") | `app.js setMine` (doc menu, reader toggle, drop on sidebar item) | `app.js visibleDocs` (`view.kind === "mine"`), sidebar count |
 | Settings key | `settings.info` (boolean; no main default) | `app.js` info toggle | `app.js renderReader()` |
+| Settings key | `settings.images` (boolean "With images"; no main default) | `app.js` reader toggle, `exportMenu` | `app.js renderReader`, `exportWithImages`, Copy |
 | Settings key | `settings.annotColor` (`[r,g,b]` 0–1; no main default, falls back to yellow) | `annotator.js` swatches / popover | `annotator.js color()` |
 | Settings key | `settings.layout` (`{side,list,rail: {w, closed}}`; no main default, filled by `app.js layout()`) | `app.js` drag / toggle / `resetLayout` | `app.js applyLayout()` |
 | CSS vars + classes on `#app` | `--side-w`, `--list-w`, `--rail-w`; `side-closed`, `list-closed`, `rail-closed`, `wide` | `app.js applyLayout()`, `renderList()` | `styles.css` grid, strips, `.app > .resizer` positions |
@@ -148,6 +165,8 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 - CSS uses custom properties on `:root`, with a dark override under `prefers-color-scheme: dark`. Never add a theme class: the light/dark choice is made only through `nativeTheme.themeSource` in `main.js`.
 - Light/dark artwork goes in `renderer/assets/brand/` as `<name>-light.svg` / `<name>-dark.svg` and is placed with `brandImg(name)` (or a `<picture>` in static HTML).
 - Bump `ANALYZER_VERSION` in `core.js` whenever extraction output changes, so saved docs rescan.
+- Pure renderer logic that tests need goes in its own script with a `module.exports` guard (`core.js`, `order.js`, `exportfmt.js`), loaded before `app.js`; main-side pure helpers go in their own CommonJS file (`identify.js`, `exportPaths.js`).
+- Paths that come from the renderer (export names, asset paths) are validated in main with `exportPaths` before any write.
 - PDF bytes are only ever written to the stored copy (`pdf:writeStored`) or a user-chosen path (`pdf:saveAs`), never to `sourcePath`.
 
 ## File → module index
@@ -160,17 +179,25 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | `renderer/app.js` | renderer-ui |
 | `renderer/assets/brand/*` | renderer-ui |
 | `renderer/core.js` | extraction-core |
+| `renderer/exportfmt.js` | renderer-ui |
+| `renderer/images.js` | renderer-ui |
 | `renderer/index.html` | renderer-ui |
+| `renderer/order.js` | renderer-ui |
 | `renderer/sample.pdf` | renderer-ui |
 | `renderer/splash.html` | renderer-ui |
 | `renderer/styles.css` | renderer-ui |
+| `src/exportPaths.js` | main-process |
 | `src/identify.js` | main-process |
 | `src/main.js` | main-process |
 | `src/preload.js` | preload-bridge |
 | `test/README.md` | tests |
 | `test/core.test.js` | tests |
+| `test/export.test.js` | tests |
+| `test/fixtures/images.pdf`, `test/fixtures/make-images-pdf.js` | tests |
 | `test/helpers/pdf.js` | tests |
 | `test/identify.test.js` | tests |
+| `test/images.test.js` | tests |
+| `test/reader-images.test.js` | tests |
 
 ## Excluded
 `node_modules/`, `dist/` (gitignored build output), `package-lock.json`, `README.md`, `.gitignore`.

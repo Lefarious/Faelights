@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-09 · Last logged commit: e4be24f · Version: 1.0.0 (unreleased changes on main)
+> Last updated: 2026-10-09 · Last logged commit: 40bb2c7 · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into `main` (pushed 2026-10-09): a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). A follow-up fix put Add PDFs buttons in the PDF list header and left-aligned the reader toolbar (F-013, pushed). Installers are built in CI but not published. Next: online metadata lookup (meta-enrich, Sprint 2).
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into `main` (pushed 2026-10-09): a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). A follow-up fix put Add PDFs buttons in the PDF list header and left-aligned the reader toolbar (F-013, pushed). Sprint 2 (2026-10-09, merged to local `main` 40bb2c7, not yet pushed) added: an "Add by identifier" box that also takes ISBNs, PMIDs and ADS Bibcodes, several at once (F-014); image capture, where the user boxes a figure in the viewer and it shows up centred among the extracts in PDF order under a "With images" toggle (F-015); and more export formats (HTML) with images (F-016). Installers are built in CI but not published. Next: online metadata lookup (meta-enrich, left out of Sprint 2 by the user).
 
 ## 2. Vision & scope
 - **Goals:**
@@ -14,7 +14,7 @@ Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pull
   - Highlights survive the original PDF moving or being deleted.
 - **Non-goals:**
   - Cloud sync, accounts or any background network service. ~~Nothing in the code makes network calls.~~ Revised 2026-10-09: the app may go online only when the user explicitly asks (add a paper by DOI/arXiv/link, F-011; metadata lookup, planned). It must keep working fully offline, and nothing runs in the background (→ D-009).
-  - ~~Annotating or editing PDFs inside the app.~~ Revised 2026-10-09: annotating is now in scope (F-007). Editing page content (text, images, page order) is still out of scope, and the user's original PDF is still never written.
+  - ~~Annotating or editing PDFs inside the app.~~ Revised 2026-10-09: annotating is now in scope (F-007), including image-capture boxes (F-015). Editing page content (text, images, page order) is still out of scope, and the user's original PDF is still never written.
   - OCR. Marks over scanned pages are listed as "loose" and the user is told to OCR the file outside the app.
 - **Success criteria (unverified):** highlights from common readers (Acrobat, Preview, Zotero and similar) extract correctly; exports drop into Obsidian without cleanup.
 
@@ -87,8 +87,11 @@ flowchart LR
 | OS shell / file associations | "Open with" for `.pdf`, open/reveal files | `package.json build.fileAssociations` | none | — | Users add PDFs from inside the app instead |
 
 | arXiv, doi.org (+ publisher sites), CrossRef REST API | Download a paper's PDF when the user adds it by arXiv ID, DOI or link (F-011) | `src/main.js` `pdf:fetch` | none | No key; public endpoints. Limits: 150 MB per PDF, 15 s to first response, 30 s stall | Clear in-app message: offline, paywalled (with "Open in browser"), not a PDF, not found. Adding from disk is unaffected. |
+| NCBI ID converter + E-utilities, PubMed Central | PMID → PMC copy or DOI (F-014) | `src/main.js` `resolvePdf` | none | No key; public endpoints. PMC currently serves a bot-check page to non-browser clients | Falls back to the DOI path; else "No free PDF was found" |
+| ADS link gateway (ui.adsabs.harvard.edu) | ADS Bibcode → e-print / publisher / ADS scan PDF (F-014) | `src/main.js` `resolvePdf` | none | No API token needed for the gateway | "Paywalled" with Open in browser |
+| Open Library search + Internet Archive downloads | ISBN → free public-domain scan (F-014) | `src/main.js` `resolvePdf` | none | Only `ebook_access: public` scans; books can be large; scan may be another edition | "No free PDF was found" with Open in browser / Add from file |
 
-There are no analytics or telemetry, and no background network calls: requests happen only inside the add-by-DOI/link dialog after the user submits it (→ D-009). Fetches use a separate in-memory session so publisher cookies don't persist. The app reads no environment variables.
+There are no analytics or telemetry, and no background network calls: requests happen only inside the add-by-identifier dialog after the user submits it (→ D-009). Fetches use a separate in-memory session so publisher cookies don't persist. The app reads no environment variables.
 
 ## 5. Environments & deployment
 | Env | Target | Branch | How it deploys | Notes |
@@ -113,27 +116,55 @@ There are no analytics or telemetry, and no background network calls: requests h
   Splash (frameless 440×280): animated lockup (dots appear, mote blooms, wordmark writes in) + "Gathering your highlights…"
   ├── Sidebar: brand (mark + wordmark) · Add PDFs · Search / All PDFs / Starred / My publications · Libraries (+ new) · Tags · footer (stale count, Rescan · theme icon switch)
   ├── List: view title · filter box · sort · progress meter · PDF cards (marks, pages, colour swatches, Changed / Original moved)
-  └── Reader: title (click to rename) · open-in-app · ⋯ · library/star/tags · View (opens the annotator) · Info toggle · Full/Only toggle · format select · Copy · Export
+  └── Reader: title (click to rename) · open-in-app · ⋯ · library/star/tags · View (opens the annotator) · Info toggle · Full/Only toggle · With images (only when the PDF has image boxes) · format select · Copy · Export ▾ (Markdown / Obsidian / HTML / Plain text · Include images)
                ├── Rail (own scroll, resizable, hideable): colour filter chips · Topics TOC
                ├── Info card (when toggled on): Zotero-style fields (type, title, authors, abstract, publication, DOI/arXiv links…) + File details
-               └── Groups by topic → extracts (page → opens viewer at that page, quote, notes, copy-one)
+               └── Groups by topic → extracts (page → opens viewer at that page, quote, notes, copy-one) and, with "With images", centred figures (crop, p. N, note) placed before the fact they sit in
   Annotator (replaces the reader while open): ← Highlights · title · page box · zoom −/%/+/fit · undo/redo · Download PDF
-               tools: Select · Highlight · Underline · Strike · Note · Draw  +  5 colour swatches · save status
+               tools: Select · Highlight · Underline · Strike · Note · Draw · Capture image  +  5 colour swatches · save status
                pages (continuous scroll, lazy-rendered) · popovers: selection (colours, underline, strike, note, copy) / mark (recolour, note, delete) / note editor
   Search view (list pane hidden): query · library scope · mode toggle → results by PDF, click to jump
   Empty states: mote + onboarding with "Try a sample PDF" + shortcut legend
   Topics: extracts before the first topic sit under "Abstract"
   ```
 - **State:** one global state object, re-rendered fully on each change. Persistence is debounced (250 ms) and saves the whole DB.
-- **Interaction:** a themed in-app action menu for libraries and PDFs (F-010), opened by right-click, a ⋯ button on hover/focus/current row, or Shift+F10 / the ContextMenu key, with icons, groups, red destructive items last, and shortcut hints only where they work; "Add from DOI or link" dialog (link button next to Add PDFs, File menu Ctrl/⌘+Shift+O, Ctrl/⌘+V of a DOI or link outside text fields, or dropping a link) with a live "recognised as…" hint and an "Offline" pill (F-011); drag PDFs from the OS onto the window or onto a library, drag docs between libraries, keyboard (↑↓/J K, Delete, Ctrl/⌘ shortcuts from the app menu).
+- **Interaction:** a themed in-app action menu for libraries and PDFs (F-010), opened by right-click, a ⋯ button on hover/focus/current row, or Shift+F10 / the ContextMenu key, with icons, groups, red destructive items last, and shortcut hints only where they work; "Add by identifier" dialog (link button next to Add PDFs, File menu Ctrl/⌘+Shift+O, Ctrl/⌘+V of identifiers or links outside text fields, or dropping links) with a multi-line box for ISBNs, DOIs, PMIDs, arXiv IDs, ADS Bibcodes and links, a live "recognised as…" / "N recognised" hint, a status row per item in a batch, and an "Offline" pill (F-011, F-014); drag PDFs from the OS onto the window or onto a library, drag docs between libraries, keyboard (↑↓/J K, Delete, Ctrl/⌘ shortcuts from the app menu).
 - **Accessibility:** ARIA labels on icon buttons and inputs, `aria-current`/`aria-pressed` states, `:focus-visible` outlines, and a `role=status` toast.
 - **Layout:** the sidebar, PDF list and topics rail can each be resized by dragging the handle at their right edge and hidden with a panel button (or Ctrl+B / Ctrl+Shift+B / Ctrl+Alt+B, View menu). A hidden column becomes a 34 px strip with a vertical label that reopens it. Dragging below the minimum snaps the column shut. Double-click a handle to reset it; View → Reset Column Widths resets all. Handles are focusable separators (←/→ resize, Enter toggles).
 - **Scrollbars:** slim rounded thumbs in the muted tone that firm up when their pane is hovered and turn accent while dragged.
 - **Responsive:** minimum window 900×560. On narrow windows the list, then the sidebar, give up width so the reader keeps at least 420 px; the topics rail hides when the reader is under 600 px.
 - **Motion:** the brand SVGs pulse; the splash lockup animates in over ~2.2 s and the splash stays up at least 2.3 s so it finishes. All of it stops under `prefers-reduced-motion`.
-- **Annotator keys:** V/H/U/S/N/D pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
+- **Image boxes (F-015):** a 1.5 pt coloured outline with no fill, so the page under it stays visible; text inside stays selectable (only the border picks the box). Image colours join the reader's colour filter.
+- **Annotator keys:** V/H/U/S/N/D/I pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
+### F-016 · More export formats, with images · 2026-10-09 · shipped to local main (40bb2c7, not pushed)
+- **Why:** captured images (F-015) needed to leave the app with the text, and an HTML export was requested alongside Markdown/Obsidian/plain.
+- **How:** Export became a menu (Markdown, Obsidian, HTML, Plain text, plus an "Include images" check bound to the reader's With images setting). With images on, crops are rendered as PNGs and written to a `<file name> images/` folder next to the export (library export: one folder per doc), linked inline in reading order; HTML is a single self-contained file with images embedded. Copy inserts `[Image, p. N]` placeholders. Formatting moved into a pure, tested module; main validates every renderer-supplied path before writing.
+- **Touched:** [renderer-ui](atlas/modules/renderer-ui.md), [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [tests](atlas/modules/tests.md)
+- **Added:** `renderer/exportfmt.js`, `src/exportPaths.js`; IPC `export:bundle`, `export:folder` assets; setting `fmt: html`; `test/export.test.js`. No dependencies.
+- **Trade-offs:** the export text is built before the save dialog, so a placeholder token stands for the images folder and main swaps in the real name (→ D-012). Exports include all images regardless of the colour filter (Copy honours it). Without images, md/obsidian/plain output is byte-identical to before (tested).
+- **Known limits / follow-ups:** many large crops take a few seconds (progress toast); no per-export image resolution choice.
+- **Commit range:** branch `feature/s2-image-export` (25a74e3), merged in d62427f on `feature/s2-integration`
+
+### F-015 · Image capture: boxes in the viewer, images among the extracts · 2026-10-09 · shipped to local main (40bb2c7, not pushed)
+- **Why:** figures and tables matter as much as highlighted sentences; the user wanted to mark them and see them in context.
+- **How:** a "Capture image" tool (I) draws a border-only PDF Square annotation in the highlight palette (recolour, note, delete, undo like other marks). Extraction reads every Square into `result.images` with a reading-order position; an image that falls inside a fact is placed before it. A "With images" reader toggle interleaves centred crops (rendered from the stored PDF with annotations hidden, cached per doc version) in both Full sentence and Highlights only, grouped under their topic; image colours join the colour filter. `ANALYZER_VERSION` → 3, so saved docs rescan on open.
+- **Touched:** [annotator](atlas/modules/annotator.md), [extraction-core](atlas/modules/extraction-core.md), [renderer-ui](atlas/modules/renderer-ui.md), [tests](atlas/modules/tests.md)
+- **Added:** `renderer/images.js` (crop helper), `renderer/order.js` (shared placement rule); setting `images`; fixture `test/fixtures/images.pdf` + generator; `test/images.test.js`, `test/reader-images.test.js`. No dependencies.
+- **Trade-offs:** boxes are standard Square annotations (→ D-011), so they show in every PDF reader and Squares from other apps (e.g. Zotero image annotations) count as images too. Colour "sorting" means the existing colour filter, per the user, not a group-by-colour view.
+- **Known limits / follow-ups:** boxes can't be moved or resized (delete and redraw); with the toggle off, image colours don't appear in the chips.
+- **Commit range:** branches `feature/s2-image-box` (55ff131), `feature/s2-image-extract` (f8cee1d), `feature/s2-image-view` (d71ad69), merged in 7963874, 207c7d7, 96051c7 on `feature/s2-integration`
+
+### F-014 · Add by identifier (ISBN, DOI, PMID, arXiv, ADS Bibcode, links), several at once · 2026-10-09 · shipped to local main (40bb2c7, not pushed)
+- **Why:** the user wanted the add box to work like Zotero's "Enter ISBNs, DOIs, PMIDs, arXiv IDs, or ADS Bibcodes".
+- **How:** the dialog became "Add by identifier" with a multi-line box; a pasted list is split, each item recognised and fetched one at a time with its own status row. New resolvers in main: PMID → NCBI ID converter → PMC copy or DOI (PubMed summary as DOI fallback); ADS → arXiv for arXiv bibcodes, else the ADS link gateway (e-print, publisher, ADS scan); ISBN → a free public-domain scan from Open Library / Internet Archive, else a clear "no free PDF" with Open in browser and Add from file.
+- **Touched:** [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [renderer-ui](atlas/modules/renderer-ui.md), [tests](atlas/modules/tests.md)
+- **Added:** IPC `id:parseMany`; failure reason `no-free-copy`; `origin.kind` `pmid|isbn|ads`; File menu item renamed "Add by Identifier…". New public endpoints (see §4). No dependencies, no env vars.
+- **Trade-offs:** ISBNs only download genuinely free scans, no placeholder book entries (user decision); bare numbers of 6–8 digits are PMIDs, shorter ones need a `PMID:` prefix; batches run serially because main has one fetch controller.
+- **Known limits / follow-ups:** PMC bot-walls non-browser clients, so PMC/PMID downloads can fail; an ISBN can fetch another edition's scan; resolvers were checked with plain Node, not through Electron's network stack.
+- **Commit range:** branch `feature/s2-add-ids` (49ffd4c), merged in 96e2507 on `feature/s2-integration`; sprint merged to `main` in 40bb2c7
+
 ### F-013 · Add PDFs from the list header; left-aligned reader toolbar · 2026-10-09 · shipped (e4be24f, pushed)
 - **Why:** once a library had PDFs, the only add buttons were in the sidebar, which can be hidden. The reader toolbar also started at the right edge, away from the meta row above it.
 - **How:** the PDF list header gets icon buttons for "Add PDFs" and "Add from DOI or link" beside the hide-pane button, in every view. The reader toolbar's leading spacer was removed, so View, Info, the mode switch, format, Copy and Export start from the left.
@@ -278,20 +309,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Verified:** generated test PDFs covering numbered, plain and ALL-CAPS layouts; the sample PDF is unchanged.
 - **Commit range:** 978ee61 (merged in 85dd5a7)
 
-### F-001 · Faelights desktop v1.0.0 · 2026-10-08 · shipped
-- **Why:** turn annotated PDFs into organised, exportable highlight notes, offline.
-- **How:**
-  - Electron app with a sandboxed renderer. All disk and OS access goes through a small IPC bridge.
-  - In-renderer extraction using pdf.js: the text stream is rebuilt, annotation quads are hit-tested per character, edges snap to words, marks expand to whole sentences, and topics come from bookmarks or font-size headings.
-  - Libraries, tags, stars, cross-PDF search, colour filtering, and two reading modes.
-  - Each PDF is copied into the app's library, with mtime-based staleness detection, auto-rescan and relinking.
-  - Export to Markdown, Obsidian or plain text, per PDF or as a folder per library with YAML frontmatter.
-  - electron-builder installers for 3 OSes, built in GitHub Actions.
-- **Touched:** all modules (see [ATLAS](atlas/ATLAS.md)).
-- **Added:** deps electron, electron-builder, pdfjs-dist, @fontsource ×3. `.pdf` file association. CI workflow.
-- **Trade-offs:** whole-DB JSON saves (simple, but cost grows with library size); analysis runs on the renderer thread apart from the pdf.js worker; no tests (see D-002, D-004).
-- **Known limits / follow-ups:** no OCR; flattened annotations can't be read; unsigned builds.
-- **Commit range:** 18c8052 (reconstructed from git: the entire app arrived in the initial commit)
+Older entries: [compass/feature-log-archive.md](compass/feature-log-archive.md) (F-001).
 
 ## 8. Decision log
 ### D-001 · Electron desktop, local-only · 2026-10-08 (reconstructed)
@@ -324,20 +342,30 @@ Context: adding papers by DOI/link (F-011) and planned metadata lookup need the 
 ### D-010 · `net.request` with manual redirects for downloads · 2026-10-09
 Context: F-011 needs the final URL after redirects to resolve relative PDF links and record `origin`. Electron's `net.fetch` returned an empty final URL. Decision: `net.request` on a separate in-memory session, following redirects by hand and checking each hop is http(s). Consequences: system proxy support is kept; publisher cookies don't persist; size and time limits are enforced in our own code.
 
+### D-011 · Image boxes are standard PDF Square annotations · 2026-10-09
+Context: F-015 needs a way to mark figures. Options: an app-only list of rectangles in the DB; a custom annotation type; a standard Square annotation. Decision: a border-only Square (`/Subj (Image)`, no fill) written into the stored copy like every other mark, and any Square is read as an image box. Consequences: boxes survive rescans and show in other readers; Zotero-style image annotations work for free; a Square drawn for another purpose in another app also becomes an "image".
+
+### D-012 · Export images to a sibling folder, path-checked in main · 2026-10-09
+Context: F-016 writes binary files chosen by renderer code. Options: a zip; embedded base64 everywhere; files in a folder next to the export. Decision: a `<file name> images/` folder for md/obsidian/plain (what Obsidian and most Markdown tools expect), a self-contained file for HTML, and every relative path validated in main before anything is written. Consequences: exports stay readable in note tools; the text is built before the save dialog, so a placeholder token is swapped for the real folder name in main.
+
 ## 9. Roadmap & deployment plan
 No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
 ### Now
-- Nothing in progress. Sprint 2 (meta-enrich) is planned.
+- Sprint 2 (F-014, F-015, F-016) merged to local `main` (40bb2c7); waiting on the user's OK to push to GitHub.
 ### Next
-- meta-enrich (Sprint 2): fill and refresh Info fields from CrossRef (DOI) and the arXiv API, on add-by-DOI/link and on demand from the Info card; optional, never blocks add/open, cached in `meta` so it shows offline (D-009). Depends on F-011.
+- meta-enrich (left out of Sprint 2 by the user): fill and refresh Info fields from CrossRef (DOI) and the arXiv API, on add-by-DOI/link and on demand from the Info card; optional, never blocks add/open, cached in `meta` so it shows offline (D-009). Depends on F-011.
 - Second test fixture PDF (underline/strike/squiggly, outline and wording topics, loose marks); run `npm test` in CI.
 ### Later
 - Code signing and notarisation; publishing GitHub Releases from CI.
 - DB schema versioning and migrations, and per-doc result storage if the library grows large.
 - Move analysis off the UI thread (worker).
 - Editable Info fields; metadata in export frontmatter (follow-up to F-006). Online lookup moved to Next (meta-enrich).
+- Image capture follow-ups (F-015): move/resize boxes; exact-edition ISBN downloads; a fallback for PMC's bot check.
 - Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
+- More export formats, with images · 2026-10-09 · F-016
+- Image capture (viewer boxes, extraction, reader toggle) · 2026-10-09 · F-015
+- Add by identifier (ISBN, PMID, ADS, batches) · 2026-10-09 · F-014
 - Add buttons in the PDF list header; left-aligned reader toolbar · 2026-10-09 · F-013
 - Test harness · 2026-10-09 · F-012
 - Add by DOI / arXiv / link · 2026-10-09 · F-011
@@ -365,6 +393,9 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - Brand artwork lives in `renderer/assets/brand/` with `-light`/`-dark` variants.
 - Network access only in `main.js`, only on explicit user action, never at startup or in the background; every online feature needs an offline path (D-009).
 - Item actions go through the in-app `openMenu`; don't reintroduce native `fl.popup` menus.
+- Pure logic that tests need lives in its own script with a `module.exports` guard (`core.js`, `order.js`, `exportfmt.js`, `identify.js`, `exportPaths.js`).
+- The image placement rule (an image goes before entry `e` when `img.at <= e.at`) lives only in `order.js`; the reader and exports both use it.
+- Paths from the renderer are validated in main (`exportPaths`) before any write.
 - Run `npm test` before merging; update the snapshot in `test/core.test.js` only for intended extraction changes.
 
 ## 11. Tech debt & open questions
@@ -383,6 +414,10 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 | Theme colours duplicated in `styles.css`, `splash.html` and `main.js themeBg()` | Palette edits must touch 3 places | F-003/F-004 | Share a tokens file |
 | Annotator re-serialises the whole PDF on every edit | Slow edits on very large PDFs | F-007 | pdf-lib incremental update, or batch edits |
 | `annotator.js` relies on many `app.js` globals | Hidden coupling; load order matters | F-007 | A small shared helpers script, or modules when a bundler arrives |
+| PMC serves a bot-check page to non-browser clients | PMCID and some PMID adds fail | F-011 / F-014 | Europe PMC render endpoint or Unpaywall fallback |
+| ISBN download may be another edition's scan | Wrong edition in the library | F-014 | Prefer exact-ISBN editions; show the edition title in the result row |
+| `ckey` duplicated in `order.js` and `app.js`; `groupsOf` and `Order.groupItems` overlap | Two places to keep in sync | F-015 / F-016 | Fold into `order.js` |
+| Image boxes can't be moved or resized | Delete and redraw | F-015 | Drag handles in the annotator |
 | Open question: target audience and distribution channel (GitHub only?) | Affects signing and auto-update priority | — | Ask the owner |
 
 ## 12. Resume checklist
