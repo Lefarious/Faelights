@@ -18,7 +18,9 @@ contextBridge.exposeInMainWorld("fl", {
   writeStored: (storedPath, bytes) => ipcRenderer.invoke("pdf:writeStored", { storedPath, bytes }),
   savePdfAs: (name, bytes) => ipcRenderer.invoke("pdf:saveAs", { name, bytes }),
   exportFile: (name, text) => ipcRenderer.invoke("export:file", { name, text }),
-  exportFolder: (folderName, files) => ipcRenderer.invoke("export:folder", { folderName, files }),
+  exportFolder: (folderName, files, assets) => ipcRenderer.invoke("export:folder", { folderName, files, assets }),
+  // one file + images in "<file base> images/"; dirToken marks that folder's name in text and asset paths
+  exportBundle: (name, text, assets, opts = {}) => ipcRenderer.invoke("export:bundle", { name, text, assets, dirToken: opts.dirToken, encode: opts.encode }),
   openFolder: p => ipcRenderer.invoke("export:openFolder", p),
   copy: text => ipcRenderer.invoke("clip:write", text),
   popup: items => ipcRenderer.invoke("menu:popup", items),

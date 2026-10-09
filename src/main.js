@@ -6,6 +6,7 @@ const fs = require("fs");
 const fsp = fs.promises;
 const crypto = require("crypto");
 const { parseIdentifier, describe, findPdfLink, isPdf, fileNameFor, fetchFailureReason } = require("./identify");
+const exportPaths = require("./exportPaths");
 
 const DATA_DIR = () => path.join(app.getPath("userData"), "library");
 const DB_PATH = () => path.join(DATA_DIR(), "faelights.json");
@@ -400,12 +401,44 @@ ipcMain.handle("export:file", async (_e, { name, text }) => {
   if (r.canceled || !r.filePath) return null;
   await fsp.writeFile(r.filePath, text, "utf8"); return r.filePath;
 });
-ipcMain.handle("export:folder", async (_e, { folderName, files }) => {
+// Write then rename, so a failed export never leaves a half-written file behind
+async function writeAtomic(p, data) {
+  await fsp.mkdir(path.dirname(p), { recursive: true });
+  const tmp = p + "." + crypto.randomBytes(4).toString("hex") + ".tmp";
+  try { await fsp.writeFile(tmp, data, typeof data === "string" ? "utf8" : undefined); await fsp.rename(tmp, p); }
+  catch (err) { try { await fsp.unlink(tmp); } catch (_) {} throw err; }
+}
+const EXPORT_FILTERS = {
+  md: { name: "Markdown", extensions: ["md"] }, txt: { name: "Text", extensions: ["txt"] }, html: { name: "HTML", extensions: ["html", "htm"] }
+};
+// One exported file plus binary assets (images) in a sibling "<file base> images" folder.
+// `dirToken` (optional) stands for that folder's name in `text` and asset paths; `encode: "url"` for Markdown links.
+ipcMain.handle("export:bundle", async (_e, { name, text, assets, dirToken, encode }) => {
+  if (typeof name !== "string" || typeof text !== "string" || (assets != null && !Array.isArray(assets))) throw new Error("Invalid export");
+  if (dirToken != null && !exportPaths.isToken(dirToken)) throw new Error("Invalid export");
+  const ext = path.extname(name).slice(1).toLowerCase();
+  const r = await dialog.showSaveDialog(win, { title: "Export highlights", defaultPath: name, filters: EXPORT_FILTERS[ext] ? [EXPORT_FILTERS[ext]] : [] });
+  if (r.canceled || !r.filePath) return null;
+  const dir = path.dirname(r.filePath), imgDir = exportPaths.imagesDirFor(r.filePath);
+  const list = (assets || []).map(a => ({ path: exportPaths.fillToken(a && a.path, dirToken, imgDir), bytes: a && a.bytes }));
+  const plan = exportPaths.planAssets(dir, list);   // throws, rejecting the whole export, on any unsafe path
+  const body = exportPaths.fillToken(text, dirToken, encode === "url" ? exportPaths.mdSeg(imgDir) : imgDir);
+  for (const a of plan) await writeAtomic(a.abs, a.bytes);
+  await writeAtomic(r.filePath, body);
+  return r.filePath;
+});
+// A folder per library: text files (+ optional binary assets); every name must stay inside that folder
+ipcMain.handle("export:folder", async (_e, { folderName, files, assets }) => {
+  if (exportPaths.pathProblem(folderName) || /[\\/]/.test(folderName) || !Array.isArray(files)) throw new Error("Invalid export folder");
+  for (const f of files) if (!f || exportPaths.pathProblem(f.name) || typeof f.text !== "string") throw new Error("Invalid export file");
   const r = await dialog.showOpenDialog(win, { title: "Choose where to export (e.g. your Obsidian vault)", properties: ["openDirectory", "createDirectory"] });
   if (r.canceled || !r.filePaths[0]) return null;
   const dir = path.join(r.filePaths[0], folderName);
+  const plan = exportPaths.planAssets(dir, assets);
+  const texts = files.map(f => ({ abs: exportPaths.resolveInside(dir, f.name), text: f.text }));
   await fsp.mkdir(dir, { recursive: true });
-  for (const f of files) await fsp.writeFile(path.join(dir, f.name), f.text, "utf8");
+  for (const a of plan) await writeAtomic(a.abs, a.bytes);
+  for (const f of texts) await writeAtomic(f.abs, f.text);
   return dir;
 });
 ipcMain.handle("export:openFolder", async (_e, p) => { shell.openPath(p); return true; });
