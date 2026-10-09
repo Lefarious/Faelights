@@ -47,9 +47,6 @@ button, select, input { font: inherit; color: inherit; }
 .brand { display: flex; align-items: center; gap: 4px; padding: 16px 18px 10px; }
 .brand-mark, .blank-mote, .drop-mote { display: block; flex: none; }
 .brand-mark img { width: 34px; height: 34px; display: block; margin: -4px -4px -4px -6px; }
-.brand .theme-btn { margin-left: auto; border: 0; background: none; color: var(--muted); padding: 6px; border-radius: 7px; cursor: pointer; display: grid; place-items: center; }
-.brand .theme-btn:hover { color: var(--ink); background: var(--sel); }
-.brand .theme-btn .ico { width: 17px; height: 17px; }
 .brand h1 { font-family: var(--font-display); font-weight: 400; font-size: 22px; margin: 0 0 2px; letter-spacing: -.01em; }
 .side .add { margin: 4px 14px 14px; justify-content: center; }
 .side-scroll { overflow-y: auto; flex: 1; padding: 0 8px 16px; }
@@ -66,7 +63,13 @@ button, select, input { font: inherit; color: inherit; }
 .nav .n { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .nav input { width: 100%; border: 1px solid var(--accent); border-radius: 6px; padding: 5px 9px; background: var(--surface); }
 .tagdot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); margin: 0 4.5px; flex: none; }
-.side-foot { border-top: 1px solid var(--line); padding: 10px 14px; font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.side-foot { border-top: 1px solid var(--line); padding: 10px 14px 12px; font-size: 12.5px; color: var(--muted); display: grid; gap: 10px; }
+.foot-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; min-height: 22px; }
+.theme-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--sel) 55%, transparent); }
+.theme-seg button { border: 0; background: none; color: var(--muted); padding: 5px 0; border-radius: 7px; cursor: pointer; display: grid; place-items: center; }
+.theme-seg button:hover { color: var(--ink); }
+.theme-seg button[aria-checked="true"] { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: var(--accent); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.theme-seg .ico { width: 15px; height: 15px; }
 .linkbtn { border: 0; background: none; color: var(--accent); cursor: pointer; font-weight: 600; padding: 2px 4px; font-size: 12.5px; }
 
 /* ---------- buttons ---------- */

@@ -64,7 +64,7 @@ Reader "Export" / menu `export-doc` → `exportDoc(d)` → `docText(d, fmt, fron
 Library menu / menu `export-library` → `exportLibrary(id)` → per-doc `docText(..., frontmatter=true)` with de-duplicated `safeName`s → `fl.exportFolder` → IPC `export:folder` directory picker → writes `<dir>/<library name>/*.md|.txt` → `fl.openFolder`.
 
 ### Theme change
-Sidebar `themeButton()` → `fl.popup` (System/Light/Dark) → `fl.setTheme(t)` → IPC `theme:set` → `main.js applyTheme(t)` sets `nativeTheme.themeSource`, `setBackgroundColor` on every window, writes `userData/theme.json`, rebuilds the menu, pushes `theme` → `fl.onTheme` → `S.theme`, `renderSide()`. View → Theme radio items call `applyTheme` directly. All styling and `<picture>` brand art react through `prefers-color-scheme`.
+Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → `fl.setTheme(t)` → IPC `theme:set` → `main.js applyTheme(t)` sets `nativeTheme.themeSource`, `setBackgroundColor` on every window, writes `userData/theme.json`, rebuilds the menu, pushes `theme` → `fl.onTheme` → `S.theme`, `renderSide()`. View → Theme radio items call `applyTheme` directly. All styling and `<picture>` brand art react through `prefers-color-scheme`.
 
 ## Cross-cutting couplings
 | Kind | Key | Producers | Consumers |
