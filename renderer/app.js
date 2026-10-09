@@ -149,6 +149,7 @@ loadMeta.busy = new Set();
 function summary(result) {
   const colours = new Map();
   for (const e of result.entries) for (const s of e.spans) colours.set(ckey(s.color), s.color);
+  for (const img of Order.imagesOf(result)) if (!colours.has(ckey(img.color))) colours.set(ckey(img.color), img.color);
   return { count: result.entries.reduce((n, e) => n + e.spans.length, 0) + result.loose.length, colours: [...colours.values()].slice(0, 6) };
 }
 
@@ -193,6 +194,7 @@ async function rescan(d, quiet) {
     const { bytes, mtime } = await fl.readPdf(d);
     const { meta, result } = await analyzeBytes(bytes);
     Object.assign(d, { meta, result, pages: result.pages, scannedAt: Date.now(), scannedMtime: mtime, stale: false, ...summary(result) });
+    Images.forget(d.id);
     save();
     if (!quiet) toast("Highlights refreshed from the PDF");
     return true;
@@ -381,6 +383,7 @@ async function removeDoc(d) {
   if (!ok) return;
   if (Annot.docId() === d.id) await Annot.close({ discard: true });
   await fl.removeStored(d.storedPath);
+  Images.forget(d.id);
   S.db.docs = S.db.docs.filter(x => x.id !== d.id);
   if (S.docId === d.id) S.docId = null;
   save(); renderAll();
@@ -950,8 +953,10 @@ function renderReader() {
     const r = await openMenu(lb, [{ type: "heading", label: "Move to" }, ...S.db.libraries.map(l => ({ id: l.id, label: l.name, checked: l.id === d.libraryId }))], { label: "Move to library" });
     if (r) moveDoc(d, r);
   };
-  meta.append(lb, el("span", null, d.fileName), el("span", null, plural(d.pages, "page")), el("span", null, plural(d.count, "highlight")),
-    el("span", null, "Added " + new Date(d.addedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })));
+  const allImgs = Order.imagesOf(d.result);
+  meta.append(lb, el("span", null, d.fileName), el("span", null, plural(d.pages, "page")), el("span", null, plural(d.count, "highlight")));
+  if (allImgs.length) meta.append(el("span", null, plural(allImgs.length, "image")));
+  meta.append(el("span", null, "Added " + new Date(d.addedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })));
   const star = el("button", "lib", d.starred ? "★ Starred" : "☆ Star"); star.onclick = () => { d.starred = !d.starred; save(); renderAll(); }; meta.append(star);
   const mine = el("button", "lib"); mine.append(svg(ICON.pub), document.createTextNode(d.mine ? "My publication" : "Mark as mine"));
   mine.querySelector("svg").style.width = "13px"; mine.setAttribute("aria-pressed", !!d.mine);
@@ -971,13 +976,20 @@ function renderReader() {
     const b = el("button", null, label); b.setAttribute("aria-pressed", S.db.settings.mode === m);
     b.onclick = () => { S.db.settings.mode = m; save(); renderReader(); }; seg.append(b);
   }
+  // "With images": interleave captured image boxes with the extracts (only offered when the doc has any)
+  let imgb = null;
+  if (allImgs.length) {
+    imgb = el("button", "btn img-btn"); imgb.append(svg(IMG_ICON), document.createTextNode("With images"));
+    imgb.title = "Show captured images among the extracts"; imgb.setAttribute("aria-pressed", !!S.db.settings.images);
+    imgb.onclick = () => { S.db.settings.images = !S.db.settings.images; save(); renderReader(); };
+  }
   const fmt = el("select", "btn"); fmt.id = "fmt"; fmt.title = "Format used when copying or exporting"; fmt.setAttribute("aria-label", "Copy format");
   for (const [v, t] of [["md", "Markdown"], ["obsidian", "Obsidian"], ["plain", "Plain text"]]) { const o = el("option", null, t); o.value = v; fmt.append(o); }
   fmt.value = S.db.settings.fmt; fmt.onchange = () => { S.db.settings.fmt = fmt.value; save(); };
   const cb = btn("", "Copy", "copy"); cb.onclick = () => copyText(docText(d, S.db.settings.fmt, false, filtered(d)), "Extracts");
   const eb = btn("", "Export", "export"); eb.onclick = () => exportDoc(d);
   const vb = btn("", "View", "view", "View and annotate the PDF"); vb.onclick = () => annotate(d);
-  tools.append(vb, ib, seg, fmt, cb, eb); head.append(meta, tools);
+  tools.append(vb, ib, seg); if (imgb) tools.append(imgb); tools.append(fmt, cb, eb); head.append(meta, tools);
   r.append(head);
 
   if (d.sourceMissing) {
@@ -990,9 +1002,12 @@ function renderReader() {
   const rail = el("aside", "rail");
   const main = el("div", "r-main");
   const entries = filtered(d);
-  const groups = groupsOf(entries);
+  // images join the stream only while "With images" is on; off, the list is entries alone (same DOM as before)
+  const showImg = !!S.db.settings.images && allImgs.length > 0;
+  const groups = Order.groupItems(withImages(entries, showImg ? filteredImages(d) : []));
   const colours = new Map();
   for (const e of d.result.entries) for (const s of e.spans) { const k = ckey(s.color); const c = colours.get(k) || { color: s.color, n: 0 }; c.n++; colours.set(k, c); }
+  if (showImg) for (const img of allImgs) { const k = ckey(img.color); const c = colours.get(k) || { color: img.color, n: 0 }; c.n++; colours.set(k, c); }
   if (colours.size > 1) {
     const sec = el("section"); sec.append(el("p", "label", "Filter by colour"));
     const chips = el("div", "chips");
@@ -1008,7 +1023,8 @@ function renderReader() {
     const ul = el("ul", "toc");
     groups.forEach((g, gi) => {
       const li = el("li", g.topic && g.topic.level > 1 ? "sub" : ""); const a = el("a"); a.href = "#";
-      a.append(el("span", "t", g.topic ? g.topic.title : PRE_TOPIC), el("span", "c", String(g.items.reduce((n, e) => n + e.spans.length, 0))));
+      a.append(el("span", "t", g.topic ? g.topic.title : PRE_TOPIC), el("span", "c", String(spanCount(g))));
+      if (g.images) { const ci = el("span", "c ci", String(g.images)); ci.prepend(svg(IMG_ICON)); ci.title = plural(g.images, "image"); a.append(ci); }
       a.onclick = ev => { ev.preventDefault(); $("g" + gi)?.scrollIntoView({ behavior: "smooth" }); };
       li.append(a); ul.append(li);
     });
@@ -1016,7 +1032,7 @@ function renderReader() {
     rail.append(sec);
   }
   if (S.db.settings.info) main.append(infoEl(d));
-  if (!d.result.entries.length && !d.result.loose.length) {
+  if (!d.result.entries.length && !d.result.loose.length && !showImg) {
     const b = el("div", "blank"); b.style.margin = "0";
     b.append(el("h2", null, "No highlights in this PDF"), el("p", null, "Faelights reads highlight, underline and strike-through marks saved in the file. If your reader flattened them into the page, or the PDF was exported without annotations, there's nothing to read. Highlight it again and use Rescan."));
     main.append(b);
@@ -1026,8 +1042,12 @@ function renderReader() {
     const gh = el("div", "group-head");
     if (g.topic && g.topic.path.length > 1) gh.append(el("p", "crumb", g.topic.path.slice(0, -1).join("  ›  ")));
     const h = el("h3"); h.append(document.createTextNode(g.topic ? g.topic.title : PRE_TOPIC));
-    const n = g.items.reduce((a, e) => a + e.spans.length, 0); h.append(el("small", null, plural(n, "extract"))); gh.append(h); sec.append(gh);
-    for (const e of g.items) {
+    const n = spanCount(g);
+    h.append(el("small", null, !g.images ? plural(n, "extract") : !g.entries ? plural(g.images, "image") : plural(n, "extract") + " · " + plural(g.images, "image")));
+    gh.append(h); sec.append(gh);
+    for (const it of g.items) {
+      if (it.kind === "image") { sec.append(figureEl(d, it.image)); continue; }
+      const e = it.entry;
       const row = el("article", "ex"); row.id = "e" + e.n;
       const pg = el("button", "pg", "p. " + e.page); pg.title = "Show page " + e.page + " in the viewer"; pg.onclick = () => annotate(d, e.page);
       row.append(pg, quoteEl(e, S.db.settings.mode, ""));
@@ -1063,6 +1083,34 @@ const TOPIC_SOURCE = {
 };
 function filtered(d) {
   return d.result.entries.map(e => ({ ...e, spans: e.spans.filter(s => !S.off.has(ckey(s.color))) })).filter(e => e.spans.length);
+}
+// Captured images whose colour isn't hidden (renderer/order.js; [] for results without images)
+const filteredImages = d => Order.filterImages(Order.imagesOf(d.result), S.off);
+// entries + images → [{kind: "entry", entry, topic} | {kind: "image", image, topic}] in reading order
+const withImages = (entries, images) => Order.withImages(entries, images);
+// extracts in a group of the combined list (images don't count)
+const spanCount = g => g.items.reduce((n, it) => n + (it.kind === "entry" ? it.entry.spans.length : 0), 0);
+const IMG_ICON = '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>';
+// One captured image, centred in the reading column; a fixed-aspect placeholder holds its place while it renders
+function figureEl(d, img) {
+  const f = el("figure", "fig"); f.id = "i" + img.n; f.style.setProperty("--mc", rgb(img.color));
+  const w = Math.abs(img.rect[2] - img.rect[0]) || 1, h = Math.abs(img.rect[3] - img.rect[1]) || 1;
+  const box = el("div", "fig-img loading");
+  box.style.aspectRatio = `${w} / ${h}`;
+  // natural size (1pt = 4/3 px), never wider than the column or taller than 60vh
+  box.style.width = `min(100%, ${Math.round(w * 4 / 3)}px, calc(60vh * ${(w / h).toFixed(4)}))`;
+  const alt = "Image from page " + img.page + (img.comment ? ": " + img.comment : "");
+  box.setAttribute("role", "img"); box.setAttribute("aria-label", alt);
+  Images.crop(d, img).then(({ url }) => {
+    const im = el("img"); im.src = url; im.alt = alt;
+    box.removeAttribute("role"); box.removeAttribute("aria-label"); box.classList.remove("loading"); box.replaceChildren(im);
+  }, err => { console.error(err); box.replaceWith(el("p", "fig-fail", "Couldn't render this image")); });
+  const cap = el("figcaption");
+  const pg = el("button", "pg", "p. " + img.page); pg.title = "Show page " + img.page + " in the viewer"; pg.onclick = () => annotate(d, img.page);
+  cap.append(pg);
+  if (img.comment) { const p = el("p", "note"); p.append(el("b", null, "Note"), document.createTextNode(img.comment)); cap.append(p); }
+  f.append(box, cap);
+  return f;
 }
 function renderBlank(r) {
   const b = el("div", "blank");
