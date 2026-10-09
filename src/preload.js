@@ -26,5 +26,12 @@ contextBridge.exposeInMainWorld("fl", {
   pathFor: file => { try { return webUtils.getPathForFile(file); } catch (_) { return file.path || ""; } },
   onMenu: fn => ipcRenderer.on("menu", (_e, ch) => fn(ch)),
   onOpenFiles: fn => ipcRenderer.on("open-files", (_e, files) => fn(files)),
-  onTheme: fn => ipcRenderer.on("theme", (_e, t) => fn(t))
+  onTheme: fn => ipcRenderer.on("theme", (_e, t) => fn(t)),
+  // add from DOI / link: the only network access, always user-initiated
+  parseId: text => ipcRenderer.invoke("id:parse", text),
+  fetchPdf: text => ipcRenderer.invoke("pdf:fetch", text),
+  cancelFetch: () => ipcRenderer.invoke("pdf:fetchCancel"),
+  onFetchProgress: fn => ipcRenderer.on("fetch-progress", (_e, p) => fn(p)),
+  openExternal: url => ipcRenderer.invoke("app:openExternal", url),
+  readClipboardText: () => ipcRenderer.invoke("clip:read")
 });

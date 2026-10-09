@@ -354,3 +354,27 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 .nav li:hover > button:first-child:not([aria-current="true"]) { background: color-mix(in srgb, var(--sel) 60%, transparent); }
 .doc-row .doc .t { padding-right: 22px; }
 .doc-row:hover .doc:not([aria-current="true"]) { background: color-mix(in srgb, var(--sel) 50%, transparent); }
+/* ---------------- add from DOI / link (add-by-identifier) ---------------- */
+.side .add-row { display: flex; gap: 6px; margin: 4px 14px 14px; }
+.side .add-row .add { margin: 0; flex: 1; }
+.btn.add-id { padding: 6px 9px; }
+.addid-back { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--bg) 60%, transparent); backdrop-filter: blur(3px); }
+.addid { width: min(460px, 100%); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 20px 20px 16px; display: grid; gap: 10px; box-shadow: 0 18px 50px rgb(0 0 0 / .22); }
+.addid h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 21px; }
+.addid p { margin: 0; color: var(--muted); font-size: 13px; }
+.addid .search { flex: none; width: 100%; padding: 8px 11px; font-size: 14px; }
+.addid .search:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.addid-line { display: flex; align-items: center; gap: 8px; min-height: 18px; font-size: 12.5px; color: var(--muted); }
+.addid-hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.addid-hint.bad { color: var(--danger); }
+.addid-off { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-size: 11.5px; font-weight: 600; }
+.addid-off[hidden], .addid-msg[hidden] { display: none !important; }
+.addid-msg { font-size: 13px; line-height: 1.45; display: grid; gap: 8px; }
+.addid-msg.progress { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.addid-msg.err { border-left: 3px solid var(--danger); padding: 2px 0 2px 10px; }
+.addid-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.addid-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.addid .btn:disabled { opacity: .45; cursor: default; }
+.addid .spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: addid-spin .8s linear infinite; flex: none; }
+@keyframes addid-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .addid .spin { animation-duration: 2.4s; } }

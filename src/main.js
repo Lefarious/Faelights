@@ -1,10 +1,11 @@
 // Faelights — main process
 // Owns the library file on disk, file dialogs, native menus and file access.
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeTheme } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeTheme, session, net } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const fsp = fs.promises;
 const crypto = require("crypto");
+const { parseIdentifier, describe, findPdfLink, isPdf, fileNameFor, fetchFailureReason } = require("./identify");
 
 const DATA_DIR = () => path.join(app.getPath("userData"), "library");
 const DB_PATH = () => path.join(DATA_DIR(), "faelights.json");
@@ -152,6 +153,7 @@ function buildAppMenu() {
     ...(isMac ? [{ role: "appMenu" }] : []),
     { label: "File", submenu: [
       { label: "Add PDFs…", accelerator: "CmdOrCtrl+O", click: send("add") },
+      { label: "Add from DOI or Link…", accelerator: "CmdOrCtrl+Shift+O", click: send("add-id") },
       { label: "New Library", accelerator: "CmdOrCtrl+Shift+N", click: send("new-library") },
       { type: "separator" },
       { label: "Export Current PDF…", accelerator: "CmdOrCtrl+E", click: send("export-doc") },
@@ -206,7 +208,7 @@ ipcMain.handle("pdf:choose", async () => {
 });
 
 // Copy a PDF into the library folder and return info about it
-ipcMain.handle("pdf:import", async (_e, srcPath) => {
+async function importPdf(srcPath) {
   const st = await fsp.stat(srcPath);
   const buf = await fsp.readFile(srcPath);
   const hash = crypto.createHash("sha1").update(buf).digest("hex");
@@ -215,7 +217,133 @@ ipcMain.handle("pdf:import", async (_e, srcPath) => {
   const stored = path.join(FILES_DIR(), id + ".pdf");
   await fsp.writeFile(stored, buf);
   return { id, hash, fileName: path.basename(srcPath), sourcePath: srcPath, storedPath: stored, mtime: st.mtimeMs, size: st.size };
+}
+ipcMain.handle("pdf:import", (_e, srcPath) => importPdf(srcPath));
+
+/* ---------------- add from DOI / link ---------------- */
+// The only code that touches the network, and only when the user asks for a paper (no background calls).
+// Requests go through an in-memory session so publisher cookies never mix with the app's own session; it still uses the system proxy.
+const FETCH_HEAD_MS = 15000, FETCH_STALL_MS = 30000, MAX_PDF = 150 * 1024 * 1024, MAX_HTML = 5 * 1024 * 1024;
+let fetchSes = null, fetchCtl = null;
+class FetchFail extends Error { constructor(reason) { super(reason); this.reason = reason; } }
+const sendProgress = p => { if (win && !win.isDestroyed()) win.webContents.send("fetch-progress", p); };
+
+// GET one http(s) URL, streaming the body with a size cap and a no-progress timeout.
+// net.request (Chromium's stack: system proxy, session cookies) with manual redirects, so every hop is checked
+// to be http(s) and the final URL is known (session.fetch leaves Response.url empty).
+const header = (res, k) => { const v = res.headers[k]; return String((Array.isArray(v) ? v[0] : v) || ""); };
+function fetchUrl(url, accept, maxBytes) {
+  return new Promise((resolve, reject) => {
+    if (!/^https?:\/\//i.test(url)) return reject(new FetchFail("invalid"));
+    fetchSes = fetchSes || session.fromPartition("faelights-fetch");
+    const outer = fetchCtl.signal;
+    let finalUrl = url, hops = 0, settled = false, timer = null;
+    const req = net.request({ url, session: fetchSes, useSessionCookies: true, redirect: "manual" });
+    req.setHeader("User-Agent", `Faelights/${app.getVersion()} (desktop PDF highlights app)`);
+    req.setHeader("Accept", accept);
+    const done = (err, val) => {
+      if (settled) return; settled = true;
+      clearTimeout(timer); outer.removeEventListener("abort", onAbort);
+      if (err) { try { req.abort(); } catch (_) {} reject(err); } else resolve(val);
+    };
+    const arm = ms => { clearTimeout(timer); timer = setTimeout(() => done(new FetchFail("network")), ms); };
+    const onAbort = () => done(new FetchFail("cancelled"));
+    if (outer.aborted) return onAbort();
+    outer.addEventListener("abort", onAbort);
+    arm(FETCH_HEAD_MS);
+    req.on("redirect", (_status, _method, next) => {
+      if (++hops > 10 || !/^https?:\/\//i.test(next)) return done(new FetchFail(hops > 10 ? "network" : "not-pdf"));
+      finalUrl = next; req.followRedirect();
+    });
+    req.on("error", e => done(new FetchFail(fetchFailureReason(e))));
+    req.on("response", res => {
+      const status = res.statusCode, type = header(res, "content-type").toLowerCase(), len = +header(res, "content-length") || 0;
+      const html = /html|xml/.test(type), cap = html ? MAX_HTML : maxBytes;
+      if (status === 404 || status === 410) return done(new FetchFail("not-found"));
+      if ([401, 402, 403, 451].includes(status)) return done(new FetchFail("paywalled"));
+      if (status < 200 || status > 299) return done(new FetchFail("network"));
+      if (len > cap) return done(new FetchFail(html ? "not-pdf" : "too-large"));
+      const chunks = []; let got = 0;
+      arm(FETCH_STALL_MS);
+      res.on("data", c => {
+        if (settled) return;
+        arm(FETCH_STALL_MS); got += c.length; chunks.push(c);
+        if (got > cap) return done(new FetchFail(html ? "not-pdf" : "too-large"));
+        if (!html && got > 65536) sendProgress({ stage: "download", got, total: len });
+      });
+      res.on("end", () => done(null, { url: finalUrl, type, html, buf: Buffer.concat(chunks) }));
+      res.on("error", e => done(new FetchFail(fetchFailureReason(e))));
+    });
+    req.end();
+  });
+}
+
+const ACCEPT_ANY = "application/pdf,text/html;q=0.9,*/*;q=0.8";
+// Fetch a URL; if it is a landing page, follow its citation_pdf_url (or a meta refresh) once
+async function pdfFrom(url, hops = 2) {
+  const r = await fetchUrl(url, ACCEPT_ANY, MAX_PDF);
+  if (isPdf(r.buf)) return r;
+  if (!r.html || !hops) throw new FetchFail(r.html ? "paywalled" : "not-pdf");  // a PDF link that serves a page is usually a login wall
+  const { pdf, refresh, title } = findPdfLink(r.buf.toString("utf8"), r.url);
+  if (pdf) { sendProgress({ stage: "download" }); return { ...(await pdfFrom(pdf, 0)), title }; }
+  if (refresh && refresh !== r.url) return pdfFrom(refresh, hops - 1);
+  throw new FetchFail("not-pdf");
+}
+
+async function resolvePdf(id) {
+  sendProgress({ stage: "find" });
+  const ax = id.kind === "doi" && /^10\.48550\/arxiv\.(.+)$/i.exec(id.value);  // arXiv's own DOIs
+  if (id.kind === "arxiv" || ax) {   // the abs page gives the title too; fall back to the PDF URL if it has no citation link
+    const aid = ax ? ax[1] : id.value;
+    try { return await pdfFrom("https://arxiv.org/abs/" + aid, 1); }
+    catch (err) { if (err.reason !== "not-pdf") throw err; return pdfFrom("https://arxiv.org/pdf/" + aid, 0); }
+  }
+  if (id.kind !== "doi") return pdfFrom(id.url);
+  try { return await pdfFrom("https://doi.org/" + id.value.split("/").map(encodeURIComponent).join("/").replace(/%2F/g, "/")); }
+  catch (err) {
+    if (!["paywalled", "not-pdf"].includes(err.reason)) throw err;
+    // CrossRef sometimes lists a full-text PDF link the landing page doesn't expose
+    try {
+      const cr = await fetchUrl("https://api.crossref.org/works/" + encodeURIComponent(id.value), "application/json", MAX_HTML);
+      const links = (JSON.parse(cr.buf.toString("utf8")).message?.link || []).filter(l => /application\/pdf/i.test(l["content-type"] || "") && /^https?:/i.test(l.URL || ""));
+      for (const l of links) { try { return await pdfFrom(l.URL, 0); } catch (e) { if (e.reason === "cancelled" || e.reason === "offline") throw e; } }
+    } catch (e) { if (e.reason === "cancelled" || e.reason === "offline") throw e; }
+    // a publisher page with no reachable PDF is access-controlled (or bot-walled) far more often than PDF-less
+    throw new FetchFail("paywalled");
+  }
+}
+
+ipcMain.handle("pdf:fetch", async (_e, text) => {
+  const id = parseIdentifier(text);
+  if (!id) return { ok: false, reason: "invalid" };
+  if (fetchCtl) fetchCtl.abort();
+  const ctl = fetchCtl = new AbortController();
+  let tmp = null;
+  try {
+    const r = await resolvePdf(id);
+    sendProgress({ stage: "import" });
+    tmp = path.join(app.getPath("temp"), `faelights-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}.pdf`);
+    await fsp.writeFile(tmp, r.buf);
+    const info = await importPdf(tmp);
+    // no original on disk to track, like the sample PDF
+    Object.assign(info, { sourcePath: null, fileName: fileNameFor(id, r.url) });
+    return { ok: true, info, origin: { kind: id.kind, value: id.value, url: r.url }, title: r.title || null };
+  } catch (err) {
+    if (!(err instanceof FetchFail)) console.error("fetch failed", err);
+    return { ok: false, reason: err instanceof FetchFail ? err.reason : "network", landingUrl: id.url };
+  } finally {
+    if (tmp) fsp.unlink(tmp).catch(() => {});
+    if (fetchCtl === ctl) fetchCtl = null;
+  }
 });
+ipcMain.handle("pdf:fetchCancel", () => { if (fetchCtl) fetchCtl.abort(); return true; });
+ipcMain.handle("id:parse", (_e, text) => { const id = parseIdentifier(text); return id && { ...id, label: describe(id) }; });
+ipcMain.handle("app:openExternal", (_e, url) => {
+  let u; try { u = new URL(String(url)); } catch (_) { return false; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  shell.openExternal(u.href); return true;
+});
+ipcMain.handle("clip:read", () => clipboard.readText().slice(0, 4096));
 
 // Read the freshest copy: the original if it still exists, otherwise the stored copy.
 // When the original is newer, refresh the stored copy too. Docs annotated in the app always read the stored copy.
