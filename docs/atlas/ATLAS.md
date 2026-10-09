@@ -1,5 +1,5 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-09 · Synced at commit: f541b3f
+> Last synced: 2026-10-09 · Synced at commit: 736ffd2
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
@@ -17,7 +17,7 @@ Faelights is an Electron 31 desktop app with no bundler and no framework. Tests 
 | Renderer boot | `renderer/app.js` `boot()` IIFE | Loads DB + theme, renders UI, sends `app:ready`, consumes pending "Open with" files |
 | CLI / OS file open | `src/main.js` `pdfArgs()`, `second-instance`, `open-file` | PDFs passed on argv or macOS "Open with" |
 | CI build | `.github/workflows/build.yml` | On `v*` tag: `electron-builder` for win/mac/linux |
-| Tests | `npm test` → `node --test "test/**/*.test.js"` | `test/core.test.js` (extraction on `sample.pdf`), `test/images.test.js` (image boxes on `test/fixtures/images.pdf`), `test/identify.test.js`, `test/reader-images.test.js`, `test/export.test.js` |
+| Tests | `npm test` → `node --test "test/**/*.test.js"` | `test/core.test.js` (extraction on `sample.pdf`), `test/images.test.js` (image boxes on `test/fixtures/images.pdf`), `test/identify.test.js`, `test/metadata.test.js`, `test/reader-images.test.js`, `test/export.test.js` |
 
 ## Module map
 ```mermaid
@@ -36,7 +36,8 @@ graph LR
   CORE -.->|pdf proxy objects| PDFJS
   MAIN -->|require| ID[identify.js]
   MAIN -->|require| EP[exportPaths.js]
-  TEST[tests<br/>test/] -.->|require| CORE & ID & EP
+  MAIN -->|require| MD[metadata.js]
+  TEST[tests<br/>test/] -.->|require| CORE & ID & EP & MD
   TEST -.->|require order.js, exportfmt.js| UI
   TEST -.->|legacy build| PDFJS
   PKG[packaging<br/>package.json, CI] -.->|bundles| MAIN & UI & PDFJS
@@ -45,13 +46,13 @@ One deliberate two-way edge: renderer-ui ↔ annotator (app.js opens/mounts the 
 
 | Module | Path | Responsibility | Depends on | Used by | Doc |
 |---|---|---|---|---|---|
-| main-process | `src/main.js`, `src/identify.js`, `src/exportPaths.js` | Library JSON + PDF copies on disk, splash/main windows, theme, dialogs, menus, shell, clipboard, exports (text + image assets, path-checked), PDF download by identifier (DOI/arXiv/PMID/PMCID/ISBN/ADS) or link (the only network use) | electron (incl. `net`, `session`), node fs/path/crypto | preload-bridge (IPC), tests (`identify.js`) | [main-process.md](modules/main-process.md) |
+| main-process | `src/main.js`, `src/identify.js`, `src/exportPaths.js`, `src/metadata.js` | Library JSON + PDF copies on disk, splash/main windows, theme, dialogs, menus, shell, clipboard, exports (text + image assets, path-checked), PDF download by identifier (DOI/arXiv/PMID/PMCID/ISBN/ADS) or link, paper details from CrossRef/arXiv (the only network use) | electron (incl. `net`, `session`), node fs/path/crypto | preload-bridge (IPC), tests (`identify.js`, `metadata.js`) | [main-process.md](modules/main-process.md) |
 | preload-bridge | `src/preload.js` | Maps `window.fl.*` → IPC channels | electron `contextBridge`, `ipcRenderer`, `webUtils` | renderer-ui | [preload-bridge.md](modules/preload-bridge.md) |
 | extraction-core | `renderer/core.js` | Turns a pdf.js document into entries (sentences + highlight spans), topics, loose marks and image boxes (`images`) | pdf.js document API (passed in) | renderer-ui | [extraction-core.md](modules/extraction-core.md) |
 | annotator | `renderer/annotator.js` | In-app PDF viewer; writes Highlight/Underline/StrikeOut/Text/Ink annotations and Square image boxes with pdf-lib into the library copy; undo/redo | pdf-lib, pdfjs-dist, preload-bridge, extraction-core, renderer-ui helpers | renderer-ui | [annotator.md](modules/annotator.md) |
 | renderer-ui | `renderer/app.js`, `images.js`, `order.js`, `exportfmt.js`, `index.html`, `splash.html`, `styles.css`, `assets/brand/*`, `sample.pdf` | State, three-pane UI, splash page, brand artwork, theme button, search, image crops + ordering, export formatting, drag/drop, keyboard | preload-bridge, extraction-core, pdfjs-dist, @fontsource | — (top of stack) | [renderer-ui.md](modules/renderer-ui.md) |
 | packaging | `package.json`, `.github/workflows/build.yml` | Dependencies, scripts, electron-builder config, CI release builds | electron-builder | — | [packaging.md](modules/packaging.md) |
-| tests | `test/` | `node:test` suites: extraction snapshot on `sample.pdf`, image boxes on `fixtures/images.pdf`, identifier parsing and offline mapping, reader ordering, export formatting and path safety | extraction-core, `src/identify.js`, pdfjs-dist legacy build | `npm test` | [tests.md](modules/tests.md) |
+| tests | `test/` | `node:test` suites: extraction snapshot on `sample.pdf`, image boxes on `fixtures/images.pdf`, identifier parsing and offline mapping, CrossRef/arXiv metadata mapping, reader ordering, export formatting and path safety | extraction-core, `src/identify.js`, `src/metadata.js`, pdfjs-dist legacy build | `npm test` | [tests.md](modules/tests.md) |
 
 ## Key flows (code-level traces)
 
@@ -97,7 +98,13 @@ Copy → `docText(d, fmt, false, filtered(d), filteredImages(d) when "With image
 Pointer down on a `.resizer[data-pane]` (window-level listener in `app.js`) → `pointermove` sets `layout()[pane].w` (clamped to `PANES` min/max) or `closed` when dragged below ~half the minimum → `applyLayout()` writes `--side-w/--list-w/--rail-w` and `*-closed` classes on `#app` (borrowing width from list then sidebar so the reader keeps `READER_MIN`) → `pointerup` → `save()`. Hide buttons (`paneBtn`), strips (`strip`), focused-handle keys (`resizerKey`), double-click (reset one pane) and menu `pane:*` / `layout-reset` all end in `togglePane()` / `resetLayout()` → `applyLayout()` + `save()`. No pane re-renders.
 
 ### Info card (PDF metadata)
-Reader `.info-btn` (labelled "Metadata", left of the Full sentence / Highlights only switch) → toggles `settings.info` → `save()` + `renderReader()` → `infoEl(d)` prepended to `.r-main` → renders `d.meta` via `infoRows()`; if `d.meta` is missing → `loadMeta(d)` → `fl.readPdf({...d, sourcePath:null})` → `readMeta()` → `d.meta` → `save()` → `renderReader()`. `rescan()` also refreshes `d.meta`.
+Reader `.info-btn` (labelled "Metadata", left of the Full sentence / Highlights only switch) → toggles `settings.info` → `save()` + `renderReader()` → `infoEl(d)` prepended to `.r-main` → renders `d.meta` via `infoRows()`; if `d.meta` is missing → `loadMeta(d)` → `fl.readPdf({...d, sourcePath:null})` → `readMeta()` → `d.meta` → `save()` → `renderReader()`. `rescan()` also refreshes `d.meta` (not `d.lookup`). The card shows `metaOf(d)` = `d.meta` overlaid with `d.lookup.meta`.
+
+### Look up paper details (CrossRef / arXiv)
+Info card "Look up details" / "Refresh details" → `app.js lookUp(d)`; or `addImported(…, {origin})` after an add by identifier → `lookUp(d, true)` (no toasts) → `lookupQuery(d)` (`d.meta.doi`/`arxiv`, `d.origin`) → offline? stop → `fl.lookupMeta(q)` → IPC `meta:lookup` → `metadata.lookupTarget` → `fetchUrl(…, {signal, quiet})` CrossRef `works/<doi>` → `fromCrossref` | arXiv `api/query` → `fromArxivAtom` → `{ok, meta, source, id}` → `d.lookup = {source, id, at, meta}` (+ `d.title` if the PDF had none and `!d.titleEdited`) → `save()` → `renderAll()`.
+
+### Copy a captured image
+Reader figure Copy button / right-click → "Copy image" → `app.js copyImage(d, img)` → `Images.png(d, img)` (PNG bytes from the cached crop) → `fl.copyImage` → IPC `clip:image` → `nativeImage.createFromBuffer` → `clipboard.writeImage` → toast "Image copied".
 
 ### Annotate a PDF
 Reader toolbar "View" button (first in the left-aligned `.r-tools`, before Info) / doc menu "Annotate" / clicking an extract's `p. N` → `app.js annotate(d, page)` → `Annot.open(d, page)` → `fl.readPdf(d)` (stored copy if `d.annotated`) → pdf.js doc + `PDFDocument.load` (pdf-lib, in the background) → `renderReader()` → `Annot.mount(#reader)` → pages drawn lazily (`drawPage`: canvas with `AnnotationMode.ENABLE` + `renderTextLayer`).
@@ -113,9 +120,9 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 |---|---|---|---|
 | IPC invoke | `db:load`, `db:save`, `app:pending` | `preload.js` | `main.js` |
 | IPC invoke | `pdf:choose`, `pdf:import`, `pdf:read`, `pdf:stat`, `pdf:open`, `pdf:reveal`, `pdf:relink`, `pdf:removeStored`, `pdf:writeStored`, `pdf:saveAs` | `preload.js` | `main.js` |
-| IPC invoke | `export:file`, `export:folder` (+ `assets`), `export:bundle`, `export:openFolder`, `clip:write`, `menu:popup`, `ask:confirm` | `preload.js` | `main.js` |
+| IPC invoke | `export:file`, `export:folder` (+ `assets`), `export:bundle`, `export:openFolder`, `clip:write`, `clip:image`, `menu:popup`, `ask:confirm` | `preload.js` | `main.js` |
 | IPC invoke | `theme:get`, `theme:set` | `preload.js` | `main.js` |
-| IPC invoke | `id:parse`, `id:parseMany`, `pdf:fetch`, `pdf:fetchCancel`, `app:openExternal`, `clip:read` | `preload.js` | `main.js` |
+| IPC invoke | `id:parse`, `id:parseMany`, `pdf:fetch`, `pdf:fetchCancel`, `meta:lookup`, `app:openExternal`, `clip:read` | `preload.js` | `main.js` |
 | IPC push | `fetch-progress` (`{stage}`) | `main.js sendProgress` | `app.js fl.onFetchProgress` |
 | Network | arxiv.org, doi.org (+ publisher redirects), api.crossref.org, pmc.ncbi.nlm.nih.gov, eutils.ncbi.nlm.nih.gov, ui.adsabs.harvard.edu (+ redirects), openlibrary.org, archive.org — only from `pdf:fetch` | `main.js fetchUrl` / `fetchJson` | — |
 | Session partition | `faelights-fetch` (in-memory) | `main.js fetchUrl` | — |
@@ -174,6 +181,7 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 |---|---|
 | `.github/workflows/build.yml` | packaging |
 | `build/icon.ico` | packaging |
+| `scripts/set-exe-icon.js` | packaging |
 | `build/icon.png` | packaging |
 | `package.json` | packaging |
 | `renderer/annotator.js` | annotator |
@@ -189,6 +197,7 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | `renderer/styles.css` | renderer-ui |
 | `src/exportPaths.js` | main-process |
 | `src/identify.js` | main-process |
+| `src/metadata.js` | main-process |
 | `src/main.js` | main-process |
 | `src/preload.js` | preload-bridge |
 | `test/README.md` | tests |
@@ -197,6 +206,7 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | `test/fixtures/images.pdf`, `test/fixtures/make-images-pdf.js` | tests |
 | `test/helpers/pdf.js` | tests |
 | `test/identify.test.js` | tests |
+| `test/metadata.test.js` | tests |
 | `test/images.test.js` | tests |
 | `test/reader-images.test.js` | tests |
 

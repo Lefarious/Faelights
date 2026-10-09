@@ -1,8 +1,8 @@
 # Module: main-process
-> Path: src/main.js, src/identify.js, src/exportPaths.js · Last synced commit: 40bb2c7 · Related features: F-001, F-003, F-004, F-005, F-007, F-008, F-011, F-014, F-016
+> Path: src/main.js, src/identify.js, src/exportPaths.js, src/metadata.js · Last synced commit: 736ffd2 · Related features: F-001, F-003, F-004, F-005, F-007, F-008, F-011, F-014, F-016, F-018, F-019, F-020
 
 ## Purpose
-This is the Electron main process. It owns the on-disk library (`faelights.json` plus copied PDFs), the splash and main windows, the theme, the native app menu, native dialogs, context-menu popups, shell actions, the clipboard, and the only network access in the app: downloading a PDF when the user submits an identifier (DOI, arXiv ID, PMID, PMCID, ISBN, ADS Bibcode) or a link (`pdf:fetch`). It does not parse PDFs or hold UI state. The renderer sends the whole DB object and this module persists it as-is.
+This is the Electron main process. It owns the on-disk library (`faelights.json` plus copied PDFs), the splash and main windows, the theme, the native app menu, native dialogs, context-menu popups, shell actions, the clipboard, and the only network access in the app: downloading a PDF when the user submits an identifier (DOI, arXiv ID, PMID, PMCID, ISBN, ADS Bibcode) or a link (`pdf:fetch`), and fetching a paper's details from CrossRef or arXiv when the user asks (`meta:lookup`). It does not parse PDFs or hold UI state. The renderer sends the whole DB object and this module persists it as-is.
 
 ## Public interface
 IPC handlers, called only through `preload.js`:
@@ -13,6 +13,7 @@ IPC handlers, called only through `preload.js`:
 - `pdf:import(srcPath)` → `importPdf(srcPath)`: copies into `files/`, returns `{id, hash, fileName, sourcePath, storedPath, mtime, size}`
 - `pdf:fetch(text)` → parses with `identify.parseIdentifier`, resolves and downloads the PDF (`resolvePdf` → `pdfFrom` → `fetchUrl`), writes a temp `faelights-*.pdf`, runs `importPdf` on it, deletes the temp file. Returns `{ok:true, info (sourcePath:null, fileName from fileNameFor), origin:{kind,value,url}, title}` or `{ok:false, reason: invalid|paywalled|not-pdf|not-found|no-free-copy|network|too-large|offline|cancelled, landingUrl}`. A new call aborts the previous one
 - `pdf:fetchCancel` → aborts the in-flight fetch
+- `meta:lookup({doi, arxiv, origin})` → `metadata.lookupTarget` picks CrossRef (`api.crossref.org/works/<doi>`, parsed by `fromCrossref`) or arXiv (`export.arxiv.org/api/query?id_list=<id>`, parsed by `fromArxivAtom`) → `{ok:true, meta, source: crossref|arxiv, id}` or `{ok:false, reason: invalid|not-found|offline|network|paywalled}`. Own `AbortController` (20 s `META_MS` cap) and `quiet` fetches, so it neither cancels nor is cancelled by `pdf:fetch` and sends no `fetch-progress`
 - `id:parse(text)` → `{kind, value, url, label}` or `null`
 - `id:parseMany(text)` → `[{text, id: {kind, value, url, label} | null}]` (`identify.parseIdentifiers`, capped at 200)
 - `app:openExternal(url)` → `shell.openExternal` for http(s) only, else `false`
@@ -25,7 +26,7 @@ IPC handlers, called only through `preload.js`:
 - `pdf:relink(doc)` → chosen path or `null`
 - `pdf:removeStored(storedPath)` → unlinks the file only if it is inside `FILES_DIR` (`isStored()`)
 - `export:file({name, text})`, `export:folder({folderName, files, assets?})` (assets = `[{path, bytes}]` under the library folder; every name checked by `exportPaths`), `export:bundle({name, text, assets, dirToken?, encode?})` → save dialog (md/txt/html filter), writes assets under `<file base> images/` (the `dirToken` in text and asset paths is replaced by that folder name, URL-encoded when `encode: "url"`), then the text file; returns the path or `null`. `export:openFolder(path)`
-- `clip:write(text)`, `menu:popup(items)` → chosen item id, `ask:confirm({message, detail, ok})` → boolean
+- `clip:write(text)`, `clip:image(pngBytes)` (`nativeImage.createFromBuffer` → `clipboard.writeImage`; `false` when the bytes aren't an image), `menu:popup(items)` → chosen item id, `ask:confirm({message, detail, ok})` → boolean
 - `theme:get` → `"system"|"light"|"dark"`; `theme:set(t)` → applies and returns the theme
 - `app:ready` (one-way `ipcMain.on`) → `revealMain()`
 
@@ -50,10 +51,10 @@ Pushes to the renderer: `menu` (channel strings; File menu adds `add-id` on CmdO
 ### `src/main.js`
 - **Role:** the entire main process
 - **Exports:** none (CommonJS entry)
-- **Key functions:** `importPdf(srcPath)`, `fetchUrl(url, accept, maxBytes)` (`net.request` with `redirect: "manual"`, ≤10 hops, each checked to be http(s); `FETCH_HEAD_MS` 15 s, `FETCH_STALL_MS` 30 s, `MAX_PDF` 150 MB, `MAX_HTML` 5 MB), `pdfFrom(url, hops)`, `resolvePdf(id)` (arXiv → `arxiv.org/abs` then `/pdf`; DOI → `doi.org` landing page → `citation_pdf_url`, then CrossRef `api.crossref.org/works/<doi>` `link[]` PDF entries; PMID → NCBI ID converter (`pmc.ncbi.nlm.nih.gov/tools/idconv`) → PMCID or DOI, falling back to PubMed `eutils esummary` for the DOI, else `no-free-copy`; ADS → arXiv bibcodes to arXiv, else ADS link gateway `EPRINT_PDF` → `PUB_PDF` → `ADS_PDF`; ISBN → Open Library `search.json` public scan → `archive.org/download/<ia>/<ia>.pdf` (up to 5 scans), else `no-free-copy`; URL → as given), `fetchJson(url)`, `hardFail(e)` (cancelled/offline stop alternatives), `writeAtomic(p, data)` (tmp + rename, for exports), `EXPORT_FILTERS`, `FetchFail`, `sendProgress()`, `loadDb()`, `saveDb(db)`, `statOrNull(p)`, `isStored(p)`, `createSplash()`, `revealMain()`, `createWindow()`, `themeBg()`, `loadTheme()`, `applyTheme(t)`, `pdfArgs(argv)`, `buildAppMenu()`, `EMPTY_DB()`, path helpers `DATA_DIR()`, `DB_PATH()`, `FILES_DIR()`, `THEME_PATH()`; constants `ICON`, `THEMES`, `SPLASH_MIN_MS`, `SPLASH_MAX_MS`
-- **Imports (internal):** `./identify` (`parseIdentifier`, `parseIdentifiers`, `describe`, `findPdfLink`, `isPdf`, `fileNameFor`, `fetchFailureReason`), `./exportPaths`; loads `preload.js` and `index.html` by path
+- **Key functions:** `importPdf(srcPath)`, `fetchUrl(url, accept, maxBytes, opts)` (`opts.signal` overrides the current download's `fetchCtl.signal`, `opts.quiet` suppresses progress; `net.request` with `redirect: "manual"`, ≤10 hops, each checked to be http(s); `FETCH_HEAD_MS` 15 s, `FETCH_STALL_MS` 30 s, `MAX_PDF` 150 MB, `MAX_HTML` 5 MB), `pdfFrom(url, hops)`, `resolvePdf(id)` (arXiv → `arxiv.org/abs` then `/pdf`; DOI → `doi.org` landing page → `citation_pdf_url`, then CrossRef `api.crossref.org/works/<doi>` `link[]` PDF entries; PMID → NCBI ID converter (`pmc.ncbi.nlm.nih.gov/tools/idconv`) → PMCID or DOI, falling back to PubMed `eutils esummary` for the DOI, else `no-free-copy`; ADS → arXiv bibcodes to arXiv, else ADS link gateway `EPRINT_PDF` → `PUB_PDF` → `ADS_PDF`; ISBN → Open Library `search.json` public scan → `archive.org/download/<ia>/<ia>.pdf` (up to 5 scans), else `no-free-copy`; URL → as given), `fetchJson(url)`, `hardFail(e)` (cancelled/offline stop alternatives), `writeAtomic(p, data)` (tmp + rename, for exports), `EXPORT_FILTERS`, `FetchFail`, `sendProgress()`, `loadDb()`, `saveDb(db)`, `statOrNull(p)`, `isStored(p)`, `createSplash()`, `revealMain()`, `createWindow()`, `themeBg()`, `loadTheme()`, `applyTheme(t)`, `pdfArgs(argv)`, `buildAppMenu()`, `EMPTY_DB()`, path helpers `DATA_DIR()`, `DB_PATH()`, `FILES_DIR()`, `THEME_PATH()`; constants `ICON`, `THEMES`, `SPLASH_MIN_MS`, `SPLASH_MAX_MS`
+- **Imports (internal):** `./identify` (`parseIdentifier`, `parseIdentifiers`, `describe`, `findPdfLink`, `isPdf`, `fileNameFor`, `fetchFailureReason`), `./exportPaths`, `./metadata` (`lookupTarget`, `fromCrossref`, `fromArxivAtom`); loads `preload.js` and `index.html` by path
 - **Used by:** Electron runtime (`package.json` `"main"`); renderer through preload
-- **Side effects:** reads and writes the files above; network requests only inside `pdf:fetch` (arxiv.org, doi.org and publisher hosts, api.crossref.org, pmc.ncbi.nlm.nih.gov, eutils.ncbi.nlm.nih.gov, ui.adsabs.harvard.edu, openlibrary.org, archive.org); opens dialogs; `shell.openExternal` for http(s) links (in-window navigation away from `file:` is blocked); sets the application menu; takes the single-instance lock
+- **Side effects:** reads and writes the files above; network requests only inside `pdf:fetch` and `meta:lookup` (export.arxiv.org, arxiv.org, doi.org and publisher hosts, api.crossref.org, pmc.ncbi.nlm.nih.gov, eutils.ncbi.nlm.nih.gov, ui.adsabs.harvard.edu, openlibrary.org, archive.org); opens dialogs; `shell.openExternal` for http(s) links (in-window navigation away from `file:` is blocked); sets the application menu; takes the single-instance lock
 - **Change impact:** renaming an IPC channel breaks `preload.js`. Changing the DB shape affects every `S.db` reader in `app.js` and existing user data, and there is no migration besides the `loadDb` repair. Changing menu `send("…")` strings breaks the `fl.onMenu` handler in `app.js`.
 
 ### `src/identify.js`
@@ -61,6 +62,12 @@ Pushes to the renderer: `menu` (channel strings; File menu adds `add-id` on CmdO
 - **Exports:** `parseIdentifier(text)` → `{kind: doi|arxiv|pmcid|pmid|isbn|ads|url, value, url}` or `null` (accepts bare, `doi:` and doi.org DOIs, new and old arXiv ids, `arXiv:` prefix, arxiv.org abs/pdf links, `PMC…` ids, other http(s) URLs; rejects other schemes, hosts without a dot, URLs with credentials); `parseIdentifiers(text)` → `[{text, id}]` (splits a pasted list on newlines, whitespace, `,`/`;`; keeps `doi: 10…` / `PMID: 1` pairs and URLs whole; drops duplicates); `describe(id)` (hint label, incl. ISBN/PMID/ADS); `findPdfLink(html, baseUrl)` → `{pdf, refresh, title}` from `citation_pdf_url` / meta refresh / `citation_title`; `isPdf(buf)` (`%PDF-` magic); `fileNameFor(id, pdfUrl)`; `fetchFailureReason(err)` → `offline` for DNS/connection error codes (`OFFLINE_CODES`), else `network`
 - **Used by:** `main.js`; `test/identify.test.js`
 - **Change impact:** `parseIdentifier` / `parseIdentifiers` decide what the renderer's hint, paste and link-drop handlers accept (through `id:parse` / `id:parseMany`).
+
+### `src/metadata.js`
+- **Role:** pure mapping of online metadata to the doc `meta` shape (no electron imports, no network; CommonJS)
+- **Exports:** `lookupTarget(meta, origin)` → `{source: "crossref", id: doi}` | `{source: "arxiv", id}` | `null` (origin wins over the PDF's own `doi`/`arxiv`; arXiv DOIs `10.48550/arXiv.*` go to arXiv); `fromCrossref(json)` → meta incl. `itemType` (from CrossRef `type`), JATS abstract stripped, `page` dashes → en dash, partial dates; `fromArxivAtom(xml)` → meta (`itemType: "Preprint"`, categories as `keywords`) or `null` for no entry / the API's error entry
+- **Used by:** `main.js` (`meta:lookup`); `test/metadata.test.js`
+- **Change impact:** field names must match `app.js readMeta()` output, since `infoEl` overlays `d.lookup.meta` on `d.meta`.
 
 ### `src/exportPaths.js`
 - **Role:** pure path safety for exports (CommonJS, no electron)
@@ -80,7 +87,7 @@ Pushes to the renderer: `menu` (channel strings; File menu adds `add-id` on CmdO
 - The main window starts hidden and is shown only by `revealMain()`, on `app:ready` or the 8 s fallback timer. A renderer crash before `fl.ready()` therefore means an 8 s wait.
 - `applyTheme()` rebuilds the whole application menu so the View → Theme radio items stay in sync.
 - The theme is applied before `createSplash()`, so the splash already uses the saved choice.
-- Nothing else in main touches the network; the app works offline except for `pdf:fetch`. `ERR_NAME_NOT_RESOLVED` maps to `offline`, so a mistyped hostname also reports offline.
+- Nothing else in main touches the network; the app works offline except for `pdf:fetch` and `meta:lookup`. `meta:lookup` maps its own timeout (`cancelled`) to `network`; a CrossRef 404 becomes `not-found` via `fetchUrl`. `ERR_NAME_NOT_RESOLVED` maps to `offline`, so a mistyped hostname also reports offline.
 - Fetch uses `net.request` rather than `net.fetch`, because the latter didn't expose the post-redirect URL needed to resolve relative `citation_pdf_url`s and to record `origin.url`.
 - `menu:popup` is no longer called by the renderer (F-010 replaced it with an in-app menu) but is still exposed.
 - ISBN downloads can be a scan of a different edition: Open Library's `ia` list covers every edition of the work.

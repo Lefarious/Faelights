@@ -1,5 +1,5 @@
 # Module: packaging
-> Path: package.json, .github/workflows/build.yml · Last synced commit: c5c0dbe · Related features: F-001, F-003, F-007, F-008, F-012
+> Path: package.json, .github/workflows/build.yml · Last synced commit: 736ffd2 · Related features: F-001, F-003, F-007, F-008, F-012
 
 ## Purpose
 This module covers dependency declarations, npm scripts, the electron-builder configuration and the CI release workflow. It decides which files ship inside the installed app.
@@ -26,9 +26,14 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 
 ### `package.json`
 - **Role:** manifest and electron-builder config (`build` key)
-- **Key config:** `main: src/main.js`; `build.files` ships `src/**`, `renderer/**`, only `pdf.min.js` and `pdf.worker.min.js` from pdfjs-dist, `pdf-lib/dist/pdf-lib.min.js`, and `@fontsource/**`. It registers a `.pdf` file association (role Viewer). Targets: win nsis+zip (`signAndEditExecutable: false`), mac dmg, linux AppImage. Output goes to `dist/`.
+- **Key config:** `main: src/main.js`; `build.files` ships `src/**`, `renderer/**`, only `pdf.min.js` and `pdf.worker.min.js` from pdfjs-dist, `pdf-lib/dist/pdf-lib.min.js`, and `@fontsource/**`. It registers a `.pdf` file association (role Viewer). Targets: win nsis+zip (`signAndEditExecutable: false`, so `build.afterPack` → `scripts/set-exe-icon.js` writes the icon instead), mac dmg, linux AppImage. Output goes to `dist/`.
 - **Note:** `renderer/**` already ships `splash.html` and `assets/brand/*`, so no config change is needed for them.
 - **Change impact:** a new runtime file under `node_modules` that the renderer references must be added to `build.files`, otherwise it works in `npm start` but is missing from installers.
+
+### `scripts/set-exe-icon.js`
+- **Role:** electron-builder `afterPack` hook; on win32 runs `rcedit` (devDependency) to write `build/icon.ico` into `<appOutDir>/<productFilename>.exe`, which the Start menu / desktop shortcuts and the installed exe show
+- **Imports:** `path`, `rcedit`
+- **Used by:** `package.json` `build.afterPack`
 
 ### `.github/workflows/build.yml`
 - **Role:** matrix build on windows-latest, macos-latest and ubuntu-latest with Node 20

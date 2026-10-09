@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-09 · Last logged commit: 40bb2c7 · Version: 1.0.0 (unreleased changes on main)
+> Last updated: 2026-10-09 · Last logged commit: 736ffd2 · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into `main` (pushed 2026-10-09): a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). A follow-up fix put Add PDFs buttons in the PDF list header and left-aligned the reader toolbar (F-013, pushed). Sprint 2 (2026-10-09, merged to local `main` 40bb2c7, not yet pushed) added: an "Add by identifier" box that also takes ISBNs, PMIDs and ADS Bibcodes, several at once (F-014); image capture, where the user boxes a figure in the viewer and it shows up centred among the extracts in PDF order under a "With images" toggle (F-015); and more export formats (HTML) with images (F-016). A polish pass (F-017, merged to local `main` f541b3f, not pushed) labelled the reader's info button "Metadata" and resized the app icon so it matches other apps on the Windows taskbar. Installers are built in CI but not published. Next: online metadata lookup (meta-enrich, left out of Sprint 2 by the user).
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into `main` (pushed 2026-10-09): a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). A follow-up fix put Add PDFs buttons in the PDF list header and left-aligned the reader toolbar (F-013, pushed). Sprint 2 (2026-10-09, merged to local `main` 40bb2c7, not yet pushed) added: an "Add by identifier" box that also takes ISBNs, PMIDs and ADS Bibcodes, several at once (F-014); image capture, where the user boxes a figure in the viewer and it shows up centred among the extracts in PDF order under a "With images" toggle (F-015); and more export formats (HTML) with images (F-016). A polish pass (F-017, merged to local `main` f541b3f, not pushed) labelled the reader's info button "Metadata" and resized the app icon so it matches other apps on the Windows taskbar. The installed Windows app now shows the Faelights icon in the Start menu and on shortcuts instead of Electron's (F-018). Sprint 3 (2026-10-09, merged to local `main` 736ffd2, not yet pushed) added copying a captured image to the clipboard (F-019) and looking up a paper's details (title, authors, journal, abstract…) from CrossRef or arXiv, automatically after adding by DOI/arXiv and on demand from the Info card (F-020). Installers are built in CI but not published. Next: push Sprint 3 to GitHub (waiting on the user), then pick from the proposals on the tech-lead board.
 
 ## 2. Vision & scope
 - **Goals:**
@@ -13,7 +13,7 @@ Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pull
   - Clean export into personal knowledge tools, especially an Obsidian vault.
   - Highlights survive the original PDF moving or being deleted.
 - **Non-goals:**
-  - Cloud sync, accounts or any background network service. ~~Nothing in the code makes network calls.~~ Revised 2026-10-09: the app may go online only when the user explicitly asks (add a paper by DOI/arXiv/link, F-011; metadata lookup, planned). It must keep working fully offline, and nothing runs in the background (→ D-009).
+  - Cloud sync, accounts or any background network service. ~~Nothing in the code makes network calls.~~ Revised 2026-10-09: the app may go online only when the user explicitly asks (add a paper by DOI/arXiv/link, F-011; paper details lookup, F-020). It must keep working fully offline, and nothing runs in the background (→ D-009).
   - ~~Annotating or editing PDFs inside the app.~~ Revised 2026-10-09: annotating is now in scope (F-007), including image-capture boxes (F-015). Editing page content (text, images, page order) is still out of scope, and the user's original PDF is still never written.
   - OCR. Marks over scanned pages are listed as "loose" and the user is told to OCR the file outside the app.
 - **Success criteria (unverified):** highlights from common readers (Acrobat, Preview, Zotero and similar) extract correctly; exports drop into Obsidian without cleanup.
@@ -89,9 +89,10 @@ flowchart LR
 | arXiv, doi.org (+ publisher sites), CrossRef REST API | Download a paper's PDF when the user adds it by arXiv ID, DOI or link (F-011) | `src/main.js` `pdf:fetch` | none | No key; public endpoints. Limits: 150 MB per PDF, 15 s to first response, 30 s stall | Clear in-app message: offline, paywalled (with "Open in browser"), not a PDF, not found. Adding from disk is unaffected. |
 | NCBI ID converter + E-utilities, PubMed Central | PMID → PMC copy or DOI (F-014) | `src/main.js` `resolvePdf` | none | No key; public endpoints. PMC currently serves a bot-check page to non-browser clients | Falls back to the DOI path; else "No free PDF was found" |
 | ADS link gateway (ui.adsabs.harvard.edu) | ADS Bibcode → e-print / publisher / ADS scan PDF (F-014) | `src/main.js` `resolvePdf` | none | No API token needed for the gateway | "Paywalled" with Open in browser |
+| CrossRef REST API (`works/<doi>`), arXiv API (`export.arxiv.org/api/query`) | Paper details for the Info card (F-020) | `src/main.js` `meta:lookup`, parsed by `src/metadata.js` | none | No key; public endpoints. 20 s cap per lookup | Info card keeps the PDF's own fields; toast says offline / no record / couldn't reach. Already-fetched details stay (stored in the library) |
 | Open Library search + Internet Archive downloads | ISBN → free public-domain scan (F-014) | `src/main.js` `resolvePdf` | none | Only `ebook_access: public` scans; books can be large; scan may be another edition | "No free PDF was found" with Open in browser / Add from file |
 
-There are no analytics or telemetry, and no background network calls: requests happen only inside the add-by-identifier dialog after the user submits it (→ D-009). Fetches use a separate in-memory session so publisher cookies don't persist. The app reads no environment variables.
+There are no analytics or telemetry, and no background network calls: requests happen only inside the add-by-identifier dialog after the user submits it, and for a details lookup right after such an add or when the user clicks Look up details (→ D-009). Fetches use a separate in-memory session so publisher cookies don't persist. The app reads no environment variables.
 
 ## 5. Environments & deployment
 | Env | Target | Branch | How it deploys | Notes |
@@ -100,7 +101,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 | Release builds | GitHub Actions artifacts | tag `v*` | push tag → matrix build | `--publish never`. Artifacts are downloaded by hand from the run. |
 
 - **CI/CD:** checkout → Node 20 → `npm ci || npm install` → `electron-builder` per OS → upload `.exe/.zip/.dmg/.AppImage`.
-- **Code signing:** none. Windows `signAndEditExecutable: false`; macOS is not notarised, so Gatekeeper will warn (unverified).
+- **Code signing:** none. Windows `signAndEditExecutable: false`, so an `afterPack` hook writes the icon into the exe instead (→ D-014); macOS is not notarised, so Gatekeeper will warn (unverified).
 - **Data migrations:** none. `loadDb` only adds a missing Inbox and missing settings defaults. The DB has `version: 1`, but nothing reads it yet.
 - **Rollback:** reinstall the previous installer. User data in `userData/library` is untouched by install and uninstall (unverified for the NSIS uninstaller).
 - **Secrets:** none.
@@ -138,6 +139,31 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Annotator keys:** V/H/U/S/N/D/I pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
+### F-020 · Paper details from CrossRef and arXiv (meta-enrich) · 2026-10-09 · shipped to local main (736ffd2, not pushed)
+- **Why:** PDFs often carry little or wrong metadata; the Info card should show the real title, authors, journal, date and abstract (todo T-001, planned since Sprint 1).
+- **How:** a DOI is looked up on CrossRef, an arXiv id (or arXiv's own 10.48550 DOI) on the arXiv API. A new pure module maps both responses to the same fields the PDF reader already produces, plus an item type. Lookups run in the main process with their own cancel signal and a 20 s cap, so they never interfere with a PDF download. Runs by itself in the background after adding a paper by DOI/arXiv/link, and on demand via "Look up details" / "Refresh details" on the Info card, which also says where the details came from and when.
+- **Touched:** [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [renderer-ui](atlas/modules/renderer-ui.md), [tests](atlas/modules/tests.md)
+- **Added:** `src/metadata.js`, `meta:lookup` IPC, doc fields `lookup` and `titleEdited`, `test/metadata.test.js` (tests 63 → 69). No dependencies.
+- **Trade-offs:** online details are stored next to the PDF's own metadata, not merged into it (→ D-013). Offline fails at once with a clear message (D-009). A looked-up title replaces the doc title only when the PDF had none and the user hasn't renamed it. Not yet used in exports.
+- **Known limits / follow-ups:** papers with neither DOI nor arXiv id can't be looked up; exports and search don't use the looked-up fields; alternate open-access locations (T-003) could reuse this lookup.
+- **Commit range:** `feature/T-001-meta-enrich` (6d15763), merged via `feature/s3-integration` (269424f → main 736ffd2)
+
+### F-019 · Copy a captured image to the clipboard · 2026-10-09 · shipped to local main (736ffd2, not pushed)
+- **Why:** the user wanted to paste a captured figure straight into Word, Paint or Obsidian (todo T-012).
+- **How:** each image in the reader's "With images" view has a Copy button and a right-click menu (Copy image / Show page). The PNG already rendered for the reader goes to the main process, which puts it on the clipboard as an image; a toast confirms.
+- **Touched:** [renderer-ui](atlas/modules/renderer-ui.md), [preload-bridge](atlas/modules/preload-bridge.md), [main-process](atlas/modules/main-process.md)
+- **Added:** `clip:image` IPC. No dependencies.
+- **Trade-offs:** copies at the reader's render scale (2×, capped at 2400 px), the same as export, rather than re-rendering larger.
+- **Commit range:** `enhancement/T-012-copy-image` (5c143c7), merged via `feature/s3-integration` (9d8820f → main 736ffd2)
+
+### F-018 · Faelights icon on the installed Windows app · 2026-10-09 · shipped to local main (eb99c96, not pushed)
+- **Why:** after installing, the Start menu and shortcuts showed Electron's atom icon (user report, todo T-013).
+- **How:** the Windows build has `signAndEditExecutable: false`, which also skips writing the icon into the exe. Removing it breaks local builds (electron-builder's signing-tools archive needs symlink rights on Windows), so an `afterPack` hook now writes `build/icon.ico` into the exe with `rcedit`. Verified by building the installer and extracting the exe's icon.
+- **Touched:** [packaging](atlas/modules/packaging.md)
+- **Added:** `scripts/set-exe-icon.js`, devDependency `rcedit`.
+- **Trade-offs:** → D-014. Windows may show a cached old icon until sign-out.
+- **Commit range:** `bug/T-013-installed-app-icon` (71571a8), merged to main eb99c96
+
 ### F-017 · "Metadata" label on the info button; taskbar-sized app icon · 2026-10-09 · shipped to local main (f541b3f, not pushed)
 - **Why:** the user asked for a text label next to the reader's ⓘ button, and reported that the Faelights icon looked smaller than other apps' icons on the Windows taskbar.
 - **How:** the ⓘ button now reads "Metadata", like the View button beside it. The icon tile used only 87.5% of its canvas and Windows was scaling a single 256 px PNG down to 24/32 px; the tile now fills ~96% (100% at 16–24 px), and a multi-size `.ico` (16–256 px, each frame rendered separately) is used for the window on Windows and for the Windows build. Rendered with a throwaway Electron canvas script, no new dependency.
@@ -356,21 +382,29 @@ Context: F-015 needs a way to mark figures. Options: an app-only list of rectang
 ### D-012 · Export images to a sibling folder, path-checked in main · 2026-10-09
 Context: F-016 writes binary files chosen by renderer code. Options: a zip; embedded base64 everywhere; files in a folder next to the export. Decision: a `<file name> images/` folder for md/obsidian/plain (what Obsidian and most Markdown tools expect), a self-contained file for HTML, and every relative path validated in main before anything is written. Consequences: exports stay readable in note tools; the text is built before the save dialog, so a placeholder token is swapped for the real folder name in main.
 
+### D-013 · Online paper details stored apart from the PDF's metadata · 2026-10-09
+Context: F-020 needed somewhere to keep CrossRef/arXiv details. Options: write them into the doc's `meta` (the board's original plan); keep them in a separate `lookup` record and overlay it when showing the Info card. Decision: separate record, because a rescan rebuilds `meta` from the PDF and would silently wipe the online details. Consequences: details survive rescans and show offline; anything that wants "best" metadata must use the overlay, not `meta` alone.
+
+### D-014 · Write the Windows exe icon with an afterPack rcedit hook · 2026-10-09
+Context: F-018. Options: turn `signAndEditExecutable` back on (fails on Windows without Developer Mode or admin, because the signing-tools archive contains symlinks); require Developer Mode for builds; keep it off and set the icon ourselves after packing. Decision: `afterPack` hook with the `rcedit` package. Consequences: local and CI builds both work; when real code signing is added, this hook can be dropped in favour of electron-builder's own step.
+
 ## 9. Roadmap & deployment plan
 No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
 ### Now
-- Sprint 2 (F-014, F-015, F-016) and the polish pass (F-017) merged to local `main` (f541b3f); waiting on the user's OK to push to GitHub.
+- Sprint 2 (F-014–F-016), polish (F-017), the installed-app icon fix (F-018) and Sprint 3 (F-019, F-020) are on local `main` (736ffd2); waiting on the user's OK to push to GitHub.
 ### Next
-- meta-enrich (left out of Sprint 2 by the user): fill and refresh Info fields from CrossRef (DOI) and the arXiv API, on add-by-DOI/link and on demand from the Info card; optional, never blocks add/open, cached in `meta` so it shows offline (D-009). Depends on F-011.
 - Second test fixture PDF (underline/strike/squiggly, outline and wording topics, loose marks); run `npm test` in CI.
 ### Later
 - Code signing and notarisation; publishing GitHub Releases from CI.
 - DB schema versioning and migrations, and per-doc result storage if the library grows large.
 - Move analysis off the UI thread (worker).
-- Editable Info fields; metadata in export frontmatter (follow-up to F-006). Online lookup moved to Next (meta-enrich).
+- Editable Info fields; metadata (including looked-up details, F-020) in export frontmatter (follow-up to F-006).
 - Image capture follow-ups (F-015): move/resize boxes; exact-edition ISBN downloads; a fallback for PMC's bot check.
 - Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
+- Paper details from CrossRef / arXiv · 2026-10-09 · F-020
+- Copy a captured image · 2026-10-09 · F-019
+- Faelights icon on the installed Windows app · 2026-10-09 · F-018
 - "Metadata" button label; taskbar-sized app icon · 2026-10-09 · F-017
 - More export formats, with images · 2026-10-09 · F-016
 - Image capture (viewer boxes, extraction, reader toggle) · 2026-10-09 · F-015
@@ -417,7 +451,8 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 | Test launches hit the single-instance lock and `--user-data-dir` doesn't move `userData` | Can't test while the real app is open | — | Dev-only env override for the userData path |
 | Whole DB (including all results) saved on every change | Slow saves with large libraries | F-001 / D-002 | Split results per doc or move to SQLite |
 | `saveDb` errors are only logged | Silent data loss is possible | F-001 | Surface failures to the renderer as a toast |
-| Unsigned builds | OS warnings on install | F-001 | Sign and notarise in CI |
+| Unsigned builds | OS warnings on install | F-001 | Sign and notarise in CI (then drop the F-018 icon hook, D-014) |
+| Looked-up details (F-020) only shown on the Info card | Exports and search still use the PDF's own metadata | F-020 | Use the `meta` + `lookup` overlay in export frontmatter and search |
 | DB `version` field unused | No migration path | F-001 | Add version-based migrations in `loadDb` |
 | Wording-based headings can misfire on short numbered lists | Odd topics in some PDFs | F-002 | Require a numbering sequence, or check for bold fonts |
 | Theme colours duplicated in `styles.css`, `splash.html` and `main.js themeBg()` | Palette edits must touch 3 places | F-003/F-004 | Share a tokens file |
