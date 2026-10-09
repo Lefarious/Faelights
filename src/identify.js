@@ -78,18 +78,20 @@ function attrs(tag) {
 const absHttp = (href, base) => { try { const u = new URL(href.trim(), base); return /^https?:$/.test(u.protocol) ? u.href : null; } catch (_) { return null; } };
 
 // Scan a landing page for its PDF: the Highwire `citation_pdf_url` meta tag most publishers, arXiv and
-// repositories emit. Also reports a <meta http-equiv="refresh"> target (DOI resolvers sometimes bounce through one).
+// repositories emit. Also reports a <meta http-equiv="refresh"> target (DOI resolvers sometimes bounce through one)
+// and citation_title, a fallback title for PDFs without one in their metadata.
 function findPdfLink(html, baseUrl) {
   const head = String(html).slice(0, 2_000_000);
-  let pdf = null, refresh = null;
+  let pdf = null, refresh = null, title = null;
   for (const [tag] of head.matchAll(/<meta\b[^>]*>/gi)) {
-    const a = attrs(tag);
-    if (!pdf && (a.name || a.property || "").toLowerCase() === "citation_pdf_url" && a.content) pdf = absHttp(a.content, baseUrl);
+    const a = attrs(tag), name = (a.name || a.property || "").toLowerCase();
+    if (!pdf && name === "citation_pdf_url" && a.content) pdf = absHttp(a.content, baseUrl);
+    if (!title && name === "citation_title" && a.content.trim()) title = a.content.replace(/\s+/g, " ").trim().slice(0, 500);
     if (!refresh && (a["http-equiv"] || "").toLowerCase() === "refresh" && a.content) {
       const m = /url\s*=\s*['"]?([^'"]+)/i.exec(a.content); if (m) refresh = absHttp(m[1], baseUrl);
     }
   }
-  return { pdf, refresh };
+  return { pdf, refresh, title };
 }
 
 // %PDF- within the first KiB (what PDF readers accept), not the server's content-type

@@ -105,6 +105,7 @@ test("findPdfLink: citation_pdf_url, attribute order, relative urls, entities", 
   assert.equal(findPdfLink('<meta name="citation_pdf_url" content="pdf/x.pdf">', base).pdf, "https://pub.example.com/doi/abs/10.1/pdf/x.pdf");
   assert.equal(findPdfLink('<meta name="citation_pdf_url" content="javascript:alert(1)">', base).pdf, null);
   assert.equal(findPdfLink('<meta name="citation_title" content="x">', base).pdf, null);
+  assert.equal(findPdfLink('<meta name="citation_title" content="Attention Is  All &amp; You Need"><meta name="citation_pdf_url" content="/pdf/1">', base).title, "Attention Is All & You Need");
   assert.equal(findPdfLink('<meta http-equiv="refresh" content="0; url=\'/next\'">', base).refresh, "https://pub.example.com/next");
 });
 
