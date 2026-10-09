@@ -189,7 +189,8 @@ ipcMain.handle("db:load", async () => {
   await Promise.all(db.docs.map(async d => {
     const st = d.sourcePath ? await statOrNull(d.sourcePath) : null;
     d.sourceMissing = !!d.sourcePath && !st;
-    d.stale = !!st && st.mtimeMs > (d.scannedMtime || 0) + 1000;
+    // annotated docs live on in the library copy, so edits to the original no longer apply
+    d.stale = !d.annotated && !!st && st.mtimeMs > (d.scannedMtime || 0) + 1000;
   }));
   return db;
 });
@@ -217,9 +218,9 @@ ipcMain.handle("pdf:import", async (_e, srcPath) => {
 });
 
 // Read the freshest copy: the original if it still exists, otherwise the stored copy.
-// When the original is newer, refresh the stored copy too.
+// When the original is newer, refresh the stored copy too. Docs annotated in the app always read the stored copy.
 ipcMain.handle("pdf:read", async (_e, doc) => {
-  const src = doc.sourcePath ? await statOrNull(doc.sourcePath) : null;
+  const src = doc.sourcePath && !doc.annotated ? await statOrNull(doc.sourcePath) : null;
   if (src) {
     const buf = await fsp.readFile(doc.sourcePath);
     if (src.mtimeMs > (doc.scannedMtime || 0) + 1000 && doc.storedPath) { try { await fsp.writeFile(doc.storedPath, buf); } catch (_) {} }
@@ -242,8 +243,27 @@ ipcMain.handle("pdf:relink", async (_e, doc) => {
   const r = await dialog.showOpenDialog(win, { title: `Find “${doc.fileName}”`, properties: ["openFile"], filters: [{ name: "PDF", extensions: ["pdf"] }] });
   return r.canceled ? null : r.filePaths[0];
 });
+const isStored = p => !!p && path.dirname(p) === FILES_DIR();
+// Annotated bytes only ever replace the library's copy, never the user's original
+let pdfWrites = Promise.resolve();
+ipcMain.handle("pdf:writeStored", (_e, { storedPath, bytes }) => {
+  if (!isStored(storedPath) || !(bytes instanceof Uint8Array)) return false;
+  const job = pdfWrites.then(async () => {
+    const tmp = storedPath + ".tmp";
+    await fsp.writeFile(tmp, bytes);
+    await fsp.rename(tmp, storedPath);
+    return true;
+  });
+  pdfWrites = job.catch(err => { console.error("pdf write failed", err); return false; });
+  return pdfWrites;
+});
+ipcMain.handle("pdf:saveAs", async (_e, { name, bytes }) => {
+  const r = await dialog.showSaveDialog(win, { title: "Save PDF", defaultPath: name, filters: [{ name: "PDF", extensions: ["pdf"] }] });
+  if (r.canceled || !r.filePath) return null;
+  await fsp.writeFile(r.filePath, bytes); return r.filePath;
+});
 ipcMain.handle("pdf:removeStored", async (_e, storedPath) => {
-  if (storedPath && path.dirname(storedPath) === FILES_DIR()) { try { await fsp.unlink(storedPath); } catch (_) {} }
+  if (isStored(storedPath)) { try { await fsp.unlink(storedPath); } catch (_) {} }
   return true;
 });
 

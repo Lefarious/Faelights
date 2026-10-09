@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld("fl", {
   revealPdf: doc => ipcRenderer.invoke("pdf:reveal", doc),
   relinkPdf: doc => ipcRenderer.invoke("pdf:relink", doc),
   removeStored: p => ipcRenderer.invoke("pdf:removeStored", p),
+  writeStored: (storedPath, bytes) => ipcRenderer.invoke("pdf:writeStored", { storedPath, bytes }),
+  savePdfAs: (name, bytes) => ipcRenderer.invoke("pdf:saveAs", { name, bytes }),
   exportFile: (name, text) => ipcRenderer.invoke("export:file", { name, text }),
   exportFolder: (folderName, files) => ipcRenderer.invoke("export:folder", { folderName, files }),
   openFolder: p => ipcRenderer.invoke("export:openFolder", p),
