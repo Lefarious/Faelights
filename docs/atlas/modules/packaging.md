@@ -26,7 +26,7 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 
 ### `package.json`
 - **Role:** manifest and electron-builder config (`build` key)
-- **Key config:** `main: src/main.js`; `build.files` ships `src/**`, `renderer/**`, only `pdf.min.js` and `pdf.worker.min.js` from pdfjs-dist, `pdf-lib/dist/pdf-lib.min.js`, and `@fontsource/**`. It registers a `.pdf` file association (role Viewer). Targets: win nsis+zip (`signAndEditExecutable: false`, so `build.afterPack` → `scripts/set-exe-icon.js` writes the icon instead), mac dmg, linux AppImage. Output goes to `dist/`.
+- **Key config:** `main: src/main.js`; `build.files` ships `src/**`, `renderer/**`, only `pdf.min.js` and `pdf.worker.min.js` from pdfjs-dist, `pdf-lib/dist/pdf-lib.min.js`, and `@fontsource/**`. `npmRebuild: false` (no native modules are shipped; pdfjs-dist's optional `canvas` would otherwise be recompiled for Electron and fail). It registers a `.pdf` file association (role Viewer). Targets: win nsis+zip (`signAndEditExecutable: false`, so `build.afterPack` → `scripts/set-exe-icon.js` writes the icon instead), mac dmg, linux AppImage. Output goes to `dist/`.
 - **Note:** `renderer/**` already ships `splash.html` and `assets/brand/*`, so no config change is needed for them.
 - **Change impact:** a new runtime file under `node_modules` that the renderer references must be added to `build.files`, otherwise it works in `npm start` but is missing from installers.
 
@@ -38,6 +38,7 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 ### `.github/workflows/build.yml`
 - **Role:** matrix build on windows-latest, macos-latest and ubuntu-latest with Node 20
 - **Steps:** checkout → setup-node → `npm ci || npm install` → `npm run <script> -- --publish never` → upload-artifact → on tag refs only, `softprops/action-gh-release@v2` with `draft: true` attaches the same `.exe/.zip/.dmg/.AppImage` files to a draft release for that tag
+- **Matrix:** `fail-fast: false`, so each platform finishes even if another fails
 - **Permissions:** `contents: write` (needed to create the release)
 - **Triggers:** `push` of tags `v*`; `workflow_dispatch` (manual run builds artifacts only, no release)
 

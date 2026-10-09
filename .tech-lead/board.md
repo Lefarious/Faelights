@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-10 · Current sprint: 4 (not planned) · main: green 69/69, pushed to GitHub 2026-10-10, released as v1.2.0_
+_Last updated: 2026-10-10 · Current sprint: 4 (not planned) · main: green 69/69, pushed to GitHub 2026-10-10, released as v1.2.1_
 
 ## Settings
 - Capacity: 3 parallel features per sprint · minor bugs/polish (XS/S) are exempt and don't count
@@ -71,7 +71,7 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
   | 1 | T-012 copy-image | 9d8820f | none | 63/63 |
   | 2 | T-001 meta-enrich | 269424f | none (main.js/preload.js/app.js touched in different places) | 69/69 |
 - Decision: online details are stored in `d.lookup` rather than `d.meta`, because `rescan()` rebuilds `d.meta` from the PDF; the Info card shows `d.meta` overlaid with `d.lookup.meta`.
-- 2026-10-09: user tried the build (gate 1) OK → merged into local main 736ffd2; 69/69; tag `sprint-3-end`. 2026-10-10: user gate 2 OK → pushed (7409d7d..b146661, together with Sprint 2, polish, T-013 and ci/github-releases); released as v1.2.0.
+- 2026-10-09: user tried the build (gate 1) OK → merged into local main 736ffd2; 69/69; tag `sprint-3-end`. 2026-10-10: user gate 2 OK → pushed (7409d7d..b146661, together with Sprint 2, polish, T-013 and ci/github-releases); released as v1.2.1 (v1.2.0's CI run failed on a native-module rebuild; fixed with npmRebuild: false).
 - Compass: F-018 (T-013), F-019 (T-012), F-020 (T-001); D-013, D-014. Atlas synced at 736ffd2.
 - Test rounds: 63 (baseline) → 63 → 69 (integration) → 69 (main 736ffd2); new failures introduced: 0
 - Checks: clipboard round-trip of a PNG in Electron OK; parsers checked against live CrossRef (10.1038/nature14539) and arXiv (1706.03762); bad arXiv id → none; unknown DOI → 404 → "not found".
