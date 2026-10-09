@@ -1447,19 +1447,23 @@ function stopAddBatch() { const D = addDlg; if (D && D.batch) { D.stop = true; f
 
 /* ---------------- guided tour (renderer/tour.js) ---------------- */
 function startTour(name) {
+  const st = S.db.settings;
   const extra = name === "app" && !S.db.docs.length ? { label: "Try a sample PDF", run: addSample } : null;
-  Tour.start(name, { extra, onEnd: (ch, skipped) => {
-    Tour.markSeen(S.db.settings, ch, skipped); save();
-    if (ch === "app" && !skipped) tourSoon();   // a PDF already open carries straight on into the reader chapter
-  } });
+  Tour.start(name, { steps: Tour.pending(st, name), extra,
+    onShow: step => { Tour.markShown(st, name, step); save(); },
+    onEnd: (ch, skipped) => {
+      if (skipped) { Tour.skipAll(st); save(); }
+      else if (ch === "app") tourSoon();   // a PDF already open carries straight on into the reader chapter
+    } });
 }
-// Each chapter runs once, the first time its part of the app is on screen: app → reader → viewer
+// Each chapter runs the first time its part of the app is on screen: app → reader → viewer.
+// Steps skipped because their button wasn't there (no highlights yet…) show once it appears.
 function maybeTour() {
   if (Tour.isOpen() || addDlg || MENU || S.editingTitle) return;
-  const st = S.db.settings;
-  const name = !Tour.seen(st, "app") ? "app"
-    : Annot.isOpen() ? (Tour.seen(st, "viewer") ? null : "viewer")
-    : S.view.kind !== "search" && document.querySelector("#reader .r-head") && !Tour.seen(st, "reader") ? "reader" : null;
+  const ready = n => Tour.ready(Tour.pending(S.db.settings, n));
+  const name = ready("app") ? "app"
+    : Annot.isOpen() ? (ready("viewer") ? "viewer" : null)
+    : S.view.kind !== "search" && ready("reader") ? "reader" : null;
   if (name) startTour(name);
 }
 function tourSoon() { clearTimeout(tourSoon.t); tourSoon.t = setTimeout(maybeTour, 500); }

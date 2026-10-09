@@ -1,8 +1,10 @@
 /* Faelights — guided tour (first-run onboarding)
    Tooltips that walk through the main buttons in order, one chapter per part of the app:
    "app" (sidebar + PDF list) on first launch, "reader" the first time a PDF is open,
-   "viewer" the first time the annotator opens. Seen chapters are kept in settings.tour.
-   Steps point at a CSS selector; a step whose target isn't on screen is skipped.
+   "viewer" the first time the annotator opens. Each step is remembered once it has been shown
+   (settings.tour[chapter] = [step ids], or true after Skip tour). A step whose target isn't on screen
+   is skipped for now and shows later, the first time its button appears (e.g. extract tips for a PDF
+   that had no highlights yet).
    The step data and the seen/skip helpers are pure (tested); the overlay needs a DOM. */
 "use strict";
 
@@ -46,15 +48,33 @@ const Tour = (() => {
     ]
   };
   const NAMES = Object.keys(CHAPTERS);
+  // a step's id is its title, slugged (rewording a title shows that step again, which is fine)
+  for (const ch of NAMES) for (const s of CHAPTERS[ch]) s.id = s.id || s.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
   /* ---------- pure helpers ---------- */
-  const seen = (settings, ch) => !!(settings && settings.tour && settings.tour[ch]);
-  // Finishing a chapter marks it seen; skipping marks every chapter seen (the user wants no more tour)
-  function markSeen(settings, ch, skipped) {
+  // Steps of a chapter not shown yet. settings.tour[ch]: true = all seen (skipped), [ids] = those shown
+  function pending(settings, ch) {
+    const v = settings && settings.tour && settings.tour[ch];
+    if (v === true) return [];
+    const done = new Set(Array.isArray(v) ? v : []);
+    return CHAPTERS[ch].filter(s => !done.has(s.id));
+  }
+  const seen = (settings, ch) => pending(settings, ch).length === 0;
+  function markShown(settings, ch, step) {
     const t = settings.tour = { ...(settings.tour || {}) };
-    for (const n of skipped ? NAMES : [ch]) t[n] = true;
+    if (t[ch] === true) return settings;
+    const ids = Array.isArray(t[ch]) ? t[ch] : [];
+    if (!ids.includes(step.id)) t[ch] = [...ids, step.id];
     return settings;
   }
+  // Skip tour: the user wants no more tour, now or later
+  function skipAll(settings) {
+    settings.tour = Object.fromEntries(NAMES.map(n => [n, true]));
+    return settings;
+  }
+  // Worth starting now: at least one of these steps points at something on screen
+  // (a chapter never opens on centred cards alone)
+  const ready = (steps, hasFn) => steps.some(s => s.sel && (hasFn || has)(s.sel));
   // Next step index from `from` in direction dir (+1/-1) whose target is available, or -1
   function nextIndex(steps, from, dir, has) {
     for (let i = from + dir; i >= 0 && i < steps.length; i += dir) if (!steps[i].sel || has(steps[i].sel)) return i;
@@ -67,7 +87,8 @@ const Tour = (() => {
   }
 
   /* ---------- overlay ---------- */
-  let T = null;   // {name, steps, i, onEnd, extra, shield, back, ring, pop, timer, keys, last}
+  let T = null;   // {name, steps, i, onShow, onEnd, extra, shield, back, ring, pop, timer, keys, last}
+  // opts.steps: the steps to walk (default: the whole chapter); opts.onShow(step) after each is shown
   // opts.extra: {label, run} — an extra button on the chapter's last step (e.g. "Try a sample PDF")
   const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
   const targets = sel => [...document.querySelectorAll(sel)].filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
@@ -90,11 +111,11 @@ const Tour = (() => {
 
   function start(name, opts = {}) {
     if (T) end(false, true);
-    const steps = CHAPTERS[name]; if (!steps) return;
+    const steps = opts.steps || CHAPTERS[name]; if (!steps || !steps.length) return;
     const shield = mk("div", "tour-shield"), back = mk("div", "tour-back"), ring = mk("div", "tour-ring"), pop = mk("div", "tour-pop");
     pop.setAttribute("role", "dialog"); pop.setAttribute("aria-modal", "true"); pop.setAttribute("aria-labelledby", "tour-h"); pop.setAttribute("aria-describedby", "tour-p");
     document.body.append(shield, back, ring, pop);
-    T = { name, steps, i: -1, onEnd: opts.onEnd, extra: opts.extra, shield, back, ring, pop, last: document.activeElement };
+    T = { name, steps, i: -1, onShow: opts.onShow, onEnd: opts.onEnd, extra: opts.extra, shield, back, ring, pop, last: document.activeElement };
     // the tour owns the keyboard while open, so list shortcuts (Delete, J/K) and viewer keys don't fire behind it
     T.keys = e => {
       if (!T) return;
@@ -142,6 +163,7 @@ const Tour = (() => {
     pop.append(row);
     if (s.sel) stepEls(s)[0]?.scrollIntoView({ block: "nearest" });
     place(); nx.focus();
+    if (T.onShow) T.onShow(s);
   }
 
   function place() {
@@ -181,7 +203,7 @@ const Tour = (() => {
     if (!quiet && t.onEnd) t.onEnd(t.name, !!skipped);
   }
 
-  return { CHAPTERS, NAMES, seen, markSeen, nextIndex, progress, start, end, isOpen: () => !!T, chapter: () => T && T.name };
+  return { CHAPTERS, NAMES, pending, seen, markShown, skipAll, ready, nextIndex, progress, start, end, isOpen: () => !!T, chapter: () => T && T.name };
 })();
 
 if (typeof module !== "undefined") module.exports = Tour;

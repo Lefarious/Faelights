@@ -16,23 +16,54 @@ test("a fresh install has seen no chapter; older DBs without settings.tour count
   assert.equal(Tour.seen(undefined, "app"), false);
 });
 
-test("finishing a chapter marks only that chapter seen", () => {
-  const st = Tour.markSeen({}, "app", false);
-  assert.deepEqual(st.tour, { app: true });
+const ids = steps => steps.map(s => s.id);
+
+test("a step counts as seen once shown; the rest of its chapter stays pending", () => {
+  const st = {};
+  const [first, second] = Tour.CHAPTERS.app;
+  Tour.markShown(st, "app", first);
+  Tour.markShown(st, "app", first);   // no duplicates
+  assert.deepEqual(st.tour, { app: [first.id] });
+  assert.deepEqual(ids(Tour.pending(st, "app")), ids(Tour.CHAPTERS.app.slice(1)));
+  Tour.markShown(st, "app", second);
+  assert.equal(Tour.pending(st, "app").length, Tour.CHAPTERS.app.length - 2);
   assert.equal(Tour.seen(st, "reader"), false);
-  Tour.markSeen(st, "reader", false);
-  assert.deepEqual(st.tour, { app: true, reader: true });
+});
+
+test("a PDF with no extracts: extract tips are skipped, then show once highlights appear", () => {
+  const st = {};
+  const onScreenNoExtracts = sel => !/\.ex|\.chips|\.toc|\.img-btn/.test(sel);
+  // first reader run: only the steps whose buttons are there get shown
+  for (const s of Tour.CHAPTERS.reader) if (onScreenNoExtracts(s.sel)) Tour.markShown(st, "reader", s);
+  const left = Tour.pending(st, "reader");
+  assert.deepEqual(ids(left), ["with-images", "colour-filter", "topics", "an-extract", "copy-one-extract"]);
+  assert.equal(Tour.ready(left, onScreenNoExtracts), false);   // nothing new on screen → no tour
+  // after highlighting, the extracts (and colour chips, topics) appear → a follow-up with just those
+  const withExtracts = sel => !/\.img-btn/.test(sel);
+  assert.equal(Tour.ready(left, withExtracts), true);
+  for (const s of left) if (withExtracts(s.sel)) Tour.markShown(st, "reader", s);
+  assert.deepEqual(ids(Tour.pending(st, "reader")), ["with-images"]);
+});
+
+test("a chapter never opens on centred cards alone", () => {
+  assert.equal(Tour.ready([{ title: "x", id: "x" }], () => true), false);
 });
 
 test("skipping marks every chapter seen, so no more tour pops up", () => {
-  const st = Tour.markSeen({}, "app", true);
-  for (const ch of Tour.NAMES) assert.equal(Tour.seen(st, ch), true);
+  const st = Tour.skipAll({ tour: { app: ["welcome-to-faelights"] } });
+  for (const ch of Tour.NAMES) { assert.equal(Tour.seen(st, ch), true); assert.deepEqual(Tour.pending(st, ch), []); }
+  Tour.markShown(st, "reader", Tour.CHAPTERS.reader[0]);
+  assert.equal(st.tour.reader, true);
 });
 
 test("Help › Show Tour clears the flags (settings.tour = {}) and the chapters run again", () => {
-  const st = Tour.markSeen({}, "app", true);
+  const st = Tour.skipAll({});
   st.tour = {};
-  assert.equal(Tour.seen(st, "app"), false);
+  assert.equal(Tour.pending(st, "app").length, Tour.CHAPTERS.app.length);
+});
+
+test("step ids are unique within a chapter", () => {
+  for (const ch of Tour.NAMES) { const xs = ids(Tour.CHAPTERS[ch]); assert.equal(new Set(xs).size, xs.length, ch); }
 });
 
 test("nextIndex skips steps whose target isn't on screen; centred steps always show", () => {
