@@ -1,5 +1,5 @@
 /* Faelights — PDF viewer / annotator
-   Renders a doc with pdf.js and writes real PDF annotations (Highlight, Underline, StrikeOut, Text notes, Ink) with pdf-lib.
+   Renders a doc with pdf.js and writes real PDF annotations (Highlight, Underline, StrikeOut, Text notes, Ink, Square image boxes) with pdf-lib.
    Every edit produces new bytes that are saved straight into the library's copy (never the original) and re-rendered,
    so undo/redo is just a stack of byte snapshots. Leaving the viewer rescans the doc so new marks show up as extracts. */
 "use strict";
@@ -16,10 +16,11 @@ const Annot = (() => {
   ];
   const TOOLS = [
     ["select", "Select", "cursor", "V"], ["highlight", "Highlight", "highlighter", "H"], ["underline", "Underline", "underline", "U"],
-    ["strike", "Strike through", "strike", "S"], ["note", "Note", "note", "N"], ["draw", "Draw", "pen", "D"]
+    ["strike", "Strike through", "strike", "S"], ["note", "Note", "note", "N"], ["draw", "Draw", "pen", "D"],
+    ["image", "Capture image", "image", "I"]
   ];
   const SUBTYPE = { highlight: "Highlight", underline: "Underline", strike: "StrikeOut" };
-  const RECOLOR = new Set(["Highlight", "Underline", "StrikeOut", "Squiggly", "Ink", "Text"]);
+  const RECOLOR = new Set(["Highlight", "Underline", "StrikeOut", "Squiggly", "Ink", "Text", "Square"]);
   const SKIP = new Set(["Link", "Widget", "Popup"]);
   const ICO = {
     back: '<path d="M15 18l-6-6 6-6"/>',
@@ -29,6 +30,7 @@ const Annot = (() => {
     strike: '<path d="M16 4H9a3 3 0 0 0-2.83 4M14 12a4 4 0 0 1 0 8H6M4 12h16"/>',
     note: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
     undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
     redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/>',
     minus: '<path d="M5 12h14"/>',
@@ -48,6 +50,7 @@ const Annot = (() => {
   const rgbCss = c => `rgb(${c.map(v => Math.round(v * 255)).join(" ")})`;
   const sameColor = (a, b) => a && b && a.every((v, i) => Math.abs(v - b[i]) < 0.02);
   const iconBtn = (name, label, cls) => { const b = el("button", "pv-ib " + (cls || "")); b.append(svg(ICO[name])); b.title = label; b.setAttribute("aria-label", label); return b; };
+  const BOX_W = 1.5;                        // image-box border, in PDF points
   const color = () => S.db.settings.annotColor || COLORS[0][1];
   // pdf.js annotation ids are "<num>R" or "<num>R<gen>" for indirect objects
   function refOf(id) { const m = /^(\d+)R(\d*)$/.exec(id || ""); return m ? PDFRef.of(+m[1], +(m[2] || 0)) : null; }
@@ -100,6 +103,12 @@ const Annot = (() => {
         ops += " S\n";
       }
       box = bbox(ink.flat(), width);
+    } else if (sub === "Square") {
+      // image box: an outline only (no /IC fill), inset by half the border so the stroke stays inside /Rect
+      const [x0, y0, x1, y1] = pdfjsLib.Util.normalizeRect(rect), h = width / 2;
+      ops = `${num(width)} w ${rgb} RG ${num(x0 + h)} ${num(y0 + h)} ${num(Math.max(0, x1 - x0 - width))} ${num(Math.max(0, y1 - y0 - width))} re S
+`;
+      box = [x0, y0, x1, y1];
     } else if (sub === "Text") {
       // a little speech-bubble icon in its own 20×20 box; the box is stretched over /Rect
       ops = `${rgb} rg 0.25 0.22 0.3 RG 0.8 w 2 6 m 2 18 l 18 18 l 18 6 l 8 6 l 4 2 l 5 6 l h B 0.25 0.22 0.3 RG 1 w 5.5 14 m 14.5 14 l 5.5 10.5 m 12 10.5 l S\n`;
@@ -151,13 +160,13 @@ const Annot = (() => {
     const d = hit.dict, sub = d.lookup(N("Subtype"), PDFName).decodeText();
     d.set(N("C"), lib.context.obj(c)); d.set(N("M"), PDFString.of(pdfNow()));
     const geo = { c, rect: numbers(d.lookupMaybe(N("Rect"), PDFArray)), quads: numbers(d.lookupMaybe(N("QuadPoints"), PDFArray)) };
-    if (sub === "Ink") {
-      const list = d.lookupMaybe(N("InkList"), PDFArray);
-      geo.ink = list ? list.asArray().map(p => numbers(lib.context.lookup(p, PDFArray))) : [];
+    if (sub === "Ink" || sub === "Square") {
+      const list = sub === "Ink" && d.lookupMaybe(N("InkList"), PDFArray);
+      if (sub === "Ink") geo.ink = list ? list.asArray().map(p => numbers(lib.context.lookup(p, PDFArray))) : [];
       const bs = d.lookupMaybe(N("BS"), PDFDict), w = bs && bs.lookupMaybe(N("W"), PDFNumber);
-      geo.width = w ? w.asNumber() : 1;
+      geo.width = w ? w.asNumber() : sub === "Square" ? BOX_W : 1;
     }
-    if (sub !== "Ink" && sub !== "Text" && !geo.quads) geo.quads = rectQuad(geo.rect);
+    if (!["Ink", "Text", "Square"].includes(sub) && !geo.quads) geo.quads = rectQuad(geo.rect);
     setAppearance(lib.context, d, appearance(sub, geo));
   }
   function setNote(lib, id, text) {
@@ -392,7 +401,7 @@ const Annot = (() => {
         s.over.append(ic);
       }
       if (a.sel && a.sel.page === s.i && a.sel.id === x.id) {
-        const o = el("div", "pv-selbox");
+        const o = el("div", "pv-selbox" + (x.subtype === "Square" ? " box" : ""));
         Object.assign(o.style, { left: l - 3 + "px", top: t - 3 + "px", width: r - l + 6 + "px", height: b - t + 6 + "px" });
         s.over.append(o);
       }
@@ -551,6 +560,7 @@ const Annot = (() => {
     down = { x: e.clientX, y: e.clientY };
     if (e.target.closest(".textLayer")) pt.s.text && pt.s.text.querySelector(".endOfContent")?.classList.add("active");
     if (A.tool === "draw" && !A.readOnly) { e.preventDefault(); startInk(e, pt); }
+    else if (A.tool === "image" && !A.readOnly) { e.preventDefault(); startBox(e, pt); }
     else if (A.tool === "note" && !A.readOnly) {
       e.preventDefault();
       const [x, y] = vpOf(A, pt.s).convertToPdfPoint(pt.x, pt.y);
@@ -564,7 +574,7 @@ const Annot = (() => {
   function onMouseUp(e) {
     if (!A || e.button !== 0) return;
     document.querySelectorAll(".pv .endOfContent.active").forEach(x => x.classList.remove("active"));
-    if (A.tool === "draw" || A.tool === "note") return;
+    if (A.tool === "draw" || A.tool === "note" || A.tool === "image") return;
     const moved = down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 3;
     const at = { x: e.clientX, y: e.clientY };
     setTimeout(() => {
@@ -600,20 +610,47 @@ const Annot = (() => {
     path.setAttribute("points", pts.map(p => p.join(",")).join(" "));
     addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up);
   }
+  // Capture image: drag a box over a figure → a border-only Square (/Subj Image) that extraction reads as an image region.
+  // A drag under 8 px is a click (picks the box under it); Esc or pointercancel drops it.
+  function startBox(e, pt) {
+    const a = A, s = pt.s, x0 = pt.x, y0 = pt.y, W = s.el.clientWidth, H = s.el.clientHeight;
+    const o = el("div", "pv-boxdraw"); o.style.setProperty("--c", rgbCss(color())); s.el.append(o);
+    let x1 = x0, y1 = y0;
+    const place = () => Object.assign(o.style, { left: Math.min(x0, x1) + "px", top: Math.min(y0, y1) + "px", width: Math.abs(x1 - x0) + "px", height: Math.abs(y1 - y0) + "px" });
+    const move = ev => {
+      const box = s.el.getBoundingClientRect();
+      x1 = Math.max(0, Math.min(W, ev.clientX - box.left)); y1 = Math.max(0, Math.min(H, ev.clientY - box.top)); place();
+    };
+    const end = ok => {
+      removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", no);
+      o.remove(); if (a.drag === drag) a.drag = null;
+      if (!ok || a !== A) return;
+      if (Math.abs(x1 - x0) < 8 || Math.abs(y1 - y0) < 8) { pickAt(e); return; }
+      const vp = vpOf(a, s), c = color(), i = s.i;
+      const rect = pdfjsLib.Util.normalizeRect([...vp.convertToPdfPoint(x0, y0), ...vp.convertToPdfPoint(x1, y1)]);
+      edit([i], lib => addAnnot(lib, i, "Square", { rect, c, width: BOX_W }, { BS: { W: BOX_W }, CA: 1, Subj: PDFString.of("Image") }));
+    };
+    const up = () => end(true), no = () => end(false), drag = a.drag = { cancel: no };
+    place();
+    addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", no);
+  }
   // Click on an existing annotation: select it and offer colour / note / delete
   async function pickAt(e) {
     const a = A, pt = pointOn(e);
     if (!pt) { select(null); return; }
     const s = pt.s, list = await loadAnnots(a, s);
     if (a !== A) return;
-    const [px, py] = vpOf(a, s).convertToPdfPoint(pt.x, pt.y), tol = 2 / a.scale + 1;
+    const [px, py] = vpOf(a, s).convertToPdfPoint(pt.x, pt.y), tol = 2 / a.scale + 1, edge = 6 / a.scale;
     const inBox = (q, pad) => px >= q[0] - pad && px <= q[2] + pad && py >= q[1] - pad && py <= q[3] + pad;
     let best = null, bestArea = Infinity;
     for (const x of list) {
       const quads = x.quadPoints && x.quadPoints.length ? normQuads(x) : null;
-      const hit = quads ? quads.some(q => inBox(q, tol)) : inBox(pdfjsLib.Util.normalizeRect(x.rect), tol);
+      const r = pdfjsLib.Util.normalizeRect(x.rect);
+      // image boxes leave their inside to the text under them: only the border picks them (anywhere with the Capture tool)
+      const hit = x.subtype === "Square" ? inBox(r, edge) && (a.tool === "image" || !inBox(r, -edge))
+        : quads ? quads.some(q => inBox(q, tol)) : inBox(r, tol);
       if (!hit) continue;
-      const r = pdfjsLib.Util.normalizeRect(x.rect), area = (r[2] - r[0]) * (r[3] - r[1]);
+      const area = (r[2] - r[0]) * (r[3] - r[1]);
       if (area <= bestArea) { best = x; bestArea = area; }
     }
     select(best ? { page: s.i, id: best.id, x: best } : null, { x: e.clientX, y: e.clientY });
@@ -721,7 +758,8 @@ const Annot = (() => {
     if (mod && k === "y") { e.preventDefault(); redo(); return true; }
     if (mod) return false;
     if (e.key === "Escape") {
-      if (document.querySelector(".pv-pop")) hidePop();
+      if (A.drag) A.drag.cancel();
+      else if (document.querySelector(".pv-pop")) hidePop();
       else if (A.sel) select(null);
       else if (A.tool !== "select") setTool("select");
       else { close(); renderReader(); }
