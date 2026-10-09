@@ -2,7 +2,7 @@
 const MARK_TYPES = { Highlight: "Highlight", Underline: "Underline", Squiggly: "Squiggly", StrikeOut: "Strike" };
 const ABBR = /\b(?:e\.g|i\.e|et al|etc|vs|cf|Fig|Figs|Eq|Eqs|Dr|Mr|Mrs|Ms|Prof|St|No|Vol|pp|approx|Ch|Sec)\.$/i;
 // Bump when the shape or quality of results changes so saved docs get rescanned.
-const ANALYZER_VERSION = 2;
+const ANALYZER_VERSION = 3;
 
 // Section headings recognised by their wording when font size gives nothing to go on
 const SECTION_NAMES = /^(?:abstract|summary|introduction|background|overview|related work|literature review|methods?|methodology|materials and methods|approach|experiments?|experimental (?:setup|results)|results?(?: and discussion)?|discussion|evaluation|analysis|findings|conclusions?(?: and future work)?|future work|limitations|recommendations|references|bibliography|acknowledge?ments?|appendix(?: [a-z0-9]+)?|preface|foreword|prologue|epilogue|chapter [0-9ivxlc]+)$/i;
@@ -73,6 +73,7 @@ async function analyzePdf(pdf, onProgress) {
   const meta = [];        // {page, hl, line}
   const lines = [];       // {start, end, size, page, y}
   const annots = [];      // collected markup annotations
+  const imgs = [];        // image boxes (Square annotations)
   const sizeHist = new Map();
 
   let last = null;        // {page, y, size, endX, hasEOL}
@@ -82,7 +83,15 @@ async function analyzePdf(pdf, onProgress) {
     const page = await pdf.getPage(p);
     const [tc, rawAnn] = await Promise.all([page.getTextContent(), page.getAnnotations()]);
     const pageAnn = [];
+    let sq = 0;
     for (const a of rawAnn) {
+      if (a.subtype === "Square" && a.rect) {
+        const r = a.rect;
+        imgs.push({ id: a.id || "p" + p + "-" + (++sq), page: p,
+          rect: [Math.min(r[0], r[2]), Math.min(r[1], r[3]), Math.max(r[0], r[2]), Math.max(r[1], r[3])],
+          color: colorOf(a), comment: ((a.contentsObj && a.contentsObj.str) || a.contents || "").trim() });
+        continue;
+      }
       if (!MARK_TYPES[a.subtype]) continue;
       const id = annots.length;
       const comment = ((a.contentsObj && a.contentsObj.str) || a.contents || "").trim();
@@ -128,6 +137,7 @@ async function analyzePdf(pdf, onProgress) {
 
       // per-char highlight hit test
       const n = str.length, w = it.width || size * 0.5 * n;
+      const L = lines[curLine]; L.xa = Math.min(L.xa ?? x, x); L.xb = Math.max(L.xb ?? x + w, x + w);
       for (let i = 0; i < n; i++) {
         const cx = x + (w * (i + 0.5)) / n, cy = y + size * 0.35;
         let hl = -1;
@@ -285,8 +295,15 @@ async function analyzePdf(pdf, onProgress) {
     return { n: i + 1, page: g.page, at: g.start, segs, spans, topic: tp, sentence: clean(text.slice(g.start, g.end + 1)).trim() };
   });
 
+  // ---- images: anchor in the char stream, then pull any that land inside a fact to its start ----
+  for (const im of imgs) im.at = imgStreamAt(im, lines, text.length);
+  imgSnapToFacts(imgs, merged);
+  imgs.sort((a, b) => a.at - b.at || a.page - b.page || b.rect[3] - a.rect[3] || b.rect[1] - a.rect[1] || a.rect[0] - b.rect[0]);
+  const images = imgs.map((im, i) => ({ id: im.id, n: i + 1, page: im.page, rect: im.rect, color: im.color, comment: im.comment,
+    at: im.at, topic: topicAt(topics, im.at) }));
+
   const looseOut = loose.map(a => ({ page: a.page, color: a.color, type: a.type, comment: a.comment }));
-  return { v: ANALYZER_VERSION, entries: out, loose: looseOut, topics, topicSource, pages: pdf.numPages, count: annots.length };
+  return { v: ANALYZER_VERSION, entries: out, loose: looseOut, topics, topicSource, pages: pdf.numPages, count: annots.length, images };
 }
 
 // Headings found by wording: "3.2 Results", "IV. DISCUSSION", "Conclusion", "Abstract—…", short ALL-CAPS lines
@@ -342,10 +359,28 @@ function pageTopics(lines) {
   return out;
 }
 
+// Where an image box sits in reading order: first line on its page below the box top that overlaps it
+// horizontally; else first line below the top; else just after the page's text (or the next page's text).
+function imgStreamAt(im, lines, textLen) {
+  const [x1, , x2, top] = im.rect;
+  const pl = lines.filter(l => l.page === im.page && l.end > l.start);
+  const below = pl.filter(l => l.y < top);
+  const hit = below.find(l => (l.xa ?? l.x0) < x2 && (l.xb ?? l.x0) > x1) || below[0];
+  if (hit) return hit.start;
+  if (pl.length) return Math.max(...pl.map(l => l.end));
+  const nx = lines.find(l => l.page > im.page && l.end > l.start);
+  return nx ? nx.start : textLen;
+}
+// An image inside a fact's (merged) sentence range [start, end] moves to the fact's start, so it shows before it
+function imgSnapToFacts(imgs, groups) {
+  for (const im of imgs) { const g = groups.find(g => g.start <= im.at && im.at <= g.end); if (g) im.at = g.start; }
+  return imgs;
+}
+
 function topicAt(topics, at) {
   let t = null;
   for (const tp of topics) { if (tp.at <= at + 1) t = tp; else break; }
   return t;
 }
 
-if (typeof module !== "undefined") module.exports = { analyzePdf, ANALYZER_VERSION };
+if (typeof module !== "undefined") module.exports = { analyzePdf, ANALYZER_VERSION, imgStreamAt, imgSnapToFacts };
