@@ -19,6 +19,7 @@ const ICON = {
   add: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15h6"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>',
   moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/>',
   monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
   paneClose: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M16 15l-3-3 3-3"/>',
   paneOpen: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M14 9l3 3-3 3"/>'
@@ -68,14 +69,71 @@ function cleanTitle(t) {
   if (!t || /^untitled$/i.test(t) || t.length < 3) return "";
   return t;
 }
+const DOI_RE = /\b(10\.\d{4,9}\/[^\s"<>]+[^\s"<>.,;:)\]])/i;
+const ARXIV_RE = /\barXiv:\s?(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?\/\d{7}(?:v\d+)?)/i;
+const pdfDate = s => { try { const d = s && pdfjsLib.PDFDateString.toDateObject(s); return d ? d.getTime() : null; } catch (_) { return null; } };
+// Bibliographic + file metadata, Zotero-style: XMP (dc / prism) first, then the Info dictionary, then a DOI / arXiv scan of page 1.
+async function readMeta(pdf) {
+  let info = {}, xmp = null;
+  try { const md = await pdf.getMetadata(); info = md.info || {}; xmp = md.metadata; } catch (_) {}
+  const x = (...keys) => { for (const k of keys) { const v = xmp && xmp.get(k); if (v && (!Array.isArray(v) || v.length)) return v; } return null; };
+  const str = v => (Array.isArray(v) ? v.join("; ") : typeof v === "string" ? v : "").replace(/\s+/g, " ").trim();
+  const list = v => (Array.isArray(v) ? v : String(v || "").split(/\s*[;,]\s*/)).map(s => s.trim()).filter(Boolean);
+  const authors = list(x("dc:creator") || (info.Author ? String(info.Author).split(/\s*(?:;|\band\b|&)\s*/) : []));
+  let doi = str(x("prism:doi", "pdfx:doi", "crossmark:doi")).replace(/^(https?:\/\/(dx\.)?doi\.org\/|doi:\s*)/i, "");
+  // only page 1: later pages start citing other papers' DOIs
+  let arxiv = "";
+  try {
+    const text = (await (await pdf.getPage(1)).getTextContent()).items.map(t => t.str).join(" ");
+    if (!doi) doi = (text.match(DOI_RE) || [])[1] || "";
+    arxiv = (text.match(ARXIV_RE) || [])[1] || "";
+  } catch (_) {}
+  const start = str(x("prism:startingpage")), end = str(x("prism:endingpage"));
+  const meta = {
+    title: str(x("dc:title")) || str(info.Title),
+    authors,
+    abstract: str(x("dc:description")) || str(info.Subject),
+    publication: str(x("prism:publicationname")),
+    volume: str(x("prism:volume")),
+    issue: str(x("prism:number")),
+    pages: str(x("prism:pagerange")) || (start ? start + (end ? "–" + end : "") : ""),
+    date: str(x("prism:coverdate", "prism:publicationdate")).slice(0, 10),
+    doi,
+    arxiv,
+    issn: str(x("prism:issn", "prism:eissn")),
+    isbn: str(x("prism:isbn")),
+    publisher: str(x("dc:publisher")),
+    url: str(x("prism:url")),
+    rights: str(x("dc:rights")),
+    keywords: list(x("dc:subject") || info.Keywords),
+    creator: str(x("xmp:creatortool")) || str(info.Creator),
+    producer: str(x("pdf:producer")) || str(info.Producer),
+    created: pdfDate(info.CreationDate),
+    modified: pdfDate(info.ModDate),
+    pdfVersion: str(info.PDFFormatVersion)
+  };
+  for (const k of Object.keys(meta)) if (meta[k] === "" || meta[k] == null || (Array.isArray(meta[k]) && !meta[k].length)) delete meta[k];
+  return meta;
+}
 async function analyzeBytes(bytes, onProgress) {
   const pdf = await pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
-  let title = "";
-  try { const md = await pdf.getMetadata(); title = cleanTitle(md.info && md.info.Title); } catch (_) {}
+  const meta = await readMeta(pdf);
   const result = await analyzePdf(pdf, onProgress);
   pdf.destroy();
-  return { title, result };
+  return { title: cleanTitle(meta.title), meta, result };
 }
+// Docs scanned before metadata existed: read it from the stored copy without a full rescan.
+async function loadMeta(d) {
+  if (loadMeta.busy.has(d.id)) return; loadMeta.busy.add(d.id);
+  try {
+    const { bytes } = await fl.readPdf({ ...d, sourcePath: null });
+    const pdf = await pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
+    d.meta = await readMeta(pdf); pdf.destroy(); save();
+  } catch (err) { console.error(err); d.meta = {}; }
+  loadMeta.busy.delete(d.id);
+  if (S.docId === d.id) renderReader();
+}
+loadMeta.busy = new Set();
 function summary(result) {
   const colours = new Map();
   for (const e of result.entries) for (const s of e.spans) colours.set(ckey(s.color), s.color);
@@ -98,8 +156,8 @@ async function addPaths(paths, opts = {}) {
         const d = { id: info.id, libraryId: target, title: "", fileName: info.fileName, sourcePath: opts.sample ? null : info.sourcePath,
           storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [], starred: false, scannedMtime: info.mtime };
         const { bytes } = await fl.readPdf({ ...d, sourcePath: null });
-        const { title, result } = await analyzeBytes(bytes, (pg, n) => { S.busy.page = `page ${pg} of ${n}`; renderProgress(); });
-        Object.assign(d, { title: title || info.fileName.replace(/\.pdf$/i, ""), result, pages: result.pages, scannedAt: Date.now(), ...summary(result) });
+        const { title, meta, result } = await analyzeBytes(bytes, (pg, n) => { S.busy.page = `page ${pg} of ${n}`; renderProgress(); });
+        Object.assign(d, { title: title || info.fileName.replace(/\.pdf$/i, ""), meta, result, pages: result.pages, scannedAt: Date.now(), ...summary(result) });
         S.db.docs.push(d); lastId = d.id;
       }
     } catch (err) { console.error(err); failed++; }
@@ -116,8 +174,8 @@ async function addPaths(paths, opts = {}) {
 async function rescan(d, quiet) {
   try {
     const { bytes, mtime } = await fl.readPdf(d);
-    const { result } = await analyzeBytes(bytes);
-    Object.assign(d, { result, pages: result.pages, scannedAt: Date.now(), scannedMtime: mtime, stale: false, ...summary(result) });
+    const { meta, result } = await analyzeBytes(bytes);
+    Object.assign(d, { meta, result, pages: result.pages, scannedAt: Date.now(), scannedMtime: mtime, stale: false, ...summary(result) });
     save();
     if (!quiet) toast("Highlights refreshed from the PDF");
     return true;
@@ -596,6 +654,56 @@ function quoteEl(e, mode, q) {
   return p;
 }
 
+// Zotero-style info card shown above the extracts
+const fmtDate = t => new Date(t).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+function infoRows(rows) {
+  const dl = el("dl", "info-grid");
+  for (const [label, value, opts = {}] of rows) {
+    if (!value) continue;
+    const dd = el("dd", opts.cls || null);
+    if (opts.href) { const a = el("a", null, value); a.href = opts.href; a.target = "_blank"; a.rel = "noreferrer"; dd.append(a); }
+    else dd.textContent = value;
+    dd.title = "Double-click to copy"; dd.ondblclick = () => copyText(value, label);
+    dl.append(el("dt", null, label), dd);
+  }
+  return dl;
+}
+function infoEl(d) {
+  const sec = el("section", "group info");
+  const head = el("div", "group-head"); head.append(el("h3", null, "Info")); sec.append(head);
+  if (!d.meta) { loadMeta(d); sec.append(el("p", "loose", "Reading metadata…")); return sec; }
+  const m = d.meta;
+  sec.append(infoRows([
+    ["Item Type", m.isbn ? "Book" : m.publication || m.volume || m.issn ? "Journal Article" : m.arxiv ? "Preprint" : "Document"],
+    ["Title", cleanTitle(m.title) || d.title],
+    ...(m.authors || []).map(a => ["Author", a]),
+    ["Abstract", m.abstract, { cls: "abstract" }],
+    ["Publication", m.publication],
+    ["Volume", m.volume],
+    ["Issue", m.issue],
+    ["Pages", m.pages],
+    ["Date", m.date],
+    ["DOI", m.doi, { href: m.doi && "https://doi.org/" + m.doi }],
+    ["arXiv", m.arxiv, { href: m.arxiv && "https://arxiv.org/abs/" + m.arxiv }],
+    ["ISSN", m.issn],
+    ["ISBN", m.isbn],
+    ["Publisher", m.publisher],
+    ["URL", m.url, { href: /^https?:/.test(m.url || "") && m.url }],
+    ["Rights", m.rights],
+    ["Keywords", (m.keywords || []).join(", ")]
+  ]), el("p", "label", "File"), infoRows([
+    ["Filename", d.fileName],
+    ["# of Pages", d.pages && String(d.pages)],
+    ["PDF version", m.pdfVersion],
+    ["Created", m.created && fmtDate(m.created)],
+    ["Modified", m.modified && fmtDate(m.modified)],
+    ["Application", m.creator],
+    ["Producer", m.producer],
+    ["Added", fmtDate(d.addedAt)]
+  ]));
+  return sec;
+}
+
 function renderReader() {
   const r = $("reader"); r.replaceChildren();
   if (S.view.kind === "search") return renderSearch(r);
@@ -632,6 +740,8 @@ function renderReader() {
   ti.onkeydown = e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); const v = ti.value.trim().replace(/^#/, ""); if (v && !d.tags.includes(v)) { d.tags.push(v); save(); renderAll(); setTimeout(() => $("tagin")?.focus(), 0); } } };
   tagedit.append(ti); meta.append(tagedit); tools.append(el("span", "sp"));
 
+  const ib = btn("icon info-btn", null, "info", "Show info"); ib.setAttribute("aria-pressed", !!S.db.settings.info);
+  ib.onclick = () => { S.db.settings.info = !S.db.settings.info; save(); renderReader(); };
   const seg = el("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "What to show");
   for (const [m, label] of [["full", "Full sentence"], ["only", "Highlights only"]]) {
     const b = el("button", null, label); b.setAttribute("aria-pressed", S.db.settings.mode === m);
@@ -642,7 +752,7 @@ function renderReader() {
   fmt.value = S.db.settings.fmt; fmt.onchange = () => { S.db.settings.fmt = fmt.value; save(); };
   const cb = btn("", "Copy", "copy"); cb.onclick = () => copyText(docText(d, S.db.settings.fmt, false, filtered(d)), "Extracts");
   const eb = btn("", "Export", "export"); eb.onclick = () => exportDoc(d);
-  tools.append(seg, fmt, cb, eb); head.append(meta, tools);
+  tools.append(ib, seg, fmt, cb, eb); head.append(meta, tools);
   r.append(head);
 
   if (d.sourceMissing) {
@@ -680,6 +790,7 @@ function renderReader() {
     sec.append(ul, el("p", "source", TOPIC_SOURCE[d.result.topicSource] || "No headings found; in page order."));
     rail.append(sec);
   }
+  if (S.db.settings.info) main.append(infoEl(d));
   if (!d.result.entries.length && !d.result.loose.length) {
     const b = el("div", "blank"); b.style.margin = "0";
     b.append(el("h2", null, "No highlights in this PDF"), el("p", null, "Faelights reads highlight, underline and strike-through marks saved in the file. If your reader flattened them into the page, or the PDF was exported without annotations, there's nothing to read. Highlight it again and use Rescan."));
