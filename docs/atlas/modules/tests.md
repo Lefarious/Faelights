@@ -1,5 +1,5 @@
 # Module: tests
-> Path: test/ · Last synced commit: 40bb2c7 · Related features: F-011, F-012, F-014, F-015, F-016
+> Path: test/ · Last synced commit: 736ffd2 · Related features: F-011, F-012, F-014, F-015, F-016, F-020
 
 ## Purpose
 Automated checks run with Node's built-in `node:test` and `node:assert`, with no extra dependencies. They cover the pure parts of the app that load in plain Node: extraction (`core.js`, incl. image boxes), identifier parsing (`src/identify.js`), reader ordering (`renderer/order.js`), export formatting (`renderer/exportfmt.js`) and export path safety (`src/exportPaths.js`). They do not launch Electron or exercise the UI.
@@ -24,6 +24,10 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. Writes nothing (the 
 ### `test/identify.test.js`
 - **Role:** unit tests for `parseIdentifier` (accepted and rejected forms incl. ISBN-10/13 checksums, PMID forms, ADS bibcodes and URLs, trimming), `parseIdentifiers` (batch splitting, de-dupe), `findPdfLink`, `isPdf`, `fileNameFor` and `fetchFailureReason` (offline vs network mapping)
 - **Imports (internal):** `src/identify.js`
+
+### `test/metadata.test.js`
+- **Role:** unit tests for `lookupTarget` (DOI vs arXiv vs arXiv DOI, origin precedence), `fromCrossref` (full record, partial dates, subtitles, inline JATS tags) and `fromArxivAtom` (entry mapping, error entry → null) on inline fixtures; no network
+- **Imports (internal):** `src/metadata.js`
 
 ### `test/images.test.js`
 - **Role:** image boxes on `test/fixtures/images.pdf` (6 Squares, 2 pages): count, ids, `n`, page, normalised rect, colour, trimmed comment, sort order, the before-the-fact rule against entry `at`s, topics; `sample.pdf` → `images: []`; unit tests of `imgStreamAt` fallbacks and `imgSnapToFacts`
