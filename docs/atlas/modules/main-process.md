@@ -1,8 +1,8 @@
 # Module: main-process
-> Path: src/main.js · Last synced commit: 18c8052 · Related features: —
+> Path: src/main.js · Last synced commit: 5a2c5e0 · Related features: F-001, F-003, F-004
 
 ## Purpose
-This is the Electron main process. It owns the on-disk library (`faelights.json` plus copied PDFs), the window, the native app menu, native dialogs, context-menu popups, shell actions and the clipboard. It does not parse PDFs or hold UI state. The renderer sends the whole DB object and this module persists it as-is.
+This is the Electron main process. It owns the on-disk library (`faelights.json` plus copied PDFs), the splash and main windows, the theme, the native app menu, native dialogs, context-menu popups, shell actions and the clipboard. It does not parse PDFs or hold UI state. The renderer sends the whole DB object and this module persists it as-is.
 
 ## Public interface
 IPC handlers, called only through `preload.js`:
@@ -18,26 +18,29 @@ IPC handlers, called only through `preload.js`:
 - `pdf:removeStored(storedPath)` → unlinks the file only if it is inside `FILES_DIR`
 - `export:file({name, text})`, `export:folder({folderName, files})`, `export:openFolder(path)`
 - `clip:write(text)`, `menu:popup(items)` → chosen item id, `ask:confirm({message, detail, ok})` → boolean
+- `theme:get` → `"system"|"light"|"dark"`; `theme:set(t)` → applies and returns the theme
+- `app:ready` (one-way `ipcMain.on`) → `revealMain()`
 
-Pushes to the renderer: `menu` (channel strings) and `open-files` (path arrays).
+Pushes to the renderer: `menu` (channel strings), `open-files` (path arrays) and `theme`.
 
 ## Dependencies
 - **Uses:** electron (`app`, `BrowserWindow`, `ipcMain`, `dialog`, `shell`, `Menu`, `clipboard`, `nativeTheme`), node `fs`, `path`, `crypto`
 - **Used by:** preload-bridge (all channels)
-- **Loads:** `src/preload.js`, `renderer/index.html`
+- **Loads:** `src/preload.js`, `renderer/index.html`, `renderer/splash.html`, `renderer/assets/brand/app-icon.png` (window icon)
 
 ## Data & state owned
 - `app.getPath("userData")/library/faelights.json` is the single JSON DB `{version:1, libraries[], docs[], settings{mode,fmt,sort}}`
 - `…/library/files/<docId>.pdf` holds the copied PDFs
+- `app.getPath("userData")/theme.json` holds `{theme}`. It sits outside `library/` and is read synchronously at startup.
 - `…/faelights.json.tmp` is the atomic write temp file, and `…/faelights.json.broken-<ts>` is a backup of an unparseable DB
-- In memory: `win`, `pendingOpen[]`, and `writeChain` (a serialised promise chain of saves)
+- In memory: `win`, `splash`, `splashShownAt`, `pendingOpen[]`, `writeChain` (a serialised promise chain of saves), and `nativeTheme.themeSource`
 
 ## Files
 
 ### `src/main.js`
 - **Role:** the entire main process
 - **Exports:** none (CommonJS entry)
-- **Key functions:** `loadDb()`, `saveDb(db)`, `statOrNull(p)`, `createWindow()`, `pdfArgs(argv)`, `buildAppMenu()`, `EMPTY_DB()`, path helpers `DATA_DIR()`, `DB_PATH()`, `FILES_DIR()`
+- **Key functions:** `loadDb()`, `saveDb(db)`, `statOrNull(p)`, `createSplash()`, `revealMain()`, `createWindow()`, `themeBg()`, `loadTheme()`, `applyTheme(t)`, `pdfArgs(argv)`, `buildAppMenu()`, `EMPTY_DB()`, path helpers `DATA_DIR()`, `DB_PATH()`, `FILES_DIR()`, `THEME_PATH()`; constants `ICON`, `THEMES`, `SPLASH_MIN_MS`, `SPLASH_MAX_MS`
 - **Imports (internal):** none (loads `preload.js` and `index.html` by path)
 - **Used by:** Electron runtime (`package.json` `"main"`); renderer through preload
 - **Side effects:** reads and writes the files above; opens dialogs; `shell.openExternal` for http(s) links (in-window navigation away from `file:` is blocked); sets the application menu; takes the single-instance lock
@@ -50,4 +53,7 @@ Pushes to the renderer: `menu` (channel strings) and `open-files` (path arrays).
 - `pdf:removeStored` compares `path.dirname(storedPath) === FILES_DIR()` as a string. A path stored with different casing or separators would not be deleted.
 - `menu:popup` resolves on the popup's close callback through `setTimeout(…, 0)` so that the click handler runs first.
 - On macOS, an `open-file` event before the window loads is queued in `pendingOpen`. After that it is sent straight away as `open-files`.
-- The window `backgroundColor` hard-codes the same hex values as the `--bg` tokens in `styles.css`.
+- `themeBg()` hard-codes the same hex values as the `--bg` tokens in `styles.css` and `splash.html`.
+- The main window starts hidden and is shown only by `revealMain()`, on `app:ready` or the 8 s fallback timer. A renderer crash before `fl.ready()` therefore means an 8 s wait.
+- `applyTheme()` rebuilds the whole application menu so the View → Theme radio items stay in sync.
+- The theme is applied before `createSplash()`, so the splash already uses the saved choice.

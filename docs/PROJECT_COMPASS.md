@@ -1,14 +1,14 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-08 · Last logged commit: 18c8052 · Version: 1.0.0
+> Last updated: 2026-10-09 · Last logged commit: 5a2c5e0 · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0, feature-complete for its first release, all in one initial commit (2026-10-08). There are no automated tests, and installers are built in CI but not published.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), and a light/dark/system theme toggle (F-004). There are no automated tests, and installers are built in CI but not published.
 
 ## 2. Vision & scope
 - **Goals:**
   - Reliable extraction of every markup annotation, with its page, colour and note.
   - Context in two views: *Full sentence* or *Highlights only*.
-  - Topic grouping from bookmarks, with headings as a fallback.
+  - Topic grouping from bookmarks, falling back to headings by font size, then by wording, then by page, so every PDF is navigable.
   - Organisation through libraries, tags and stars, plus search across every PDF.
   - Clean export into personal knowledge tools, especially an Obsidian vault.
   - Highlights survive the original PDF moving or being deleted.
@@ -31,6 +31,8 @@ flowchart LR
   subgraph Main [Main process]
     MAIN[main-process] --> FS[(userData/library<br/>faelights.json + files/*.pdf)]
     MAIN --> OS[Dialogs · menus · shell · clipboard]
+    MAIN --> SPLASH[Splash window]
+    MAIN --> THEME[(userData/theme.json)]
   end
   OSOPEN[OS 'Open with' / argv] --> MAIN
   MAIN --> SRC[(Original PDFs on disk)]
@@ -61,11 +63,12 @@ flowchart LR
 - **Library:** a named container. `inbox` is a built-in system library that can't be deleted.
 - **Doc:** one imported PDF. It belongs to exactly one library and carries tags, a star, its original path, the path of its stored copy, the last-scanned mtime, and the cached extraction `result`.
 - **Result:** entries (sentence + highlighted spans + topic), loose marks, and topics. It is cached so the UI never re-parses the PDF unless a rescan is triggered.
-- **Settings:** view mode, export format and list sort.
+- **Settings:** view mode, export format and list sort (in the DB). The theme is stored separately in `theme.json`, owned by the main process (→ D-005).
 
 ### Key flows
 - **Add:** the PDF is copied into the library, analysed in the renderer, and its result is saved into the JSON DB.
 - **Sync on change:** at startup the original's mtime is compared with the last scan. Docs that have changed show as "Changed" and rescan automatically when opened. When the original is missing, the stored copy is used and the user is offered "Find original file".
+- **Startup:** a splash window shows the logo while the main window loads, and is swapped out once the library has rendered (→ D-006).
 - **Search:** in-memory AND-match over sentence, highlight, note and topic text across all cached results.
 - **Export:** one note per PDF, with optional YAML frontmatter, written to a file or to a folder per library.
 
@@ -88,27 +91,69 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Data migrations:** none. `loadDb` only adds a missing Inbox and missing settings defaults. The DB has `version: 1`, but nothing reads it yet.
 - **Rollback:** reinstall the previous installer. User data in `userData/library` is untouched by install and uninstall (unverified for the NSIS uninstaller).
 - **Secrets:** none.
-- **App icon:** `build/icon.png` (committed) is used for all three platforms through `directories.buildResources: build`.
+- **App icon:** `build/icon.png` (the brand mark on a dark rounded tile, F-003) is used for all three platforms through `directories.buildResources: build`.
+- **Local Windows build note:** on this machine (Node 26), `electron`'s postinstall did not extract its binary, so it was unzipped by hand. Build with `npx electron-builder --win --config.electronDist=node_modules/electron/dist` to avoid re-downloading Electron.
 
 ## 6. UI & UX
-- **Design system:** CSS custom properties in `renderer/styles.css`, with a light palette (lavender-grey background, amber accent `#B8721A`, glow `#F4B23E`) and an automatic dark palette through `prefers-color-scheme`. Fonts: Young Serif for display, Figtree for UI, Newsreader for reading text. Highlight marks use the PDF annotation's own colour at reduced alpha.
+- **Design system:** CSS custom properties in `renderer/styles.css`, with a light palette (lavender-grey background, amber accent `#B8721A`, glow `#F4B23E`) and a dark palette through `prefers-color-scheme`. The user picks System, Light or Dark (F-004), which sets the media query app-wide. Fonts: Young Serif for display, Figtree for UI, Newsreader for reading text. Highlight marks use the PDF annotation's own colour at reduced alpha.
+- **Brand:** a lowercase "faelights" wordmark (Young Serif) next to the **mark** (a highlight stroke plus a glowing mote). The **mote** alone is used for small accents. Every asset has light and dark variants in `renderer/assets/brand/`. The app icon is the mark on a dark rounded tile.
 - **Screen map:**
   ```
   Window (3-pane grid)
-  ├── Sidebar: brand · Add PDFs · Search / All PDFs / Starred · Libraries (+ new) · Tags · footer (stale count, Rescan)
+  Splash (frameless 440×280): mark + wordmark + "Gathering your highlights…"
+  ├── Sidebar: brand (mark + wordmark + theme button) · Add PDFs · Search / All PDFs / Starred · Libraries (+ new) · Tags · footer (stale count, Rescan)
   ├── List: view title · filter box · sort · progress meter · PDF cards (marks, pages, colour swatches, Changed / Original moved)
   └── Reader: title (click to rename) · library/star/tags · Full/Only toggle · format select · Copy · Export
                ├── Rail: colour filter chips · Topics TOC
                └── Groups by topic → extracts (page, quote, notes, copy-one)
   Search view (list pane hidden): query · library scope · mode toggle → results by PDF, click to jump
-  Empty states: onboarding with "Try a sample PDF" + shortcut legend
+  Empty states: mote + onboarding with "Try a sample PDF" + shortcut legend
+  Topics: extracts before the first topic sit under "Abstract"
   ```
 - **State:** one global state object, re-rendered fully on each change. Persistence is debounced (250 ms) and saves the whole DB.
 - **Interaction:** native context menus (library, doc), drag PDFs from the OS onto the window or onto a library, drag docs between libraries, keyboard (↑↓/J K, Delete, Ctrl/⌘ shortcuts from the app menu).
 - **Accessibility:** ARIA labels on icon buttons and inputs, `aria-current`/`aria-pressed` states, `:focus-visible` outlines, and a `role=status` toast.
 - **Responsive:** minimum window 900×560. Columns narrow below 1100 px.
+- **Motion:** the brand SVGs pulse and the splash fades in; both stop under `prefers-reduced-motion`.
 
 ## 7. Feature log (newest first)
+### F-004 · Light / dark / system theme toggle · 2026-10-09 · shipped
+- **Why:** let users override the OS appearance, for example reading in light mode on a dark-themed system.
+- **How:**
+  - A sun/moon/monitor button in the sidebar header opens System / Light / Dark. The same choice is under View → Theme.
+  - The main process sets `nativeTheme.themeSource`, which flips `prefers-color-scheme` in every window. The existing CSS tokens, the splash, and the light/dark brand `<picture>`s all follow it with no CSS changes.
+  - The choice is saved to `userData/theme.json` and applied before the splash window is created.
+- **Touched:** [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [renderer-ui](atlas/modules/renderer-ui.md)
+- **Added:** IPC `theme:get`, `theme:set`, push `theme`; file `userData/theme.json`; View → Theme menu.
+- **Trade-offs:** no theme class in CSS, and the theme isn't stored in the library DB (→ D-005).
+- **Verified:** over DevTools Protocol, each mode switched the colour scheme, background and logo variant; with a saved Light theme on a dark OS the splash rendered light.
+- **Commit range:** 5a2c5e0 (branch `feature/theme-toggle`)
+
+### F-003 · Brand icons, logo and splash screen · 2026-10-08 · shipped
+- **Why:** give the app its own identity in place of the placeholder icon, and a polished launch instead of a blank window.
+- **How:**
+  - Brand assets from the design files (mark, mote, favicons; light and dark) were added under `renderer/assets/brand/`.
+  - The app icon was regenerated from the mark on a dark rounded tile, rendered with Electron's canvas, so no new dependency was added.
+  - The sidebar shows the mark and wordmark; empty states and the drop overlay use the mote.
+  - A frameless splash window shows while the hidden main window loads. The renderer signals `app:ready` after the first render (→ D-006).
+- **Touched:** [main-process](atlas/modules/main-process.md), [preload-bridge](atlas/modules/preload-bridge.md), [renderer-ui](atlas/modules/renderer-ui.md), [packaging](atlas/modules/packaging.md)
+- **Added:** `renderer/splash.html`, `renderer/assets/brand/*`, new `build/icon.png`; IPC `app:ready`.
+- **Trade-offs:** the splash colours duplicate the CSS tokens. A renderer failure before `app:ready` delays the window by up to 8 s.
+- **Commit range:** 69b1817 (merged in 5ecdf1d)
+
+### F-002 · "Abstract" group and topic generation fallbacks · 2026-10-08 · shipped
+- **Why:** many PDFs (papers, exports) have no bookmarks and no larger-font headings, so every extract landed in one ungrouped bucket labelled "Before the first heading".
+- **How:**
+  - Extracts before the first topic are now labelled "Abstract" in the reader, the topics rail and exports.
+  - When font-size detection finds fewer than 2 headings, headings are found by wording: numbered sections, common section names, ALL-CAPS lines and run-in "Abstract—". Captions and running headers are skipped.
+  - If there is still nothing, one topic is made per page.
+  - Results carry an analyzer version, and older docs rescan automatically when opened.
+- **Touched:** [extraction-core](atlas/modules/extraction-core.md), [renderer-ui](atlas/modules/renderer-ui.md)
+- **Added:** `topicSource` values `patterns` and `pages`; `result.v` / `ANALYZER_VERSION`.
+- **Trade-offs:** wording rules can misread short numbered list items as headings. Pattern detection replaces a single font-size heading (usually just the title).
+- **Verified:** generated test PDFs covering numbered, plain and ALL-CAPS layouts; the sample PDF is unchanged.
+- **Commit range:** 978ee61 (merged in 85dd5a7)
+
 ### F-001 · Faelights desktop v1.0.0 · 2026-10-08 · shipped
 - **Why:** turn annotated PDFs into organised, exportable highlight notes, offline.
 - **How:**
@@ -137,6 +182,12 @@ Context: annotation geometry and text positions are needed together. Decision: u
 ### D-004 · No framework, no bundler · 2026-10-08 (reconstructed)
 Decision: plain `<script>` tags with globals and full re-render on each state change. Consequences: zero build step and fast iteration; scaling the UI will need care, and there is no module system or type checking.
 
+### D-005 · Theme via `nativeTheme.themeSource`, stored outside the DB · 2026-10-09
+Context: the user wanted a light/dark toggle, but all styling already keys off `prefers-color-scheme`. Options: a CSS theme class mirrored in every page; or Electron `nativeTheme.themeSource`. Decision: use `themeSource`, so a single setting drives every window, including the splash and the `<picture>` artwork. Store it in a small `theme.json` owned by main rather than in `faelights.json`, so it can be read synchronously before the splash appears without parsing the whole library. Consequences: CSS stays single-path, and theme code lives only in `main.js`.
+
+### D-006 · Splash as a separate window, gated on renderer ready · 2026-10-08
+Context: the app needed a branded launch screen. Options: an overlay inside `index.html`, or a separate frameless window. Decision: a separate window, shown immediately, while the main window stays hidden until the renderer sends `app:ready` after its first render. It stays on screen at least 0.9 s, and an 8 s fallback forces the main window. Consequences: there is no flash of an empty UI, but startup now depends on the renderer reporting ready.
+
 ## 9. Roadmap & deployment plan
 No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
 ### Now
@@ -148,6 +199,9 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - DB schema versioning and migrations, and per-doc result storage if the library grows large.
 - Move analysis off the UI thread (worker).
 ### Done
+- Theme toggle · 2026-10-09 · F-004
+- Brand icons, logo, splash · 2026-10-08 · F-003
+- Abstract group + topic fallbacks · 2026-10-08 · F-002
 - Initial release v1.0.0 · 2026-10-08 · F-001
 
 ## 10. Conventions & guardrails
@@ -157,7 +211,9 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - Removing a library never loses docs; they move to Inbox.
 - Any `node_modules` file the renderer references must also be listed in `package.json build.files`.
 - Keep the CSP in `index.html` strict: no inline scripts and no remote origins.
-- Changing the DB or `result` shape requires a load-time repair or migration in `main.js loadDb`, or a forced rescan.
+- Changing the DB or `result` shape requires a load-time repair or migration in `main.js loadDb`, or a bump of `ANALYZER_VERSION` in `core.js` so docs rescan.
+- Theming goes only through `nativeTheme.themeSource`. CSS reacts to `prefers-color-scheme`; never add per-page theme classes.
+- Brand artwork lives in `renderer/assets/brand/` with `-light`/`-dark` variants.
 
 ## 11. Tech debt & open questions
 | Item | Impact | Introduced by | Suggested fix |
@@ -167,6 +223,8 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 | `saveDb` errors are only logged | Silent data loss is possible | F-001 | Surface failures to the renderer as a toast |
 | Unsigned builds | OS warnings on install | F-001 | Sign and notarise in CI |
 | DB `version` field unused | No migration path | F-001 | Add version-based migrations in `loadDb` |
+| Wording-based headings can misfire on short numbered lists | Odd topics in some PDFs | F-002 | Require a numbering sequence, or check for bold fonts |
+| Theme colours duplicated in `styles.css`, `splash.html` and `main.js themeBg()` | Palette edits must touch 3 places | F-003/F-004 | Share a tokens file |
 | Open question: target audience and distribution channel (GitHub only?) | Affects signing and auto-update priority | — | Ask the owner |
 
 ## 12. Resume checklist

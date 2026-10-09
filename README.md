@@ -9,6 +9,7 @@ Faelights is a desktop app that pulls the highlights out of annotated PDFs. Each
 - **Groups extracts by topic.** It uses the PDF's bookmarks, or falls back to headings detected by font size.
 - **Organises PDFs into libraries.** Drag a PDF onto a library to move it, and right-click a library to rename, export or delete it. Deleting a library moves its PDFs to Inbox.
 - **Supports tags, stars and filtering** by title or tag.
+- **Light, dark or system theme.** Use the button next to the logo, or *View → Theme*. Your choice is remembered.
 - **Searches highlights across every PDF.** Every word you type must appear in the sentence, the highlight or its note. Click a result to jump to it.
 - **Keeps PDFs in sync.** Faelights remembers where each PDF lives. If you annotate it again, it shows *Changed* and rescans automatically when you open it. If the file moves, use *Find original file*.
 - **Exports:**

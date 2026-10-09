@@ -1,5 +1,5 @@
 # Module: packaging
-> Path: package.json, .github/workflows/build.yml · Last synced commit: 18c8052 · Related features: —
+> Path: package.json, .github/workflows/build.yml · Last synced commit: 5a2c5e0 · Related features: F-001, F-003
 
 ## Purpose
 This module covers dependency declarations, npm scripts, the electron-builder configuration and the CI release workflow. It decides which files ship inside the installed app.
@@ -16,9 +16,14 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 
 ## Files
 
+### `build/icon.png`
+- **Role:** 1024 px app icon: `renderer/assets/brand/mark-dark.svg` on a rounded `#1F1C2A` tile with transparent corners and the halo frozen at mid-glow. It is the source for `.ico`/`.icns`.
+
+
 ### `package.json`
 - **Role:** manifest and electron-builder config (`build` key)
 - **Key config:** `main: src/main.js`; `build.files` ships `src/**`, `renderer/**`, only `pdf.min.js` and `pdf.worker.min.js` from pdfjs-dist, and `@fontsource/**`. It registers a `.pdf` file association (role Viewer). Targets: win nsis+zip (`signAndEditExecutable: false`), mac dmg, linux AppImage. Output goes to `dist/`.
+- **Note:** `renderer/**` already ships `splash.html` and `assets/brand/*`, so no config change is needed for them.
 - **Change impact:** a new runtime file under `node_modules` that the renderer references must be added to `build.files`, otherwise it works in `npm start` but is missing from installers.
 
 ### `.github/workflows/build.yml`
