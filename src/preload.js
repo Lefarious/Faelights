@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld("fl", {
   fetchPdf: text => ipcRenderer.invoke("pdf:fetch", text),
   cancelFetch: () => ipcRenderer.invoke("pdf:fetchCancel"),
   onFetchProgress: fn => ipcRenderer.on("fetch-progress", (_e, p) => fn(p)),
+  lookupMeta: q => ipcRenderer.invoke("meta:lookup", q),   // {doi, arxiv, origin}
   openExternal: url => ipcRenderer.invoke("app:openExternal", url),
   readClipboardText: () => ipcRenderer.invoke("clip:read")
 });
