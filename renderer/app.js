@@ -776,7 +776,9 @@ function renderList() {
   if (S.view.kind === "library") { h.ondblclick = () => { S.renaming = S.view.id; renderSide(); }; h.title = "Double-click to rename in the sidebar"; }
   const docsAll = visibleDocs();
   const hl = docsAll.reduce((n, d) => n + (d.count || 0), 0);
-  const hr = el("div", "head-row"); hr.append(h, paneBtn("list"));
+  const add = btn("icon", null, "add", "Add PDFs"); add.onclick = chooseAndAdd;
+  const acts = el("div", "head-acts"); acts.append(add, addIdBtn(true), paneBtn("list"));
+  const hr = el("div", "head-row"); hr.append(h, acts);
   head.append(hr, el("div", "sub", `${plural(docsAll.length, "PDF")} · ${plural(hl, "highlight")}`));
   const tools = el("div", "list-tools");
   const q = el("input", "search"); q.id = "dq"; q.placeholder = "Filter by title or tag"; q.value = S.docQuery; q.setAttribute("aria-label", "Filter PDFs");
@@ -960,7 +962,7 @@ function renderReader() {
   const ti = el("input"); ti.id = "tagin"; ti.placeholder = "+ tag"; ti.setAttribute("aria-label", "Add tag");
   const known = [...new Set(S.db.docs.flatMap(x => x.tags))]; if (known.length) { const dl = el("datalist"); dl.id = "tagsdl"; for (const k of known) { const o = el("option"); o.value = k; dl.append(o); } tagedit.append(dl); ti.setAttribute("list", "tagsdl"); }
   ti.onkeydown = e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); const v = ti.value.trim().replace(/^#/, ""); if (v && !d.tags.includes(v)) { d.tags.push(v); save(); renderAll(); setTimeout(() => $("tagin")?.focus(), 0); } } };
-  tagedit.append(ti); meta.append(tagedit); tools.append(el("span", "sp"));
+  tagedit.append(ti); meta.append(tagedit);
 
   const ib = btn("icon info-btn", null, "info", "Show info"); ib.setAttribute("aria-pressed", !!S.db.settings.info);
   ib.onclick = () => { S.db.settings.info = !S.db.settings.info; save(); renderReader(); };
