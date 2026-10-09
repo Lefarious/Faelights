@@ -1,5 +1,5 @@
 # Module: packaging
-> Path: package.json, .github/workflows/build.yml · Last synced commit: 5a2c5e0 · Related features: F-001, F-003
+> Path: package.json, .github/workflows/build.yml · Last synced commit: a6750ae · Related features: F-001, F-003, F-007
 
 ## Purpose
 This module covers dependency declarations, npm scripts, the electron-builder configuration and the CI release workflow. It decides which files ship inside the installed app.
@@ -10,7 +10,7 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 - CI builds all three when a `v*` tag is pushed (or on manual dispatch) and uploads `.exe/.zip/.dmg/.AppImage` as run artifacts. It does not publish them.
 
 ## Dependencies
-- **Runtime:** `pdfjs-dist` pinned to `3.11.174`, `@fontsource/figtree`, `@fontsource/newsreader`, `@fontsource/young-serif`
+- **Runtime:** `pdfjs-dist` pinned to `3.11.174`, `pdf-lib` pinned to `1.17.1`, `@fontsource/figtree`, `@fontsource/newsreader`, `@fontsource/young-serif`
 - **Dev:** `electron ^31`, `electron-builder ^24.13.3`
 - **Used by:** every other module at package time
 
@@ -22,7 +22,7 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 
 ### `package.json`
 - **Role:** manifest and electron-builder config (`build` key)
-- **Key config:** `main: src/main.js`; `build.files` ships `src/**`, `renderer/**`, only `pdf.min.js` and `pdf.worker.min.js` from pdfjs-dist, and `@fontsource/**`. It registers a `.pdf` file association (role Viewer). Targets: win nsis+zip (`signAndEditExecutable: false`), mac dmg, linux AppImage. Output goes to `dist/`.
+- **Key config:** `main: src/main.js`; `build.files` ships `src/**`, `renderer/**`, only `pdf.min.js` and `pdf.worker.min.js` from pdfjs-dist, `pdf-lib/dist/pdf-lib.min.js`, and `@fontsource/**`. It registers a `.pdf` file association (role Viewer). Targets: win nsis+zip (`signAndEditExecutable: false`), mac dmg, linux AppImage. Output goes to `dist/`.
 - **Note:** `renderer/**` already ships `splash.html` and `assets/brand/*`, so no config change is needed for them.
 - **Change impact:** a new runtime file under `node_modules` that the renderer references must be added to `build.files`, otherwise it works in `npm start` but is missing from installers.
 

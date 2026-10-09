@@ -1,5 +1,5 @@
 # Module: preload-bridge
-> Path: src/preload.js · Last synced commit: 5a2c5e0 · Related features: F-003, F-004
+> Path: src/preload.js · Last synced commit: a6750ae · Related features: F-003, F-004, F-007
 
 ## Purpose
 This is the only channel between the sandboxed renderer and the main process. It exposes `window.fl` with one thin wrapper per IPC channel and holds no logic of its own, apart from `pathFor`.
@@ -12,6 +12,7 @@ This is the only channel between the sandboxed renderer and the main process. It
 | `getTheme()` / `setTheme(t)` | `theme:get` / `theme:set` |
 | `choosePdfs()` / `importPdf(p)` / `readPdf(doc)` / `statPdf(p)` | `pdf:choose` / `pdf:import` / `pdf:read` / `pdf:stat` |
 | `openPdf(doc)` / `revealPdf(doc)` / `relinkPdf(doc)` / `removeStored(p)` | `pdf:open` / `pdf:reveal` / `pdf:relink` / `pdf:removeStored` |
+| `writeStored(storedPath, bytes)` / `savePdfAs(name, bytes)` | `pdf:writeStored` / `pdf:saveAs` |
 | `exportFile(name, text)` / `exportFolder(folderName, files)` / `openFolder(p)` | `export:file` / `export:folder` / `export:openFolder` |
 | `copy(text)` / `popup(items)` / `confirm(message, detail, ok)` | `clip:write` / `menu:popup` / `ask:confirm` |
 | `pathFor(file)` | none: `webUtils.getPathForFile`, falling back to `file.path` |
@@ -19,7 +20,7 @@ This is the only channel between the sandboxed renderer and the main process. It
 
 ## Dependencies
 - **Uses:** electron `contextBridge`, `ipcRenderer`, `webUtils`
-- **Used by:** renderer-ui (`app.js`, as the global `fl`)
+- **Used by:** renderer-ui (`app.js`) and annotator (`annotator.js`), as the global `fl`
 - **Talks to:** main-process
 
 ## Files

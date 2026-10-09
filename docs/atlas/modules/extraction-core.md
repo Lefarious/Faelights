@@ -1,5 +1,5 @@
 # Module: extraction-core
-> Path: renderer/core.js · Last synced commit: 5a2c5e0 · Related features: F-001, F-002
+> Path: renderer/core.js · Last synced commit: a6750ae · Related features: F-001, F-002, F-007
 
 ## Purpose
 This module is the PDF highlight extraction algorithm. Given a loaded pdf.js document, it rebuilds the text stream in reading order, works out which characters each markup annotation covers, expands the marks to whole sentences, and assigns each one to a topic taken from bookmarks or detected headings. It has no DOM, IPC or persistence code.
@@ -16,7 +16,7 @@ This module is the PDF highlight extraction algorithm. Given a loaded pdf.js doc
 
 ## Dependencies
 - **Uses:** pdf.js document/page API through the `pdf` argument (`numPages`, `getPage`, `getTextContent`, `getAnnotations`, `getOutline`, `getDestination`, `getPageIndex`)
-- **Used by:** renderer-ui (`app.js analyzeBytes`)
+- **Used by:** renderer-ui (`app.js analyzeBytes`); annotator (`normQuads` for hit-testing existing annotations)
 - **External libs:** none imported directly. It assumes the pdf.js 3.11.174 annotation shape (`quadPoints`, `contentsObj`, `titleObj`, `color`).
 
 ## Internal structure
@@ -43,7 +43,7 @@ None. It is a pure function of the input document, and the result is stored by t
 - **Exports:** `analyzePdf` (global, and CommonJS when available)
 - **Internal:** `MARK_TYPES` (Highlight, Underline, Squiggly, StrikeOut→"Strike"), `ABBR` regex, `normQuads(a)`, `colorOf(a)` (default `[255,214,64]`), `resolveOutline(pdf)`, `topicAt(topics, at)`, `patternTopics(lines, text)`, `headingText(t)`, `capsHeading(t)`, `pageTopics(lines)`; regexes `SECTION_NAMES`, `NUMBERED`, `RUN_IN`, `CAPTION`
 - **Imports (internal):** none
-- **Used by:** `renderer/app.js`
+- **Used by:** `renderer/app.js`, `renderer/annotator.js` (`normQuads`)
 - **Side effects:** none
 - **Change impact:** the shape of `entries` / `spans` / `segs` / `topics` is persisted in `faelights.json` and read by `app.js` rendering (`quoteEl`, `groupsOf`), export (`docText`, `entryLines`), search (`renderResults`) and colour filters (`ckey`). Shape or quality changes must bump `ANALYZER_VERSION`; `app.js` then rescans outdated docs on open and in Rescan all.
 
