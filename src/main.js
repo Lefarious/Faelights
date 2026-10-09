@@ -1,6 +1,6 @@
 // Faelights — main process
 // Owns the library file on disk, file dialogs, native menus and file access.
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeTheme, session, net } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, nativeTheme, session, net } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const fsp = fs.promises;
@@ -490,6 +490,12 @@ ipcMain.handle("export:folder", async (_e, { folderName, files, assets }) => {
 ipcMain.handle("export:openFolder", async (_e, p) => { shell.openPath(p); return true; });
 
 ipcMain.handle("clip:write", (_e, text) => { clipboard.writeText(text); return true; });
+// PNG bytes of a captured image (renderer Images.png) → clipboard as an image
+ipcMain.handle("clip:image", (_e, bytes) => {
+  const img = nativeImage.createFromBuffer(Buffer.from(bytes || []));
+  if (img.isEmpty()) return false;
+  clipboard.writeImage(img); return true;
+});
 
 // Native context menu: renderer sends items, gets back the chosen id
 ipcMain.handle("menu:popup", (_e, items) => new Promise(resolve => {

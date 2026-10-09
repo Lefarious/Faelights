@@ -74,6 +74,10 @@ const outdated = d => !d.result || (d.result.v || 1) < ANALYZER_VERSION;
 
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2200); }
 async function copyText(text, what) { await fl.copy(text); toast(what + " copied"); }
+async function copyImage(d, img) {
+  try { if (!await fl.copyImage(await Images.png(d, img))) throw new Error("empty image"); toast("Image copied"); }
+  catch (err) { console.error(err); toast("Couldn't copy the image"); }
+}
 
 /* ---------------- PDF analysis ---------------- */
 function cleanTitle(t) {
@@ -1129,6 +1133,14 @@ function figureEl(d, img) {
   const pg = el("button", "pg", "p. " + img.page); pg.title = "Show page " + img.page + " in the viewer"; pg.onclick = () => annotate(d, img.page);
   cap.append(pg);
   if (img.comment) { const p = el("p", "note"); p.append(el("b", null, "Note"), document.createTextNode(img.comment)); cap.append(p); }
+  const c = el("button", "copy1"); c.append(svg(ICON.copy)); c.title = "Copy image"; c.setAttribute("aria-label", "Copy image from page " + img.page);
+  c.onclick = () => copyImage(d, img); cap.append(c);
+  f.oncontextmenu = async ev => {
+    ev.preventDefault();
+    const r = await openMenu({ x: ev.clientX, y: ev.clientY }, [{ id: "copy", label: "Copy image", icon: "copy" }, { id: "page", label: "Show page " + img.page, icon: "open" }], { label: "Image" });
+    if (r === "copy") copyImage(d, img);
+    if (r === "page") annotate(d, img.page);
+  };
   f.append(box, cap);
   return f;
 }

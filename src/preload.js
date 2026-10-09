@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("fl", {
   exportBundle: (name, text, assets, opts = {}) => ipcRenderer.invoke("export:bundle", { name, text, assets, dirToken: opts.dirToken, encode: opts.encode }),
   openFolder: p => ipcRenderer.invoke("export:openFolder", p),
   copy: text => ipcRenderer.invoke("clip:write", text),
+  copyImage: pngBytes => ipcRenderer.invoke("clip:image", pngBytes),
   popup: items => ipcRenderer.invoke("menu:popup", items),
   confirm: (message, detail, ok) => ipcRenderer.invoke("ask:confirm", { message, detail, ok }),
   pathFor: file => { try { return webUtils.getPathForFile(file); } catch (_) { return file.path || ""; } },
