@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("fl", {
   onTheme: fn => ipcRenderer.on("theme", (_e, t) => fn(t)),
   // add from DOI / link: the only network access, always user-initiated
   parseId: text => ipcRenderer.invoke("id:parse", text),
+  parseIds: text => ipcRenderer.invoke("id:parseMany", text),
   fetchPdf: text => ipcRenderer.invoke("pdf:fetch", text),
   cancelFetch: () => ipcRenderer.invoke("pdf:fetchCancel"),
   onFetchProgress: fn => ipcRenderer.on("fetch-progress", (_e, p) => fn(p)),
