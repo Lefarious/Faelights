@@ -1,5 +1,5 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-09 · Synced at commit: 40bb2c7
+> Last synced: 2026-10-09 · Synced at commit: f541b3f
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
@@ -97,7 +97,7 @@ Copy → `docText(d, fmt, false, filtered(d), filteredImages(d) when "With image
 Pointer down on a `.resizer[data-pane]` (window-level listener in `app.js`) → `pointermove` sets `layout()[pane].w` (clamped to `PANES` min/max) or `closed` when dragged below ~half the minimum → `applyLayout()` writes `--side-w/--list-w/--rail-w` and `*-closed` classes on `#app` (borrowing width from list then sidebar so the reader keeps `READER_MIN`) → `pointerup` → `save()`. Hide buttons (`paneBtn`), strips (`strip`), focused-handle keys (`resizerKey`), double-click (reset one pane) and menu `pane:*` / `layout-reset` all end in `togglePane()` / `resetLayout()` → `applyLayout()` + `save()`. No pane re-renders.
 
 ### Info card (PDF metadata)
-Reader `.info-btn` (left of the Full sentence / Highlights only switch) → toggles `settings.info` → `save()` + `renderReader()` → `infoEl(d)` prepended to `.r-main` → renders `d.meta` via `infoRows()`; if `d.meta` is missing → `loadMeta(d)` → `fl.readPdf({...d, sourcePath:null})` → `readMeta()` → `d.meta` → `save()` → `renderReader()`. `rescan()` also refreshes `d.meta`.
+Reader `.info-btn` (labelled "Metadata", left of the Full sentence / Highlights only switch) → toggles `settings.info` → `save()` + `renderReader()` → `infoEl(d)` prepended to `.r-main` → renders `d.meta` via `infoRows()`; if `d.meta` is missing → `loadMeta(d)` → `fl.readPdf({...d, sourcePath:null})` → `readMeta()` → `d.meta` → `save()` → `renderReader()`. `rescan()` also refreshes `d.meta`.
 
 ### Annotate a PDF
 Reader toolbar "View" button (first in the left-aligned `.r-tools`, before Info) / doc menu "Annotate" / clicking an extract's `p. N` → `app.js annotate(d, page)` → `Annot.open(d, page)` → `fl.readPdf(d)` (stored copy if `d.annotated`) → pdf.js doc + `PDFDocument.load` (pdf-lib, in the background) → `renderReader()` → `Annot.mount(#reader)` → pages drawn lazily (`drawPage`: canvas with `AnnotationMode.ENABLE` + `renderTextLayer`).
@@ -145,7 +145,7 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | Magic id | library id `"inbox"` (`system: true`) | `main.js EMPTY_DB/loadDb` | `app.js` (default target, delete fallback, boot) |
 | Drag MIME | `application/x-faelights-doc` | `app.js renderDocs` dragstart | `app.js navItem` drop on library |
 | Relative paths | `../node_modules/pdfjs-dist/build/*.min.js`, `../node_modules/pdf-lib/dist/pdf-lib.min.js`, `../node_modules/@fontsource/*` | `package.json build.files` | `index.html`, `app.js` worker src, `styles.css @import` |
-| Brand asset paths | `assets/brand/{mark,mote,splash}-{light,dark}.svg`, `favicon-*.ico`, `app-icon.png` | files in `renderer/assets/brand/` | `app.js brandImg()`, `index.html`, `splash.html`, `main.js ICON` |
+| Brand asset paths | `assets/brand/{mark,mote,splash}-{light,dark}.svg`, `favicon-*.ico`, `app-icon.png`, `app-icon.ico` | files in `renderer/assets/brand/` | `app.js brandImg()`, `index.html`, `splash.html`, `main.js ICON` |
 | Media query | `prefers-color-scheme` | `nativeTheme.themeSource` (main) | `styles.css`, `splash.html`, `<picture>` sources |
 | Settings keys | `settings.mode` (`full`/`only`), `fmt` (`md`/`obsidian`/`html`/`plain`), `sort` (`added`/`title`/`count`) | `main.js EMPTY_DB` defaults | `app.js` reader, export, list |
 | Doc flag | `mine` ("My publications") | `app.js setMine` (doc menu, reader toggle, drop on sidebar item) | `app.js visibleDocs` (`view.kind === "mine"`), sidebar count |
@@ -173,6 +173,7 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | File | Module |
 |---|---|
 | `.github/workflows/build.yml` | packaging |
+| `build/icon.ico` | packaging |
 | `build/icon.png` | packaging |
 | `package.json` | packaging |
 | `renderer/annotator.js` | annotator |

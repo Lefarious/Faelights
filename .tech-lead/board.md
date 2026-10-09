@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-09 · Current sprint: 3 (not planned) · main: green 63/63 @ 40bb2c7 (local, not pushed)_
+_Last updated: 2026-10-09 · Current sprint: 3 (not planned) · main: green 63/63 @ f541b3f (local, not pushed)_
 
 ## Settings
 - Capacity: 3 parallel features per sprint
@@ -24,7 +24,7 @@ Proposals waiting for approval (each can join Sprint 2):
 
 Polish (reported by user):
 
-- [ ] [Fix · XS] The app icon on the Windows taskbar looks a different size from other apps' icons. Likely causes to check: too much padding around the artwork, or the .ico missing some sizes (16/24/32/48/256).
+- [x] [Fix · XS] Taskbar icon size: done (F-017). The tile used 87.5% of the canvas and there was no .ico; now ~96% plus a 16–256 px .ico.
 
 ## Backlog
 | id | requirements (short) | footprint | depends on | size | priority | status |
@@ -63,6 +63,9 @@ Polish (reported by user):
 - Test rounds: 23 (baseline) → 23 → 34 → 44 → 57 → 63 (integration) → 63 (main 40bb2c7); new failures introduced: 0
 - Contract `result.images[]`: `{id, n, page, rect:[x1,y1,x2,y2] PDF user space normalised, color:[r,g,b] 0-255, comment, at, topic}`; sorted by `at`; consumers put an image before entry e when `img.at <= e.at`
 
+
+### Between sprints — polish (2026-10-09)
+- `fix/taskbar-icon-size` (055a74f) + `feature/metadata-label` (47e8eeb, "Metadata" label on the reader's ⓘ button), built directly (XS each, no shared files). Combined on `feature/polish-integration`, 63/63; user gate 1 OK → main fast-forwarded to f541b3f, 63/63. Push awaits gate 2. Compass F-017.
 
 ### Between sprints — fix (2026-10-09)
 - `fix/list-add-and-reader-tools` (F-013): Add PDFs + add-by-link buttons in the PDF list header; reader toolbar left-aligned (spacer removed). Small, so built directly without sub-agents.
