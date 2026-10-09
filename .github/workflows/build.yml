@@ -1,10 +1,17 @@
 name: Build Faelights
+# Every push to main and every pull request runs the tests and all three installer builds, so a broken
+# build shows up before a release is tagged. A v* tag does the same and attaches the files to a draft release.
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 jobs:
   build:
     strategy:
@@ -22,12 +29,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm ci || npm install
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          v="v$(node -p "require('./package.json').version")"
+          [ "$v" = "$GITHUB_REF_NAME" ] || { echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $v"; exit 1; }
       - run: npm run ${{ matrix.script }} -- --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: faelights-${{ matrix.os }}
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/') && 90 || 7 }}
+          if-no-files-found: error
           path: |
             dist/*.exe
             dist/*.zip

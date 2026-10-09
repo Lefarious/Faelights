@@ -98,10 +98,11 @@ There are no analytics or telemetry, and no background network calls: requests h
 | Env | Target | Branch | How it deploys | Notes |
 |---|---|---|---|---|
 | Local dev | `npm start` | any | manual | Node 18+ |
+| CI check | Run artifacts (kept 7 days) | `main`, pull requests | push / PR → tests + all three builds | Catches a broken build before release (added after the v1.2.0 failure). |
 | Release builds | Draft GitHub Release (+ run artifacts) | tag `v*` | push tag → matrix build → `softprops/action-gh-release` attaches files to a draft release | electron-builder runs with `--publish never`; the workflow's release step uploads instead. The user reviews and publishes the draft. |
 
-- **CI/CD:** checkout → Node 20 → `npm ci || npm install` → `electron-builder` per OS → upload `.exe/.zip/.dmg/.AppImage` as artifacts and, on tags, to a draft GitHub Release (`contents: write` permission).
-- **Releasing:** bump `version` in `package.json` on a branch, merge to `main`, push, then push the matching `v<version>` tag.
+- **CI/CD:** on every push to `main`, every PR and every `v*` tag: checkout → Node 22 (npm cache) → strict `npm ci` → `npm test` → (tags only) check the tag equals `v` + package.json version → `electron-builder` per OS → upload `.exe/.zip/.dmg/.AppImage` as artifacts and, on tags, to a draft GitHub Release (`contents: write` permission).
+- **Releasing:** bump `version` in `package.json` on a branch, merge to `main`, push, **wait for the `main` build to go green**, then push the matching `v<version>` tag (a mismatched tag fails the run).
 - **Code signing:** none. Windows `signAndEditExecutable: false`, so an `afterPack` hook writes the icon into the exe instead (→ D-014); macOS is not notarised, so Gatekeeper will warn (unverified).
 - **Data migrations:** none. `loadDb` only adds a missing Inbox and missing settings defaults. The DB has `version: 1`, but nothing reads it yet.
 - **Rollback:** reinstall the previous installer. User data in `userData/library` is untouched by install and uninstall (unverified for the NSIS uninstaller).
@@ -404,7 +405,7 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - v1.2.1 tagged (2026-10-10): CI builds the installers into a draft GitHub Release for the user to publish. (v1.2.0's run failed on a native-module rebuild; no release was made from it.)
 - Sprint 4: not planned yet; proposals T-002…T-011 on the tech-lead board.
 ### Next
-- Second test fixture PDF (underline/strike/squiggly, outline and wording topics, loose marks); run `npm test` in CI.
+- Second test fixture PDF (underline/strike/squiggly, outline and wording topics, loose marks). (`npm test` in CI: done 2026-10-10.)
 ### Later
 - Code signing and notarisation. (Publishing releases from CI: done, F-021.)
 - DB schema versioning and migrations, and per-doc result storage if the library grows large.
