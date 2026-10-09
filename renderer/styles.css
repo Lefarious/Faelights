@@ -37,14 +37,44 @@ button, select, input { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 [hidden] { display: none !important; }
 
-.app { height: 100%; display: grid; grid-template-columns: 236px 330px minmax(0, 1fr); }
-.app.wide { grid-template-columns: 236px minmax(0, 1fr); }
-.app.wide .list { display: none; }
-@media (max-width: 1100px) { .app { grid-template-columns: 210px 280px minmax(0, 1fr); } }
+/* Column widths come from app.js applyLayout(); --*-w is the strip width while a pane is closed. */
+.app { position: relative; height: 100%; display: grid; grid-template-columns: var(--side-w, 236px) var(--list-w, 330px) minmax(0, 1fr); transition: grid-template-columns .18s ease; }
+.app.wide { grid-template-columns: var(--side-w, 236px) minmax(0, 1fr); }
+.app.wide .list, .app.wide > .resizer[data-pane="list"] { display: none; }
+.resizing, .resizing * { cursor: col-resize !important; user-select: none; }
+.resizing .app, .resizing .rail-pane { transition: none; }
+/* ---------- column handles + collapsed strips ---------- */
+.resizer { position: relative; z-index: 5; width: 9px; flex: none; cursor: col-resize; touch-action: none; }
+.resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; transition: background .15s .08s, left .15s .08s, width .15s .08s; }
+.resizer:hover::after, .resizer.active::after, .resizer:focus-visible::after { background: var(--accent); left: 3px; width: 3px; }
+.resizer:focus-visible { outline: none; }
+.app > .resizer { position: absolute; top: 0; bottom: 0; transition: left .18s ease; }
+.resizing .app > .resizer { transition: none; }
+.app > .resizer[data-pane="side"] { left: calc(var(--side-w) - 5px); }
+.app > .resizer[data-pane="list"] { left: calc(var(--side-w) + var(--list-w) - 5px); }
+.strip { display: none; flex: 1; flex-direction: column; align-items: center; gap: 10px; width: 100%; min-height: 0; padding: 16px 0; border: 0; background: none; color: var(--muted); cursor: pointer; }
+.strip:hover { color: var(--ink); background: color-mix(in srgb, var(--sel) 50%, transparent); }
+.strip .ico { width: 16px; height: 16px; flex: none; }
+.strip span { writing-mode: vertical-rl; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 0; }
+.app.side-closed .side > :not(.strip), .app.list-closed .list > :not(.strip), .app.rail-closed .rail-pane > :not(.strip) { display: none; }
+.app.side-closed .side > .strip, .app.list-closed .list > .strip, .app.rail-closed .rail-pane > .strip { display: flex; }
+.pane-btn { flex: none; border: 0; background: none; color: var(--muted); padding: 4px; border-radius: 6px; cursor: pointer; display: grid; place-items: center; }
+.pane-btn:hover { color: var(--ink); background: var(--sel); }
+.pane-btn .ico { width: 16px; height: 16px; }
+
+/* ---------- scrollbars: slim rounded thumb, firmer when its pane is hovered ---------- */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { min-height: 40px; border: 4px solid transparent; border-radius: 999px; background: color-mix(in srgb, var(--muted) 22%, transparent) padding-box; }
+:hover::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, var(--muted) 42%, transparent); }
+::-webkit-scrollbar-thumb:hover { border-width: 3px; background-color: color-mix(in srgb, var(--muted) 62%, transparent); }
+::-webkit-scrollbar-thumb:active { border-width: 3px; background-color: var(--accent); }
+.side-scroll, .docs, .rail-pane, .r-main, .s-body { overscroll-behavior: contain; }
 
 /* ---------- sidebar ---------- */
-.side { background: var(--pane); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
-.brand { display: flex; align-items: center; gap: 4px; padding: 16px 18px 10px; }
+.side { background: var(--pane); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.brand { display: flex; align-items: center; gap: 4px; padding: 16px 12px 10px 18px; }
+.brand .pane-btn { margin-left: auto; }
 .brand-mark, .blank-mote, .drop-mote { display: block; flex: none; }
 .brand-mark img { width: 34px; height: 34px; display: block; margin: -4px -4px -4px -6px; }
 .brand h1 { font-family: var(--font-display); font-weight: 400; font-size: 22px; margin: 0 0 2px; letter-spacing: -.01em; }
@@ -84,8 +114,9 @@ select.btn { font-weight: 500; padding-right: 8px; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 
 /* ---------- PDF list ---------- */
-.list { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+.list { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; background: var(--bg); }
 .list-head { padding: 16px 16px 10px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
+.head-row { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
 .list-head h2 { font-family: var(--font-display); font-weight: 400; font-size: 22px; margin: 0; line-height: 1.2; overflow-wrap: anywhere; }
 .list-head .sub { color: var(--muted); font-size: 12.5px; }
 .list-tools { display: flex; gap: 8px; }
@@ -114,7 +145,7 @@ select.btn { font-weight: 500; padding-right: 8px; }
 .meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 
 /* ---------- reader ---------- */
-.reader { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+.reader { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); container-type: inline-size; }
 .r-head { padding: 16px 28px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
 .r-title { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; }
 .r-title h2 { font-family: var(--font-display); font-weight: 400; font-size: 25px; line-height: 1.2; margin: 0; text-wrap: balance; overflow-wrap: anywhere; cursor: text; border-radius: 5px; }
@@ -132,10 +163,16 @@ select.btn { font-weight: 500; padding-right: 8px; }
 .tagedit input:focus { border-style: solid; border-color: var(--accent); width: 140px; }
 .banner { margin: 12px 28px 0; padding: 9px 12px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 12%, transparent); font-size: 13px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 
-.r-body { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 36px; padding: 24px 28px 80px; align-content: start; }
-@media (max-width: 1250px) { .r-body { grid-template-columns: minmax(0, 1fr); } .rail { display: none; } }
-.rail { position: sticky; top: 0; align-self: start; display: grid; gap: 22px; }
+/* Topics rail and extracts scroll independently, split by a resize handle */
+.r-body { flex: 1; min-height: 0; display: flex; }
+.rail-pane { width: var(--rail-w, 248px); flex: none; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; transition: width .18s ease; }
+.app.rail-closed .rail-pane { overflow: hidden; }
+.r-main { flex: 1; min-width: 0; overflow-y: auto; padding: 24px 28px 80px; }
+.rail-pane + .resizer + .r-main { padding-left: 22px; }
+@container (max-width: 600px) { .rail-pane, .r-body > .resizer { display: none; } .r-main { padding-left: 28px !important; } }
+.rail { display: grid; gap: 22px; align-content: start; padding: 24px 6px 40px 28px; }
 .label { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0 0 8px; }
+.label.with-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: -4px; }
 .toc { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
 .toc a { display: flex; gap: 8px; align-items: baseline; text-decoration: none; color: var(--ink); padding: 4px 8px; border-radius: 6px; font-size: 13px; }
 .toc a:hover { background: var(--sel); }

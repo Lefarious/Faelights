@@ -19,7 +19,9 @@ const ICON = {
   add: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15h6"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>',
   moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
-  monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>'
+  monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  paneClose: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M16 15l-3-3 3-3"/>',
+  paneOpen: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M14 9l3 3-3 3"/>'
 };
 // Brand artwork with light/dark variants (renderer/assets/brand/<name>-light|dark.svg)
 function brandImg(name, cls) {
@@ -278,6 +280,103 @@ async function exportLibrary(id) {
   if (dir) { toast(`Exported ${plural(files.length, "file")}`); fl.openFolder(dir); }
 }
 
+/* ---------------- layout: resizable, collapsible columns ---------------- */
+// Widths are px and persist in settings.layout. A closed pane shrinks to a STRIP-wide tab that reopens it.
+const PANES = {
+  side: { name: "sidebar", label: "Libraries", def: 236, min: 180, max: 380, key: "B" },
+  list: { name: "PDF list", label: "PDFs", def: 330, min: 240, max: 560, key: "⇧ B" },
+  rail: { name: "topics", label: "Topics", def: 248, min: 190, max: 420, key: "Alt B" }
+};
+const STRIP = 34, READER_MIN = 420;
+function layout() {
+  const L = S.db.settings.layout = S.db.settings.layout || {};
+  for (const k in PANES) {   // fill gaps in place: callers hold on to these objects while dragging
+    const p = L[k] = L[k] || {};
+    if (typeof p.w !== "number") p.w = PANES[k].def;
+    p.closed = !!p.closed;
+  }
+  return L;
+}
+const paneEl = k => k === "rail" ? document.querySelector(".rail-pane") : $(k);
+function applyLayout() {
+  const L = layout(), app = $("app");
+  const eff = k => L[k].closed ? STRIP : L[k].w;
+  let side = eff("side"), list = app.classList.contains("wide") ? 0 : eff("list");
+  // narrow window: borrow from the list, then the sidebar, so the reader keeps READER_MIN
+  let over = side + list + READER_MIN - innerWidth;
+  if (over > 0 && list && !L.list.closed) { const d = Math.min(over, list - PANES.list.min); list -= d; over -= d; }
+  if (over > 0 && !L.side.closed) side -= Math.min(over, side - PANES.side.min);
+  app.style.setProperty("--side-w", side + "px");
+  app.style.setProperty("--list-w", list + "px");
+  app.style.setProperty("--rail-w", eff("rail") + "px");
+  for (const k in PANES) app.classList.toggle(k + "-closed", L[k].closed);
+  document.querySelectorAll(".resizer").forEach(syncResizer);
+}
+function togglePane(k, open) {
+  const p = layout()[k]; p.closed = open == null ? !p.closed : !open;
+  // the clicked strip / hide button vanishes, so hand focus to its counterpart
+  const hadFocus = paneEl(k)?.contains(document.activeElement) && document.activeElement.matches(".strip, .pane-btn");
+  applyLayout(); save();
+  if (hadFocus) paneEl(k).querySelector(p.closed ? ".strip" : ".pane-btn")?.focus({ preventScroll: true });
+}
+function resetLayout() { S.db.settings.layout = null; applyLayout(); save(); }
+const shortcut = k => (process_platform() === "darwin" ? "⌘ " : "Ctrl ") + PANES[k].key;
+function paneBtn(k) {
+  const b = el("button", "pane-btn"); b.append(svg(ICON.paneClose));
+  b.title = `Hide ${PANES[k].name} (${shortcut(k)})`; b.setAttribute("aria-label", "Hide " + PANES[k].name);
+  b.onclick = () => togglePane(k, false); return b;
+}
+function strip(k, label) {
+  const b = el("button", "strip"); b.append(svg(ICON.paneOpen), el("span", null, label || PANES[k].label));
+  b.title = `Show ${PANES[k].name} (${shortcut(k)})`; b.setAttribute("aria-label", "Show " + PANES[k].name);
+  b.onclick = () => togglePane(k, true); return b;
+}
+function resizer(k) {
+  const h = el("div", "resizer"); h.dataset.pane = k; h.tabIndex = 0;
+  h.setAttribute("role", "separator"); h.setAttribute("aria-orientation", "vertical"); h.setAttribute("aria-label", "Resize " + PANES[k].name);
+  h.setAttribute("aria-valuemin", 0); h.setAttribute("aria-valuemax", PANES[k].max);
+  h.title = "Drag to resize · double-click to reset"; syncResizer(h); return h;
+}
+function syncResizer(h) {
+  const p = layout()[h.dataset.pane];
+  h.setAttribute("aria-valuenow", p.closed ? 0 : p.w); h.setAttribute("aria-valuetext", p.closed ? "Hidden" : p.w + " pixels");
+}
+// Drag a handle: every pane grows rightwards; dropping below about half its minimum snaps it closed
+addEventListener("pointerdown", e => {
+  const h = e.target.closest?.(".resizer"); if (!h || e.button !== 0) return;
+  e.preventDefault(); h.setPointerCapture(e.pointerId);
+  const k = h.dataset.pane, P = PANES[k], p = layout()[k];
+  const x0 = e.clientX, w0 = paneEl(k).getBoundingClientRect().width, keepW = p.w;
+  document.body.classList.add("resizing"); h.classList.add("active");
+  const move = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    const raw = w0 + ev.clientX - x0;
+    if (raw < (STRIP + P.min) / 2) Object.assign(p, { closed: true, w: keepW });   // reopens at its old width
+    else { p.closed = false; p.w = Math.round(Math.min(P.max, Math.max(P.min, raw))); }
+    applyLayout();
+  };
+  const up = ev => {
+    if (ev.pointerId !== e.pointerId) return;
+    removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up);
+    document.body.classList.remove("resizing"); h.classList.remove("active"); save();
+  };
+  addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up);
+});
+addEventListener("dblclick", e => {
+  const h = e.target.closest?.(".resizer"); if (!h) return;
+  Object.assign(layout()[h.dataset.pane], { w: PANES[h.dataset.pane].def, closed: false }); applyLayout(); save();
+});
+function resizerKey(e, h) {
+  const k = h.dataset.pane, P = PANES[k], p = layout()[k], step = e.shiftKey ? 48 : 16;
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); togglePane(k); return; }
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  e.preventDefault();
+  if (p.closed) { if (e.key === "ArrowRight") togglePane(k, true); return; }
+  const w = p.w + (e.key === "ArrowRight" ? step : -step);
+  if (w < P.min) togglePane(k, false); else { p.w = Math.min(P.max, w); applyLayout(); save(); }
+}
+addEventListener("resize", () => { if (S.db) applyLayout(); });
+
 /* ---------------- rendering: sidebar ---------------- */
 function navItem({ icon, name, count, current, onClick, onContext, onDrop, editing, onRename }) {
   const li = el("li");
@@ -302,7 +401,7 @@ function navItem({ icon, name, count, current, onClick, onContext, onDrop, editi
 }
 function renderSide() {
   const side = $("side"); side.replaceChildren();
-  const brand = el("div", "brand"); brand.append(brandImg("mark", "brand-mark"), el("h1", null, "faelights")); brand.setAttribute("aria-label", "Faelights");
+  const brand = el("div", "brand"); brand.append(brandImg("mark", "brand-mark"), el("h1", null, "faelights"), paneBtn("side")); brand.setAttribute("aria-label", "Faelights");
   const add = btn("primary add", "Add PDFs", "add"); add.onclick = chooseAndAdd;
   side.append(brand, add);
   const sc = el("div", "side-scroll");
@@ -354,7 +453,7 @@ function renderSide() {
   status.append(el("span", null, stale ? plural(stale, "PDF") + " changed" : plural(S.db.docs.length, "PDF")));
   const rb = el("button", "linkbtn", stale ? "Rescan" : "Rescan all"); rb.onclick = rescanAll; if (S.db.docs.length) status.append(rb);
   foot.append(status, themeSwitch());
-  side.append(foot);
+  side.append(foot, strip("side"));
 }
 
 // One icon per theme; clicking an icon applies it straight away
@@ -408,13 +507,15 @@ function renderProgress() {
 function renderList() {
   const list = $("list"); list.replaceChildren();
   $("app").classList.toggle("wide", S.view.kind === "search");
+  applyLayout();
   if (S.view.kind === "search") return;
   const head = el("div", "list-head");
   const h = el("h2", null, viewTitle());
   if (S.view.kind === "library") { h.ondblclick = () => { S.renaming = S.view.id; renderSide(); }; h.title = "Double-click to rename in the sidebar"; }
   const docsAll = visibleDocs();
   const hl = docsAll.reduce((n, d) => n + (d.count || 0), 0);
-  head.append(h, el("div", "sub", `${plural(docsAll.length, "PDF")} · ${plural(hl, "highlight")}`));
+  const hr = el("div", "head-row"); hr.append(h, paneBtn("list"));
+  head.append(hr, el("div", "sub", `${plural(docsAll.length, "PDF")} · ${plural(hl, "highlight")}`));
   const tools = el("div", "list-tools");
   const q = el("input", "search"); q.id = "dq"; q.placeholder = "Filter by title or tag"; q.value = S.docQuery; q.setAttribute("aria-label", "Filter PDFs");
   q.oninput = () => { S.docQuery = q.value; renderDocs(); };
@@ -426,7 +527,7 @@ function renderList() {
   if (S.busy) {
     const p = el("div", "progress"); p.id = "progress"; p.append(el("span")); const m = el("div", "meter"); m.append(el("i")); p.append(m); list.append(p); renderProgress();
   }
-  const docs = el("div", "docs"); docs.id = "docs"; list.append(docs);
+  const docs = el("div", "docs"); docs.id = "docs"; list.append(docs, strip("list", viewTitle()));
   renderDocs();
 }
 function renderDocs() {
@@ -552,7 +653,7 @@ function renderReader() {
   // body
   const body = el("div", "r-body"); body.id = "rbody";
   const rail = el("aside", "rail");
-  const main = el("div");
+  const main = el("div", "r-main");
   const entries = filtered(d);
   const groups = groupsOf(entries);
   const colours = new Map();
@@ -606,7 +707,12 @@ function renderReader() {
     for (const l of d.result.loose.filter(l => l.comment)) { const p = el("p", "note"); p.append(el("b", null, "Note p." + l.page), document.createTextNode(l.comment)); sec.append(p); }
     main.append(sec);
   }
-  body.append(rail, main); r.append(body);
+  if (rail.childElementCount) {
+    const lbl = rail.querySelector(".label"); lbl.classList.add("with-btn"); lbl.append(paneBtn("rail"));
+    const pane = el("div", "rail-pane"); pane.append(rail, strip("rail"));
+    body.append(pane, resizer("rail"));
+  }
+  body.append(main); r.append(body);
   if (S.jumpTo != null) {
     const target = $("e" + S.jumpTo); S.jumpTo = null;
     if (target) setTimeout(() => { target.scrollIntoView({ block: "center" }); target.classList.add("flash"); }, 30);
@@ -630,7 +736,7 @@ function renderBlank(r) {
     const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; const s = btn("", "Try a sample PDF"); s.onclick = addSample; row.append(a, s); b.append(row);
   } else b.append(el("h2", null, "Pick a PDF"), el("p", null, "Choose a PDF from the list to read its highlights."));
   const k = el("div", "keys"); const mod = process_platform() === "darwin" ? "⌘" : "Ctrl";
-  for (const [key, what] of [[`${mod} O`, "Add PDFs"], [`${mod} F`, "Search all highlights"], [`${mod} T`, "Full sentence / highlights only"], [`${mod} E`, "Export current PDF"], [`${mod} ⇧ N`, "New library"]]) {
+  for (const [key, what] of [[`${mod} O`, "Add PDFs"], [`${mod} F`, "Search all highlights"], [`${mod} T`, "Full sentence / highlights only"], [`${mod} E`, "Export current PDF"], [`${mod} ⇧ N`, "New library"], [`${mod} B`, "Show / hide sidebar"]]) {
     const kk = el("span"); for (const part of key.split(" ")) { kk.append(el("kbd", null, part), document.createTextNode(" ")); } k.append(kk, el("span", null, what));
   }
   b.append(k); r.append(b);
@@ -701,6 +807,7 @@ addEventListener("drop", e => { e.preventDefault(); hideDrop(); const files = [.
 
 addEventListener("keydown", e => {
   if (e.target.matches("input, select, textarea")) return;
+  if (e.target.matches(".resizer")) return resizerKey(e, e.target);
   const docs = S.view.kind === "search" ? [] : visibleDocs();
   const i = docs.findIndex(d => d.id === S.docId);
   if ((e.key === "ArrowDown" || e.key === "j") && docs.length) { e.preventDefault(); openDoc(docs[Math.min(docs.length - 1, i + 1)].id); }
@@ -717,6 +824,8 @@ fl.onMenu(ch => {
   if (ch === "rescan-all") rescanAll();
   if (ch === "search") go({ kind: "search" });
   if (ch === "toggle-mode") { S.db.settings.mode = S.db.settings.mode === "full" ? "only" : "full"; save(); renderReader(); }
+  if (ch.startsWith("pane:")) togglePane(ch.slice(5));
+  if (ch === "layout-reset") resetLayout();
 });
 fl.onOpenFiles(files => addPaths(files));
 fl.onTheme(t => { S.theme = t; renderSide(); });
@@ -725,6 +834,7 @@ fl.onTheme(t => { S.theme = t; renderSide(); });
   [S.db, S.theme] = await Promise.all([fl.loadDb(), fl.getTheme()]);
   const inbox = S.db.docs.filter(d => d.libraryId === "inbox").sort((a, b) => b.addedAt - a.addedAt);
   S.docId = inbox[0] ? inbox[0].id : null;
+  $("app").append(resizer("side"), resizer("list"));
   renderAll();
   fl.ready();
   const pending = await fl.pendingFiles();
