@@ -319,3 +319,4 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 .pv-noteed { width: 300px; padding: 10px; }
 .pv-noteed textarea { width: 100%; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); font-family: var(--font-read); font-size: 15px; line-height: 1.45; }
 .pv-noteed textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.r-meta .lib[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }

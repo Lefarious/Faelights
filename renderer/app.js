@@ -20,6 +20,7 @@ const ICON = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>',
   moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/>',
+  pub: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><circle cx="12" cy="13" r="2"/><path d="M8.5 18.5a3.5 3.5 0 0 1 7 0"/>',
   pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   view: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
@@ -243,6 +244,7 @@ async function docMenu(d) {
     ...(d.sourceMissing || !d.sourcePath ? [{ id: "relink", label: "Find original file…" }] : []),
     { type: "separator" },
     { id: "star", label: d.starred ? "Remove star" : "Star" },
+    { id: "mine", label: d.mine ? "Remove from My publications" : "Mark as my publication" },
     { label: "Move to", submenu: libs },
     { id: "export", label: "Export as Markdown…" },
     { id: "pdf", label: d.annotated ? "Save annotated PDF…" : "Save PDF copy…" },
@@ -261,10 +263,17 @@ async function docMenu(d) {
   if (r === "rescan") { await rescan(d); renderAll(); }
   if (r === "relink") relink(d);
   if (r === "star") { d.starred = !d.starred; save(); renderAll(); }
+  if (r === "mine") setMine(d, !d.mine);
   if (r.startsWith("move:")) moveDoc(d, r.slice(5));
   if (r === "export") exportDoc(d);
   if (r === "copy") copyText(docText(d, S.db.settings.fmt, false), "All extracts");
   if (r === "remove") removeDoc(d);
+}
+// "My publications": PDFs the user wrote, flagged on the doc like a star
+function setMine(d, on) {
+  if (!!d.mine === on) return;
+  d.mine = on; save(); renderAll();
+  toast(on ? "Added to My publications" : "Removed from My publications");
 }
 function process_platform() { return navigator.userAgent.includes("Mac") ? "darwin" : "other"; }
 function moveDoc(d, libId) {
@@ -498,6 +507,8 @@ function renderSide() {
   top.append(navItem({ icon: svg(ICON.all), name: "All PDFs", count: S.db.docs.length, current: S.view.kind === "all", onClick: () => go({ kind: "all" }) }));
   const starred = S.db.docs.filter(d => d.starred).length;
   top.append(navItem({ icon: svg(ICON.star), name: "Starred", count: starred, current: S.view.kind === "starred", onClick: () => go({ kind: "starred" }) }));
+  top.append(navItem({ icon: svg(ICON.pub), name: "My publications", count: S.db.docs.filter(d => d.mine).length, current: S.view.kind === "mine", onClick: () => go({ kind: "mine" }),
+    onDrop: e => { const d = doc(e.dataTransfer.getData("application/x-faelights-doc")); if (d) setMine(d, true); } }));
   sc.append(top);
 
   const h = el("h3"); h.append(el("span", null, "Libraries"));
@@ -569,6 +580,7 @@ function viewTitle() {
   const v = S.view;
   if (v.kind === "library") return lib(v.id)?.name || "Library";
   if (v.kind === "starred") return "Starred";
+  if (v.kind === "mine") return "My publications";
   if (v.kind === "tag") return "#" + v.tag;
   return "All PDFs";
 }
@@ -576,6 +588,7 @@ function visibleDocs() {
   const v = S.view; let docs = S.db.docs;
   if (v.kind === "library") docs = docs.filter(d => d.libraryId === v.id);
   if (v.kind === "starred") docs = docs.filter(d => d.starred);
+  if (v.kind === "mine") docs = docs.filter(d => d.mine);
   if (v.kind === "tag") docs = docs.filter(d => (d.tags || []).includes(v.tag));
   const q = S.docQuery.trim().toLowerCase();
   if (q) docs = docs.filter(d => (d.title + " " + d.fileName + " " + (d.tags || []).join(" ")).toLowerCase().includes(q));
@@ -627,6 +640,7 @@ function renderDocs() {
       const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; e.append(a);
       if (!S.db.docs.length) { const s = btn("", "Try a sample PDF"); s.onclick = addSample; e.append(s); }
     } else if (S.view.kind === "starred") e.append(el("b", null, "No starred PDFs"), el("span", null, "Star a PDF from its ⋯ menu to keep it here."));
+    else if (S.view.kind === "mine") e.append(el("b", null, "No publications yet"), el("span", null, "Mark a PDF you wrote with “Mark as mine” in the reader or its ⋯ menu, or drag it onto My publications."));
     else e.append(el("b", null, "No PDFs"), el("span", null, "Add PDFs to start a library."));
     box.append(e); return;
   }
@@ -766,6 +780,9 @@ function renderReader() {
   meta.append(lb, el("span", null, d.fileName), el("span", null, plural(d.pages, "page")), el("span", null, plural(d.count, "highlight")),
     el("span", null, "Added " + new Date(d.addedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })));
   const star = el("button", "lib", d.starred ? "★ Starred" : "☆ Star"); star.onclick = () => { d.starred = !d.starred; save(); renderAll(); }; meta.append(star);
+  const mine = el("button", "lib"); mine.append(svg(ICON.pub), document.createTextNode(d.mine ? "My publication" : "Mark as mine"));
+  mine.querySelector("svg").style.width = "13px"; mine.setAttribute("aria-pressed", !!d.mine);
+  mine.title = d.mine ? "Remove from My publications" : "Mark as my publication"; mine.onclick = () => setMine(d, !d.mine); meta.append(mine);
   const tools = el("div", "r-tools");
   const tagedit = el("div", "tagedit");
   for (const t of d.tags) { const g = el("span", "tg", t); const x = el("button", null, "×"); x.title = "Remove tag"; x.setAttribute("aria-label", "Remove tag " + t); x.onclick = () => { d.tags = d.tags.filter(z => z !== t); save(); renderAll(); }; g.append(x); tagedit.append(g); }
