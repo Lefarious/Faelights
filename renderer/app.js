@@ -23,7 +23,16 @@ const ICON = {
   pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
   paneClose: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M16 15l-3-3 3-3"/>',
-  paneOpen: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M14 9l3 3-3 3"/>'
+  paneOpen: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M14 9l3 3-3 3"/>',
+  trash: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  move: '<path d="M2 9V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10M9 16l3-3-3-3"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  download: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
+  undo: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  chevron: '<path d="m9 18 6-6-6-6"/>'
 };
 // Brand artwork with light/dark variants (renderer/assets/brand/<name>-light|dark.svg)
 function brandImg(name, cls) {
@@ -212,14 +221,151 @@ async function deleteLibrary(id) {
   if (S.view.kind === "library" && S.view.id === id) S.view = { kind: "library", id: "inbox" };
   save(); renderAll();
 }
-async function libraryMenu(id) {
-  const l = lib(id);
-  const items = [{ id: "rename", label: "Rename" }, { id: "export", label: "Export to folder…" }];
-  if (!l.system) items.push({ type: "separator" }, { id: "delete", label: "Delete library…" });
-  const r = await fl.popup(items);
+// at / opts: see openMenu()
+async function libraryMenu(id, at, opts) {
+  const l = lib(id), cur = S.view.kind === "library" && S.view.id === id;
+  const items = [{ id: "rename", label: "Rename", icon: "pen" }, { id: "export", label: "Export to folder…", icon: "export", hint: cur ? keyHint("E", true) : "" }];
+  if (!l.system) items.push({ type: "separator" }, { id: "delete", label: "Delete library…", icon: "trash", danger: true });
+  const r = await openMenu(at || document.activeElement, items, { label: l.name, ...opts });
   if (r === "rename") { S.renaming = id; renderSide(); }
   if (r === "export") exportLibrary(id);
   if (r === "delete") deleteLibrary(id);
+}
+
+/* ---------------- action menu ---------------- */
+// Themed in-app popover menu (the native fl.popup is no longer used). Items:
+//   { id, label, icon, hint, danger, disabled, checked, submenu: [items] } | { type: "separator" } | { type: "heading", label }
+// at: an element (menu opens below it) or { x, y } (opens at the pointer).
+// opts: { trigger: element focus returns to, keyboard: focus the first item, label: aria-label }.
+// Resolves with the chosen item's id, or null when dismissed.
+let MENU = null, kbdNav = false;
+addEventListener("keydown", () => { kbdNav = true; }, true);
+addEventListener("pointerdown", () => { kbdNav = false; }, true);
+const keyHint = (k, shift) => process_platform() === "darwin" ? (shift ? "⇧" : "") + "⌘" + k : "Ctrl+" + (shift ? "Shift+" : "") + k;
+function closeMenu() { if (MENU) MENU.close(null); }
+function openMenu(at, items, opts = {}) {
+  const isEl = at instanceof Element;
+  // a press on the open menu's own trigger closes it; swallow the click that follows
+  const sk = openMenu.skip; openMenu.skip = null;
+  if (isEl && sk && sk.at === at && performance.now() - sk.t < 600) return Promise.resolve(null);
+  closeMenu();
+  const trigger = opts.trigger || (isEl ? at : document.activeElement);
+  const kb = opts.keyboard ?? kbdNav;
+  return new Promise(resolve => {
+    const panels = []; let hoverT = 0, hoverFrom = 0, hoverItem = null;
+    const m = {};
+    const inside = t => panels.some(p => p.contains(t));
+    const live = p => [...p.querySelectorAll(".amenu-item:not([aria-disabled='true'])")];
+    const focusItem = r => r && r.focus({ preventScroll: true });
+    const onDown = e => { if (inside(e.target)) return; if (isEl && at.contains(e.target)) openMenu.skip = { at, t: performance.now() }; done(null); };
+    const onScroll = e => { if (!inside(e.target)) done(null); };
+    const onBlur = e => { if (e.type === "resize" || e.target === window) done(null); };
+    function done(id) {
+      if (MENU !== m) return;
+      MENU = null; clearTimeout(hoverT);
+      panels.forEach(p => p.remove());
+      removeEventListener("pointerdown", onDown, true); removeEventListener("scroll", onScroll, true);
+      removeEventListener("blur", onBlur); removeEventListener("resize", onBlur);
+      if (isEl) at.setAttribute("aria-expanded", "false");
+      if (trigger && trigger.isConnected) trigger.focus({ preventScroll: true });
+      resolve(id);
+    }
+    m.close = done;
+    const place = (p, r, mode) => {
+      const w = p.offsetWidth, h = p.offsetHeight, W = innerWidth, H = innerHeight, M = 6;
+      let x, y;
+      if (mode === "point") { x = r.x; y = r.y; if (x + w > W - M) x = r.x - w; if (y + h > H - M) y = r.y - h; }
+      else if (mode === "below") { x = r.left; y = r.bottom + 4; if (x + w > W - M) x = r.right - w; if (y + h > H - M) y = r.top - h - 4; }
+      else { x = r.right - 2; y = r.top - 5; if (x + w > W - M) x = r.left - w + 2; }
+      p.style.left = Math.max(M, Math.min(x, W - M - w)) + "px";
+      p.style.top = Math.max(M, Math.min(y, H - M - h)) + "px";
+    };
+    const closeFrom = level => {
+      while (panels.length > level) { const p = panels.pop(); p._parent?.setAttribute("aria-expanded", "false"); p.remove(); }
+    };
+    const openSub = (r, focusFirst) => {
+      const level = r.parentNode._level + 1;
+      if (panels[level]?._parent !== r) {
+        closeFrom(level);
+        const p = build(r._it.submenu, level, r);
+        r.setAttribute("aria-expanded", "true");
+        place(p, r.getBoundingClientRect(), "side");
+      }
+      if (focusFirst) focusItem(live(panels[level])[0]);
+    };
+    const activate = r => {
+      if (!r || r.getAttribute("aria-disabled") === "true") return;
+      if (r._it.submenu) openSub(r, true); else done(r._it.id ?? null);
+    };
+    const onKey = (e, p) => {
+      const its = live(p), i = its.indexOf(document.activeElement), cur = its[i], k = e.key;
+      e.stopPropagation(); hoverItem = null;
+      if (k === "ArrowDown") focusItem(its[(i + 1) % its.length]);
+      else if (k === "ArrowUp") focusItem(its[i <= 0 ? its.length - 1 : i - 1]);
+      else if (k === "Home") focusItem(its[0]);
+      else if (k === "End") focusItem(its[its.length - 1]);
+      else if (k === "Enter" || k === " ") activate(cur);
+      else if (k === "ArrowRight") { if (cur?._it.submenu) openSub(cur, true); }
+      else if (k === "ArrowLeft" || k === "Escape") { if (p._level) { closeFrom(p._level); focusItem(p._parent); } else if (k === "Escape") done(null); }
+      else if (k === "Tab") done(null);
+      else if (k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // type-ahead: next item whose label starts with the letter
+        const lk = k.toLowerCase(), n = its.length;
+        for (let j = 1; j <= n; j++) { const r = its[(i + j + n) % n]; if (r._it.label.toLowerCase().startsWith(lk)) { focusItem(r); break; } }
+      } else return;
+      e.preventDefault();
+    };
+    function build(list, level, parent) {
+      const p = el("div", "amenu"); p.setAttribute("role", "menu"); p.tabIndex = -1; p._level = level; p._parent = parent;
+      if (level) p.setAttribute("aria-label", parent._it.label); else if (opts.label) p.setAttribute("aria-label", opts.label);
+      const lead = list.some(it => it.icon || "checked" in it);
+      for (const it of list) {
+        if (it.type === "separator") { const s = el("div", "amenu-sep"); s.setAttribute("role", "separator"); p.append(s); continue; }
+        if (it.type === "heading") { const h = el("div", "amenu-head", it.label); h.setAttribute("role", "presentation"); p.append(h); continue; }
+        const r = el("div", "amenu-item" + (it.danger ? " danger" : "")); r.tabIndex = -1; r._it = it;
+        r.setAttribute("role", "checked" in it ? "menuitemcheckbox" : "menuitem");
+        if ("checked" in it) r.setAttribute("aria-checked", !!it.checked);
+        if (it.disabled) r.setAttribute("aria-disabled", "true");
+        if (lead) { const ic = el("span", "ai-ico"); if (it.checked) ic.append(svg(ICON.check)); else if (it.icon && !("checked" in it)) ic.append(svg(ICON[it.icon])); r.append(ic); }
+        r.append(el("span", "ai-label", it.label));
+        if (it.hint) r.append(el("span", "ai-hint", it.hint));
+        if (it.submenu) { r.setAttribute("aria-haspopup", "menu"); r.setAttribute("aria-expanded", "false"); const c = svg(ICON.chevron); c.classList.add("ai-sub"); r.append(c); }
+        // real pointer movement only: a panel opening under a resting pointer must not steal keyboard focus
+        r.onmousemove = e => {
+          if ((!e.movementX && !e.movementY) || hoverItem === r) return;
+          hoverItem = r; if (!it.disabled) focusItem(r);
+          clearTimeout(hoverT);
+          hoverFrom = level; hoverT = setTimeout(() => { if (MENU !== m) return; if (it.submenu && !it.disabled) openSub(r, false); else closeFrom(level + 1); }, 140);
+        };
+        r.onclick = e => { e.stopPropagation(); activate(r); };
+        p.append(r);
+      }
+      p.onkeydown = e => onKey(e, p);
+      // reaching a submenu cancels a pending close queued by its parent panel
+      p.onmouseenter = () => { if (hoverFrom < level) clearTimeout(hoverT); };
+      p.oncontextmenu = e => e.preventDefault();
+      document.body.append(p); panels[level] = p;
+      return p;
+    }
+    MENU = m;
+    const root = build(items, 0);
+    if (isEl) { at.setAttribute("aria-haspopup", "menu"); at.setAttribute("aria-expanded", "true"); place(root, at.getBoundingClientRect(), "below"); }
+    else place(root, at, "point");
+    addEventListener("pointerdown", onDown, true); addEventListener("scroll", onScroll, true);
+    addEventListener("blur", onBlur); addEventListener("resize", onBlur);
+    if (kb) focusItem(live(root)[0]); else root.focus({ preventScroll: true });
+  });
+}
+// ⋯ trigger shown on hover / focus-within / current rows
+function moreBtn(label) {
+  const b = el("button", "row-more"); b.append(svg(ICON.more)); b.title = label;
+  b.setAttribute("aria-label", label); b.setAttribute("aria-haspopup", "menu"); b.setAttribute("aria-expanded", "false");
+  return b;
+}
+// Shift+F10 / ContextMenu key on a focused row
+function menuKey(e, open) {
+  if (e.key !== "ContextMenu" && !(e.shiftKey && e.key === "F10")) return;
+  e.preventDefault(); e.stopPropagation(); open();
 }
 
 /* ---------------- doc actions ---------------- */
@@ -232,25 +378,28 @@ async function removeDoc(d) {
   if (S.docId === d.id) S.docId = null;
   save(); renderAll();
 }
-async function docMenu(d) {
+// at / opts: see openMenu(); with no anchor it opens below the focused element (the reader's ⋯ button)
+async function docMenu(d, at, opts) {
+  const cur = d.id === S.docId && S.view.kind !== "search";
   const libs = S.db.libraries.map(l => ({ id: "move:" + l.id, label: l.name, checked: l.id === d.libraryId }));
   const items = [
-    { id: "annotate", label: "Annotate" },
-    { id: "open", label: "Open PDF" },
-    { id: "reveal", label: process_platform() === "darwin" ? "Show in Finder" : "Show in folder" },
-    { id: "rescan", label: "Rescan highlights" },
-    ...(d.sourceMissing || !d.sourcePath ? [{ id: "relink", label: "Find original file…" }] : []),
+    { id: "annotate", label: "Annotate", icon: "pen" },
+    { id: "open", label: "Open PDF", icon: "open" },
+    { id: "reveal", label: process_platform() === "darwin" ? "Show in Finder" : "Show in folder", icon: "folder" },
+    { id: "rescan", label: "Rescan highlights", icon: "refresh" },
+    ...(d.sourceMissing || !d.sourcePath ? [{ id: "relink", label: "Find original file…", icon: "link" }] : []),
     { type: "separator" },
-    { id: "star", label: d.starred ? "Remove star" : "Star" },
-    { label: "Move to", submenu: libs },
-    { id: "export", label: "Export as Markdown…" },
-    { id: "pdf", label: d.annotated ? "Save annotated PDF…" : "Save PDF copy…" },
-    { id: "copy", label: "Copy all extracts" },
-    ...(d.annotated && d.sourcePath && !d.sourceMissing ? [{ id: "original", label: "Discard annotations made here…" }] : []),
+    { id: "star", label: d.starred ? "Remove star" : "Star", icon: "star" },
+    { label: "Move to", icon: "move", submenu: libs },
     { type: "separator" },
-    { id: "remove", label: "Remove from Faelights…" }
+    { id: "export", label: "Export as Markdown…", icon: "export", hint: cur ? keyHint("E") : "" },
+    { id: "pdf", label: d.annotated ? "Save annotated PDF…" : "Save PDF copy…", icon: "download" },
+    { id: "copy", label: "Copy all extracts", icon: "copy" },
+    { type: "separator" },
+    ...(d.annotated && d.sourcePath && !d.sourceMissing ? [{ id: "original", label: "Discard annotations made here…", icon: "undo", danger: true }] : []),
+    { id: "remove", label: "Remove from Faelights…", icon: "trash", danger: true, hint: cur ? "Del" : "" }
   ];
-  const r = await fl.popup(items);
+  const r = await openMenu(at || document.activeElement, items, { label: d.title, ...opts });
   if (!r) return;
   if (r === "annotate") annotate(d);
   if (r === "pdf") savePdfCopy(d);
@@ -463,8 +612,10 @@ function resizerKey(e, h) {
 addEventListener("resize", () => { if (S.db) applyLayout(); });
 
 /* ---------------- rendering: sidebar ---------------- */
-function navItem({ icon, name, count, current, onClick, onContext, onDrop, editing, onRename }) {
-  const li = el("li");
+// onMenu(at, opts): row actions — adds a ⋯ trigger, right-click and Shift+F10 / ContextMenu.
+// The <li> wraps the main button and the ⋯ sibling (buttons can't nest) and is the drop target.
+function navItem({ icon, name, count, current, onClick, onMenu, onDrop, editing, onRename }) {
+  const li = el("li", onMenu ? "has-more" + (current ? " is-current" : "") : null);
   if (editing) {
     const inp = el("input"); inp.value = name; inp.setAttribute("aria-label", "Library name");
     const done = commit => { if (inp.dataset.done) return; inp.dataset.done = 1; onRename(commit ? inp.value.trim() : null); };
@@ -476,13 +627,19 @@ function navItem({ icon, name, count, current, onClick, onContext, onDrop, editi
   const b = el("button"); b.setAttribute("aria-current", !!current);
   b.append(icon, el("span", "name", name)); if (count != null) b.append(el("span", "n", String(count)));
   b.onclick = onClick;
-  if (onContext) b.oncontextmenu = e => { e.preventDefault(); onContext(); };
-  if (onDrop) {
-    b.ondragover = e => { if (e.dataTransfer.types.includes("application/x-faelights-doc") || e.dataTransfer.types.includes("Files")) { e.preventDefault(); b.classList.add("dropping"); } };
-    b.ondragleave = () => b.classList.remove("dropping");
-    b.ondrop = e => { e.preventDefault(); e.stopPropagation(); b.classList.remove("dropping"); onDrop(e); hideDrop(); };
+  li.append(b);
+  if (onMenu) {
+    const mb = moreBtn("Actions for " + name); mb.onclick = () => onMenu(mb);
+    li.oncontextmenu = e => { e.preventDefault(); if (!MENU) onMenu({ x: e.clientX, y: e.clientY }, { trigger: b }); };
+    li.onkeydown = e => menuKey(e, () => onMenu(mb, { trigger: e.target === mb ? mb : b, keyboard: true }));
+    li.append(mb);
   }
-  li.append(b); return li;
+  if (onDrop) {
+    li.ondragover = e => { if (e.dataTransfer.types.includes("application/x-faelights-doc") || e.dataTransfer.types.includes("Files")) { e.preventDefault(); b.classList.add("dropping"); } };
+    li.ondragleave = () => b.classList.remove("dropping");
+    li.ondrop = e => { e.preventDefault(); e.stopPropagation(); b.classList.remove("dropping"); onDrop(e); hideDrop(); };
+  }
+  return li;
 }
 function renderSide() {
   const side = $("side"); side.replaceChildren();
@@ -511,7 +668,7 @@ function renderSide() {
       editing: S.renaming === l.id,
       onRename: v => { if (v) l.name = v; S.renaming = null; save(); renderAll(); },
       onClick: () => go({ kind: "library", id: l.id }),
-      onContext: () => libraryMenu(l.id),
+      onMenu: (at, o) => libraryMenu(l.id, at, o),
       onDrop: e => {
         const did = e.dataTransfer.getData("application/x-faelights-doc");
         if (did) { const d = doc(did); if (d) moveDoc(d, l.id); }
@@ -630,6 +787,8 @@ function renderDocs() {
     box.append(e); return;
   }
   for (const d of docs) {
+    // wrapper holds the card button and its ⋯ sibling (buttons can't nest)
+    const row = el("div", "doc-row" + (d.id === S.docId ? " is-current" : ""));
     const b = el("button", "doc"); b.setAttribute("aria-current", d.id === S.docId); b.draggable = true;
     const t = el("div", "t"); t.append(el("span", null, d.title)); if (d.starred) { const s = svg(ICON.star); s.classList.add("star"); s.style.width = "13px"; s.setAttribute("fill", "currentColor"); t.append(s); }
     const m = el("div", "m");
@@ -642,9 +801,11 @@ function renderDocs() {
     b.append(t, m);
     if (d.tags && d.tags.length) { const tg = el("div", "tags-inline"); for (const x of d.tags) tg.append(el("span", null, x)); b.append(tg); }
     b.onclick = () => openDoc(d.id);
-    b.oncontextmenu = e => { e.preventDefault(); docMenu(d); };
     b.ondragstart = e => { e.dataTransfer.setData("application/x-faelights-doc", d.id); e.dataTransfer.effectAllowed = "move"; };
-    box.append(b);
+    const mb = moreBtn("Actions for " + d.title); mb.onclick = () => docMenu(d, mb);
+    row.oncontextmenu = e => { e.preventDefault(); if (!MENU) docMenu(d, { x: e.clientX, y: e.clientY }, { trigger: b }); };
+    row.onkeydown = e => menuKey(e, () => docMenu(d, mb, { trigger: e.target === mb ? mb : b, keyboard: true }));
+    row.append(b, mb); box.append(row);
   }
 }
 
@@ -762,7 +923,11 @@ function renderReader() {
   const meta = el("div", "r-meta");
   const lb = el("button", "lib"); lb.append(svg(lib(d.libraryId)?.system ? ICON.inbox : ICON.lib), document.createTextNode(lib(d.libraryId)?.name || "Inbox"));
   lb.querySelector("svg").style.width = "13px"; lb.title = "Move to another library";
-  lb.onclick = async () => { const r = await fl.popup(S.db.libraries.map(l => ({ id: l.id, label: l.name, checked: l.id === d.libraryId }))); if (r) moveDoc(d, r); };
+  lb.setAttribute("aria-haspopup", "menu"); lb.setAttribute("aria-expanded", "false");
+  lb.onclick = async () => {
+    const r = await openMenu(lb, [{ type: "heading", label: "Move to" }, ...S.db.libraries.map(l => ({ id: l.id, label: l.name, checked: l.id === d.libraryId }))], { label: "Move to library" });
+    if (r) moveDoc(d, r);
+  };
   meta.append(lb, el("span", null, d.fileName), el("span", null, plural(d.pages, "page")), el("span", null, plural(d.count, "highlight")),
     el("span", null, "Added " + new Date(d.addedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })));
   const star = el("button", "lib", d.starred ? "★ Starred" : "☆ Star"); star.onclick = () => { d.starred = !d.starred; save(); renderAll(); }; meta.append(star);
