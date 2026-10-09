@@ -8,6 +8,20 @@ _Last updated: 2026-10-09 · Current sprint: 2 (not started) · main: green 23/2
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
 
+## To do
+
+**Next sprint (Sprint 2):** meta-enrich, which fills in paper details from CrossRef and arXiv, stays optional, and keeps working offline. Any of the proposals below can join it if you approve them.
+
+- [ ] **meta-enrich** (M, depends on F-011 ✓): fill and refresh Info fields from CrossRef (DOI) and the arXiv API. Runs when a paper is added by DOI/link and on demand from the Info card. Never blocks adding or opening a PDF; results are saved in `meta`, so they still show offline.
+
+Proposals waiting for approval (each can join Sprint 2):
+
+- [ ] [Risk · S] A mistyped link says "You're offline": tell "no connection" apart from "couldn't reach that site".
+- [ ] [Risk · S] nature.com bot-blocks downloads, so some open-access papers fail: add an alternative-source lookup (fits meta-enrich).
+- [ ] [Feature · S] Second test PDF (underline, strike-through, bookmark and wording topics, marks with no text) and run `npm test` in the GitHub build.
+- [ ] [Optimization · XS] Rename "Annotate" in the PDF menu to "View"; remove the unused native-menu IPC (`menu:popup`).
+- [ ] [Risk · S] Dev-only setting for a separate library folder, so a test copy can run while the real app is open.
+
 ## Backlog
 | id | requirements (short) | footprint | depends on | size | priority | status |
 |----|----------------------|-----------|------------|------|----------|--------|
