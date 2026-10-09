@@ -58,6 +58,23 @@ async function statOrNull(p) { try { return await fsp.stat(p); } catch (_) { ret
 /* ---------------- window ---------------- */
 const themeBg = () => nativeTheme.shouldUseDarkColors ? "#14121B" : "#F2F0F6";
 
+/* ---------------- theme ---------------- */
+// "system" follows the OS; "light"/"dark" force prefers-color-scheme in every window.
+// Kept in its own small file so it can be applied before the splash appears.
+const THEMES = ["system", "light", "dark"];
+const THEME_PATH = () => path.join(app.getPath("userData"), "theme.json");
+function loadTheme() {
+  try { const t = JSON.parse(fs.readFileSync(THEME_PATH(), "utf8")).theme; if (THEMES.includes(t)) return t; } catch (_) {}
+  return "system";
+}
+function applyTheme(t) {
+  nativeTheme.themeSource = t;
+  for (const w of BrowserWindow.getAllWindows()) w.setBackgroundColor(themeBg());
+  fsp.writeFile(THEME_PATH(), JSON.stringify({ theme: t }), "utf8").catch(err => console.error("theme save failed", err));
+  if (win && !win.isDestroyed()) win.webContents.send("theme", t);
+  buildAppMenu(); // keep the View → Theme radio items in sync
+}
+
 function createSplash() {
   splash = new BrowserWindow({
     width: 440, height: 280, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
@@ -119,6 +136,7 @@ else {
   });
   app.whenReady().then(() => {
     pendingOpen.push(...pdfArgs(process.argv.slice(1)));
+    nativeTheme.themeSource = loadTheme();
     buildAppMenu();
     createSplash();
     createWindow();
@@ -148,6 +166,7 @@ function buildAppMenu() {
     { label: "View", submenu: [
       { label: "Search All Highlights", accelerator: "CmdOrCtrl+F", click: send("search") },
       { label: "Toggle Full Sentence / Highlights Only", accelerator: "CmdOrCtrl+T", click: send("toggle-mode") },
+      { label: "Theme", submenu: THEMES.map(t => ({ label: t[0].toUpperCase() + t.slice(1), type: "radio", checked: nativeTheme.themeSource === t, click: () => applyTheme(t) })) },
       { type: "separator" },
       { role: "reload" }, { role: "toggleDevTools" }, { type: "separator" },
       { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" }
@@ -170,6 +189,8 @@ ipcMain.handle("db:load", async () => {
 });
 ipcMain.handle("db:save", async (_e, db) => { await saveDb(db); return true; });
 ipcMain.on("app:ready", revealMain);
+ipcMain.handle("theme:get", () => nativeTheme.themeSource);
+ipcMain.handle("theme:set", (_e, t) => { if (THEMES.includes(t)) applyTheme(t); return nativeTheme.themeSource; });
 ipcMain.handle("app:pending", () => { const p = pendingOpen; pendingOpen = []; return p; });
 
 ipcMain.handle("pdf:choose", async () => {

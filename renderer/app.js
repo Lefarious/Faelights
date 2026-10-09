@@ -16,7 +16,10 @@ const ICON = {
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   export: '<path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
   open: '<path d="M14 3h7v7M10 14 21 3M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>',
-  add: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15h6"/>'
+  add: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15h6"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>',
+  moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+  monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>'
 };
 // Brand artwork with light/dark variants (renderer/assets/brand/<name>-light|dark.svg)
 function brandImg(name, cls) {
@@ -39,8 +42,10 @@ const S = {
   busy: null,              // {label, done, total}
   renaming: null,          // library id being renamed
   editingTitle: false,
-  jumpTo: null             // entry index to scroll to after opening a doc
+  jumpTo: null,            // entry index to scroll to after opening a doc
+  theme: "system"          // system | light | dark (owned by the main process)
 };
+const THEMES = [["system", "Match system", "monitor"], ["light", "Light", "sun"], ["dark", "Dark", "moon"]];
 let saveTimer = null;
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => fl.saveDb(S.db), 250); }
 const doc = id => S.db.docs.find(d => d.id === id);
@@ -297,7 +302,7 @@ function navItem({ icon, name, count, current, onClick, onContext, onDrop, editi
 }
 function renderSide() {
   const side = $("side"); side.replaceChildren();
-  const brand = el("div", "brand"); brand.append(brandImg("mark", "brand-mark"), el("h1", null, "faelights")); brand.setAttribute("aria-label", "Faelights");
+  const brand = el("div", "brand"); brand.append(brandImg("mark", "brand-mark"), el("h1", null, "faelights"), themeButton()); brand.setAttribute("aria-label", "Faelights");
   const add = btn("primary add", "Add PDFs", "add"); add.onclick = chooseAndAdd;
   side.append(brand, add);
   const sc = el("div", "side-scroll");
@@ -349,6 +354,16 @@ function renderSide() {
   foot.append(el("span", null, stale ? plural(stale, "PDF") + " changed" : plural(S.db.docs.length, "PDF")));
   const rb = el("button", "linkbtn", stale ? "Rescan" : "Rescan all"); rb.onclick = rescanAll; if (S.db.docs.length) foot.append(rb);
   side.append(foot);
+}
+
+function themeButton() {
+  const [, label, icon] = THEMES.find(t => t[0] === S.theme) || THEMES[0];
+  const b = btn("icon theme-btn", null, icon, `Theme: ${label}`); b.setAttribute("aria-haspopup", "menu");
+  b.onclick = async () => {
+    const r = await fl.popup(THEMES.map(([id, l]) => ({ id, label: l, checked: id === S.theme })));
+    if (r) { S.theme = await fl.setTheme(r); renderSide(); }
+  };
+  return b;
 }
 
 function go(view) {
@@ -701,9 +716,10 @@ fl.onMenu(ch => {
   if (ch === "toggle-mode") { S.db.settings.mode = S.db.settings.mode === "full" ? "only" : "full"; save(); renderReader(); }
 });
 fl.onOpenFiles(files => addPaths(files));
+fl.onTheme(t => { S.theme = t; renderSide(); });
 
 (async function boot() {
-  S.db = await fl.loadDb();
+  [S.db, S.theme] = await Promise.all([fl.loadDb(), fl.getTheme()]);
   const inbox = S.db.docs.filter(d => d.libraryId === "inbox").sort((a, b) => b.addedAt - a.addedAt);
   S.docId = inbox[0] ? inbox[0].id : null;
   renderAll();

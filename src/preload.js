@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld("fl", {
   saveDb: db => ipcRenderer.invoke("db:save", db),
   pendingFiles: () => ipcRenderer.invoke("app:pending"),
   ready: () => ipcRenderer.send("app:ready"),
+  getTheme: () => ipcRenderer.invoke("theme:get"),
+  setTheme: t => ipcRenderer.invoke("theme:set", t),
   choosePdfs: () => ipcRenderer.invoke("pdf:choose"),
   importPdf: p => ipcRenderer.invoke("pdf:import", p),
   readPdf: doc => ipcRenderer.invoke("pdf:read", doc),
@@ -21,5 +23,6 @@ contextBridge.exposeInMainWorld("fl", {
   confirm: (message, detail, ok) => ipcRenderer.invoke("ask:confirm", { message, detail, ok }),
   pathFor: file => { try { return webUtils.getPathForFile(file); } catch (_) { return file.path || ""; } },
   onMenu: fn => ipcRenderer.on("menu", (_e, ch) => fn(ch)),
-  onOpenFiles: fn => ipcRenderer.on("open-files", (_e, files) => fn(files))
+  onOpenFiles: fn => ipcRenderer.on("open-files", (_e, files) => fn(files)),
+  onTheme: fn => ipcRenderer.on("theme", (_e, t) => fn(t))
 });
