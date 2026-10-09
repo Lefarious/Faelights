@@ -2,7 +2,7 @@
 > Last updated: 2026-10-09 · Last logged commit: a6750ae · Version: 1.0.0 (unreleased changes on main)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. In progress on branch `feature/pdf-annotator` (not merged): an in-app PDF viewer and annotator (F-007), which reverses the earlier "no annotating inside the app" non-goal. There are no automated tests, and installers are built in CI but not published.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. There are no automated tests, and installers are built in CI but not published.
 
 ## 2. Vision & scope
 - **Goals:**
@@ -130,7 +130,7 @@ There are no network APIs, analytics or telemetry. The app reads no environment 
 - **Annotator keys:** V/H/U/S/N/D pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
-### F-007 · PDF viewer and annotator · 2026-10-09 · built, verified on branch `feature/pdf-annotator` (not merged)
+### F-007 · PDF viewer and annotator · 2026-10-09 · shipped (merged to main from `feature/pdf-annotator`)
 - **Why:** the user wanted to view PDFs and add annotations inside Faelights, then export or download the annotated PDF, rather than switching to another reader to highlight.
 - **How:**
   - A viewer replaces the reader pane: pdf.js draws each page to a canvas (existing annotations included) with a selectable text layer. Pages render lazily as they scroll into view, and are dropped again when far away.
@@ -254,7 +254,7 @@ Context: F-007 needs to add annotations that other readers and our own extractor
 ## 9. Roadmap & deployment plan
 No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
 ### Now
-- Merge F-007 (PDF viewer and annotator) after the user's review. Status: waiting for approval.
+- (none set)
 ### Next
 - Smoke tests for `core.js` extraction against `renderer/sample.pdf` (it is already Node-exportable). Status: open.
 ### Later
@@ -264,6 +264,7 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - Online metadata lookup (CrossRef / arXiv) and editable Info fields; metadata in export frontmatter (follow-up to F-006).
 - Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
+- PDF viewer and annotator · 2026-10-09 · F-007
 - PDF info panel · 2026-10-09 · F-006
 - Resizable, collapsible columns + scrollbars · 2026-10-09 · F-005
 - Theme toggle · 2026-10-09 · F-004
