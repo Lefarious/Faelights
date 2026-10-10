@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-10 · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · push to GitHub awaits gate 2 (last push: v1.2.1)_
+_Last updated: 2026-10-10 · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
 - Capacity: 3 parallel features per sprint · minor bugs/polish (XS/S) are exempt and don't count
@@ -77,7 +77,7 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
   | order | id | merge sha | conflicts | tests after |
   |---|---|---|---|---|
   | 1 | T-014 onboarding-tour | 43721ca | none | 81/81 |
-- 2026-10-10: user gate 1 OK → merged into local main 43721ca; 81/81; tag `sprint-4-end`. Atlas synced at 43721ca; compass F-022, D-015. Push awaits gate 2.
+- 2026-10-10: user gate 1 OK → merged into local main 43721ca; 81/81; tag `sprint-4-end`. Atlas synced at 43721ca; compass F-022, D-015. User gate 2 OK → pushed e53e35e..f0168db; CI run 38038099830 green (tests + all three builds). No version tag yet.
 - Test rounds: 69 (baseline) → 78 → 81 (branch) → 81 (main 43721ca); new failures introduced: 0
 
 ### Sprint 3 — closed (2026-10-09)
