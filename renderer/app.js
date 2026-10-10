@@ -866,7 +866,7 @@ function renderDocs() {
     if (S.docQuery) e.append(el("b", null, "No matches"), el("span", null, "No PDF titles or tags here contain that text."));
     else if (S.view.kind === "library") {
       e.append(el("b", null, "Nothing here yet"), el("span", null, "Drag PDFs onto this window, or add them from your computer. Highlights are read straight away."));
-      const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; e.append(a, addIdBtn());
+      const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; e.append(a, addIdBtn()); e.dataset.tour = "start";
       if (!S.db.docs.length) { const s = btn("", "Try a sample PDF"); s.onclick = addSample; e.append(s); }
     } else if (S.view.kind === "starred") e.append(el("b", null, "No starred PDFs"), el("span", null, "Star a PDF from its ⋯ menu to keep it here."));
     else if (S.view.kind === "mine") e.append(el("b", null, "No publications yet"), el("span", null, "Mark a PDF you wrote with “Mark as mine” in the reader or its ⋯ menu, or drag it onto My publications."));
@@ -1194,7 +1194,7 @@ function renderBlank(r) {
   b.append(brandImg("mote", "blank-mote"));
   if (!S.db.docs.length) {
     b.append(el("h2", null, "Your highlights, organised"), el("p", null, "Add annotated PDFs and Faelights lists every highlight in reading order, grouped by the topic it sits under. Sort PDFs into libraries, tag them, and search across all of them."));
-    const row = el("div"); row.style.display = "flex"; row.style.gap = "8px"; row.style.flexWrap = "wrap";
+    const row = el("div"); row.style.display = "flex"; row.style.gap = "8px"; row.style.flexWrap = "wrap"; row.dataset.tour = "start";
     const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; const s = btn("", "Try a sample PDF"); s.onclick = addSample; row.append(a, addIdBtn(), s); b.append(row);
   } else b.append(el("h2", null, "Pick a PDF"), el("p", null, "Choose a PDF from the list to read its highlights."));
   const k = el("div", "keys"); const mod = process_platform() === "darwin" ? "⌘" : "Ctrl";
