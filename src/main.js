@@ -182,7 +182,8 @@ function buildAppMenu() {
       { role: "reload" }, { role: "toggleDevTools" }, { type: "separator" },
       { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" }
     ] },
-    { role: "windowMenu" }
+    { role: "windowMenu" },
+    { role: "help", submenu: [{ label: "Show Tour", click: send("tour") }] }
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

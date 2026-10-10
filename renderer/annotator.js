@@ -247,7 +247,7 @@ const Annot = (() => {
     const root = a.root = el("div", "pv");
     const head = el("div", "pv-head");
     const row = el("div", "pv-row");
-    const back = el("button", "btn"); back.append(svg(ICO.back), document.createTextNode("Highlights")); back.title = "Back to the extracted highlights (Esc)";
+    const back = el("button", "btn"); back.dataset.tour = "pv-back"; back.append(svg(ICO.back), document.createTextNode("Highlights")); back.title = "Back to the extracted highlights (Esc)";
     back.onclick = () => { close(); renderReader(); };
     const title = el("h2", "pv-title", a.d.title); title.title = a.d.title;
     const pageBox = el("div", "pv-page-box");
@@ -262,7 +262,7 @@ const Annot = (() => {
     zoom.append(zo, zl, zi, zf);
     const ub = iconBtn("undo", "Undo (Ctrl Z)"), rb = iconBtn("redo", "Redo (Ctrl Shift Z)");
     ub.onclick = undo; rb.onclick = redo;
-    const dl = btn("", "Download PDF"); dl.prepend(svg(ICO.download)); dl.title = "Save a copy of the PDF with its annotations"; dl.onclick = download;
+    const dl = btn("", "Download PDF"); dl.prepend(svg(ICO.download)); dl.title = "Save a copy of the PDF with its annotations"; dl.dataset.tour = "pv-dl"; dl.onclick = download;
     row.append(back, title, pageBox, zoom, ub, rb, dl);
 
     const tools = el("div", "pv-row pv-tools");
