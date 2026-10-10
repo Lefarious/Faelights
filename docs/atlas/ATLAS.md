@@ -1,5 +1,5 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-09 · Synced at commit: b146661
+> Last synced: 2026-10-10 · Synced at commit: 43721ca
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
@@ -13,11 +13,11 @@ Faelights is an Electron 31 desktop app with no bundler and no framework. Tests 
 | Electron main | `src/main.js` (`package.json` → `"main"`) | Single-instance lock, theme, app menu, splash + main `BrowserWindow`, all `ipcMain` channels |
 | Splash | `renderer/splash.html` | Frameless window from `createSplash()`; destroyed by `revealMain()` |
 | Preload | `src/preload.js` | Exposes `window.fl` bridge via `contextBridge` |
-| Renderer page | `renderer/index.html` | Loads `pdf.min.js` → `pdf-lib.min.js` → `core.js` → `annotator.js` → `images.js` → `order.js` → `exportfmt.js` → `app.js` |
+| Renderer page | `renderer/index.html` | Loads `pdf.min.js` → `pdf-lib.min.js` → `core.js` → `annotator.js` → `images.js` → `order.js` → `exportfmt.js` → `tour.js` → `app.js` |
 | Renderer boot | `renderer/app.js` `boot()` IIFE | Loads DB + theme, renders UI, sends `app:ready`, consumes pending "Open with" files |
 | CLI / OS file open | `src/main.js` `pdfArgs()`, `second-instance`, `open-file` | PDFs passed on argv or macOS "Open with" |
 | CI build | `.github/workflows/build.yml` | On `v*` tag: `electron-builder` for win/mac/linux, files attached to a draft GitHub Release |
-| Tests | `npm test` → `node --test "test/**/*.test.js"` | `test/core.test.js` (extraction on `sample.pdf`), `test/images.test.js` (image boxes on `test/fixtures/images.pdf`), `test/identify.test.js`, `test/metadata.test.js`, `test/reader-images.test.js`, `test/export.test.js` |
+| Tests | `npm test` → `node --test "test/**/*.test.js"` | `test/core.test.js` (extraction on `sample.pdf`), `test/images.test.js` (image boxes on `test/fixtures/images.pdf`), `test/identify.test.js`, `test/metadata.test.js`, `test/reader-images.test.js`, `test/export.test.js`, `test/tour.test.js` |
 
 ## Module map
 ```mermaid
@@ -38,7 +38,7 @@ graph LR
   MAIN -->|require| EP[exportPaths.js]
   MAIN -->|require| MD[metadata.js]
   TEST[tests<br/>test/] -.->|require| CORE & ID & EP & MD
-  TEST -.->|require order.js, exportfmt.js| UI
+  TEST -.->|require order.js, exportfmt.js, tour.js| UI
   TEST -.->|legacy build| PDFJS
   PKG[packaging<br/>package.json, CI] -.->|bundles| MAIN & UI & PDFJS
 ```
@@ -50,7 +50,7 @@ One deliberate two-way edge: renderer-ui ↔ annotator (app.js opens/mounts the 
 | preload-bridge | `src/preload.js` | Maps `window.fl.*` → IPC channels | electron `contextBridge`, `ipcRenderer`, `webUtils` | renderer-ui | [preload-bridge.md](modules/preload-bridge.md) |
 | extraction-core | `renderer/core.js` | Turns a pdf.js document into entries (sentences + highlight spans), topics, loose marks and image boxes (`images`) | pdf.js document API (passed in) | renderer-ui | [extraction-core.md](modules/extraction-core.md) |
 | annotator | `renderer/annotator.js` | In-app PDF viewer; writes Highlight/Underline/StrikeOut/Text/Ink annotations and Square image boxes with pdf-lib into the library copy; undo/redo | pdf-lib, pdfjs-dist, preload-bridge, extraction-core, renderer-ui helpers | renderer-ui | [annotator.md](modules/annotator.md) |
-| renderer-ui | `renderer/app.js`, `images.js`, `order.js`, `exportfmt.js`, `index.html`, `splash.html`, `styles.css`, `assets/brand/*`, `sample.pdf` | State, three-pane UI, splash page, brand artwork, theme button, search, image crops + ordering, export formatting, drag/drop, keyboard | preload-bridge, extraction-core, pdfjs-dist, @fontsource | — (top of stack) | [renderer-ui.md](modules/renderer-ui.md) |
+| renderer-ui | `renderer/app.js`, `images.js`, `order.js`, `exportfmt.js`, `tour.js`, `index.html`, `splash.html`, `styles.css`, `assets/brand/*`, `sample.pdf` | State, three-pane UI, splash page, brand artwork, theme button, search, image crops + ordering, export formatting, first-run guided tour, drag/drop, keyboard | preload-bridge, extraction-core, pdfjs-dist, @fontsource | — (top of stack) | [renderer-ui.md](modules/renderer-ui.md) |
 | packaging | `package.json`, `.github/workflows/build.yml` | Dependencies, scripts, electron-builder config, CI release builds | electron-builder | — | [packaging.md](modules/packaging.md) |
 | tests | `test/` | `node:test` suites: extraction snapshot on `sample.pdf`, image boxes on `fixtures/images.pdf`, identifier parsing and offline mapping, CrossRef/arXiv metadata mapping, reader ordering, export formatting and path safety | extraction-core, `src/identify.js`, `src/metadata.js`, pdfjs-dist legacy build | `npm test` | [tests.md](modules/tests.md) |
 
@@ -115,6 +115,9 @@ Leave (back button / Esc / another doc / search) → `Annot.close()` → after `
 ### Theme change
 Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → `fl.setTheme(t)` → IPC `theme:set` → `main.js applyTheme(t)` sets `nativeTheme.themeSource`, `setBackgroundColor` on every window, writes `userData/theme.json`, rebuilds the menu, pushes `theme` → `fl.onTheme` → `S.theme`, `renderSide()`. View → Theme radio items call `applyTheme` directly. All styling and `<picture>` brand art react through `prefers-color-scheme`.
 
+### First-run guided tour
+`boot()` → after 900 ms `maybeTour()` (also `tourSoon()` at the end of `renderReader` and after `annotate`) → picks the first chapter with a pending step whose target is on screen: `app`, else `viewer` if `Annot.isOpen()`, else `reader` (`Tour.ready(Tour.pending(S.db.settings, ch))`) → `startTour(ch)` → `Tour.start(ch, {steps: pending})` → overlay spotlights each step's `[data-tour]`/class target, skipping ones not on screen → each shown step `Tour.markShown` → `save()` (`settings.tour[ch]` = shown ids). Skip tour / Esc → `Tour.skipAll` (every chapter `true`). Finishing `app` → `tourSoon()` so an open PDF continues into `reader`. Steps skipped for a missing target stay pending and run as a short follow-up the first time it appears. Help › Show Tour → menu `tour` → `settings.tour = {}` → `startTour("app")`.
+
 ## Cross-cutting couplings
 | Kind | Key | Producers | Consumers |
 |---|---|---|---|
@@ -143,6 +146,10 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | Global (window) | `analyzePdf`, `ANALYZER_VERSION` (3), `imgStreamAt`, `imgSnapToFacts` | `core.js` (top-level) | `app.js analyzeBytes`, `outdated()` |
 | Global (window) | `Images` | `images.js` | `app.js figureEl`, `exportImages`, `removeDoc`, `rescan` |
 | Global (window) | `Order` | `order.js` | `app.js renderReader` / `filteredImages` / `withImages`, `exportfmt.js` |
+| Global (window) | `Tour` | `tour.js` | `app.js` guided-tour section (`startTour`, `maybeTour`) |
+| DOM hooks | `data-tour="…"` attributes (`add`, `add-id`, `search`, `all`, `starred`, `mine`, `libraries`, `foot`, `pane`, `list-tools`, `start`, `view`, `copy`, `export`, `pv-back`, `pv-dl`) | `app.js`, `annotator.js` | `tour.js CHAPTERS` selectors (checked by `test/tour.test.js`) |
+| Settings key | `settings.tour` (`{app\|reader\|viewer: [shown step ids] or true}`; no main default) | `app.js startTour` via `Tour.markShown` / `skipAll`; menu `tour` resets to `{}` | `app.js maybeTour` via `Tour.pending` |
+| Menu channel | `tour` (Help › Show Tour) | `main.js` app menu | `app.js fl.onMenu` |
 | Global (window) | `ExportFmt` | `exportfmt.js` | `app.js` export section (`wrapHl`/`entryLines`/`groupsOf` are aliases) |
 | Result field | `result.images[]` `{id, n, page, rect, color, comment, at, topic}` | `core.js analyzePdf` | `order.js`, `images.js`, `exportfmt.js`, `app.js` |
 | PDF annotation | `Square` (`/Subj (Image)`, border-only) = image box | `annotator.js startBox` (or other apps) | `core.js` (`images`), `images.js` (crop by `/Rect`) |
@@ -192,6 +199,7 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | `renderer/images.js` | renderer-ui |
 | `renderer/index.html` | renderer-ui |
 | `renderer/order.js` | renderer-ui |
+| `renderer/tour.js` | renderer-ui |
 | `renderer/sample.pdf` | renderer-ui |
 | `renderer/splash.html` | renderer-ui |
 | `renderer/styles.css` | renderer-ui |
@@ -207,6 +215,7 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 | `test/helpers/pdf.js` | tests |
 | `test/identify.test.js` | tests |
 | `test/metadata.test.js` | tests |
+| `test/tour.test.js` | tests |
 | `test/images.test.js` | tests |
 | `test/reader-images.test.js` | tests |
 

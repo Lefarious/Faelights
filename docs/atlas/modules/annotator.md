@@ -1,5 +1,5 @@
 # Module: annotator
-> Path: renderer/annotator.js · Last synced commit: 40bb2c7 · Related features: F-007, F-015
+> Path: renderer/annotator.js · Last synced commit: 43721ca · Related features: F-007, F-015, F-022
 
 ## Purpose
 The in-app PDF viewer and annotator. It renders a doc's pages with pdf.js (canvas + selectable text layer), and writes real PDF annotations (Highlight, Underline, StrikeOut, Text notes, Ink, Square image boxes) into the bytes with pdf-lib. Each edit is saved straight to the library's stored copy. It does not extract highlights itself: when it closes after changes, it calls `rescan()` from renderer-ui, which runs extraction-core.
@@ -28,7 +28,7 @@ The global `Annot` (an IIFE that returns these):
 - **Exports:** global `Annot`
 - **Key internals:** `appearance(sub, geo)` / `setAppearance` (builds `/AP /N` form XObjects; Highlight uses `/BM /Multiply`), `addAnnot`, `deleteAnnot` (also drops `/Popup` and the AP stream), `recolorAnnot` (rewrites `/C` and regenerates the AP), `setNote` (sets `/Contents`, drops `/RC`), `refOf(id)` (pdf.js id `"12R"` → `PDFRef`), `edit(pages, fn)` → `swap(a, bytes, pages)` → `persist(a)`, `history()`, `drawPage`/`undraw` (IntersectionObserver, ±900 px), `loadAnnots`, `drawOverlay`, `selectionByPage` + `quadsFor` (text-node rects → merged lines → PDF quads in Acrobat order TL,TR,BL,BR), `markSelection`, `startInk`, `startBox` (Capture image tool `I`: drag → border-only `Square` with `/C`, `/BS /W 1.5` (`BOX_W`), `/CA 1`, `/Subj (Image)`, no `/IC`; AP is a stroked rect inset by half the border), `pickAt` (a Square is picked only within 6 CSS px of its border, or anywhere inside while the Capture tool is active), `selectionPop`/`annotPop`/`noteEditor`
 - **Side effects:** a window capture `pointerdown` listener that closes `.pv-pop`; a `ResizeObserver` on the scroller (fit-width); `pointermove/up` listeners while drawing
-- **Change impact:** quad geometry must keep covering `baseline + 0.35·size`, the point extraction-core hit-tests, or new marks won't be extracted. `SUBTYPE` names must stay inside core.js `MARK_TYPES` to become extracts (Ink and Text aren't extracted). Class names are string-coupled to `styles.css` (`.pv*`, `.textLayer`, `.pv-boxdraw`, `.pv-selbox.box`). Squares become `result.images` in core.js; their `/Rect` is what `images.js` crops.
+- **Change impact:** quad geometry must keep covering `baseline + 0.35·size`, the point extraction-core hit-tests, or new marks won't be extracted. `SUBTYPE` names must stay inside core.js `MARK_TYPES` to become extracts (Ink and Text aren't extracted). Class names are string-coupled to `styles.css` (`.pv*`, and to `tour.js` viewer steps: `.pv-seg`, `.pv-swatches`, `.pv-page-box`, `.pv-zoom`, plus `data-tour` hooks `pv-back` (← Highlights) and `pv-dl` (Download PDF); `.textLayer`, `.pv-boxdraw`, `.pv-selbox.box`). Squares become `result.images` in core.js; their `/Rect` is what `images.js` crops.
 
 ## Gotchas
 - It must load **before** `app.js` (`index.html`): `boot()` can resume between script tags and call `renderReader`, which references `Annot`. It only touches app.js globals at call time.

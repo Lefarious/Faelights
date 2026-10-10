@@ -1,5 +1,5 @@
 # Module: main-process
-> Path: src/main.js, src/identify.js, src/exportPaths.js, src/metadata.js · Last synced commit: 736ffd2 · Related features: F-001, F-003, F-004, F-005, F-007, F-008, F-011, F-014, F-016, F-018, F-019, F-020
+> Path: src/main.js, src/identify.js, src/exportPaths.js, src/metadata.js · Last synced commit: 43721ca · Related features: F-001, F-003, F-004, F-005, F-007, F-008, F-011, F-014, F-016, F-018, F-019, F-020
 
 ## Purpose
 This is the Electron main process. It owns the on-disk library (`faelights.json` plus copied PDFs), the splash and main windows, the theme, the native app menu, native dialogs, context-menu popups, shell actions, the clipboard, and the only network access in the app: downloading a PDF when the user submits an identifier (DOI, arXiv ID, PMID, PMCID, ISBN, ADS Bibcode) or a link (`pdf:fetch`), and fetching a paper's details from CrossRef or arXiv when the user asks (`meta:lookup`). It does not parse PDFs or hold UI state. The renderer sends the whole DB object and this module persists it as-is.
@@ -30,7 +30,7 @@ IPC handlers, called only through `preload.js`:
 - `theme:get` → `"system"|"light"|"dark"`; `theme:set(t)` → applies and returns the theme
 - `app:ready` (one-way `ipcMain.on`) → `revealMain()`
 
-Pushes to the renderer: `menu` (channel strings; File menu adds `add-id` on CmdOrCtrl+Shift+O; View menu adds `pane:side`, `pane:list`, `pane:rail`, `layout-reset`), `open-files` (path arrays), `theme`, and `fetch-progress` (`{stage: find|download|import}`).
+Pushes to the renderer: `menu` (channel strings; File menu adds `add-id` on CmdOrCtrl+Shift+O; View menu adds `pane:side`, `pane:list`, `pane:rail`, `layout-reset`; Help menu (`role: help`) sends `tour` from Show Tour), `open-files` (path arrays), `theme`, and `fetch-progress` (`{stage: find|download|import}`).
 
 ## Dependencies
 - **Uses:** electron (`app`, `BrowserWindow`, `ipcMain`, `dialog`, `shell`, `Menu`, `clipboard`, `nativeTheme`, `session`, `net`), node `fs`, `path`, `crypto`; internal `./identify`

@@ -1,11 +1,11 @@
 # Module: renderer-ui
-> Path: renderer/ (app.js, images.js, order.js, exportfmt.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: 736ffd2 · Related features: F-001…F-011, F-013, F-014, F-015, F-016
+> Path: renderer/ (app.js, images.js, order.js, exportfmt.js, tour.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: 43721ca · Related features: F-001…F-011, F-013, F-014, F-015, F-016, F-022
 
 ## Purpose
 This is the whole user interface plus the splash page and brand artwork. It holds app state (`S`), renders the three panes (library sidebar, PDF list, extract reader) and the search view, and formats exports. It drives PDF import, rescan and analysis by combining `window.fl` (OS access) with `analyzePdf` (extraction). It does not touch the filesystem directly.
 
 ## Public interface
-None. This is the top of the stack. It reacts to DOM events, `fl.onMenu` (including `pane:side|list|rail`, `layout-reset` and `add-id`), `fl.onOpenFiles` and `fl.onFetchProgress`.
+None. This is the top of the stack. It reacts to DOM events, `fl.onMenu` (including `pane:side|list|rail`, `layout-reset`, `add-id` and `tour`), `fl.onOpenFiles` and `fl.onFetchProgress`.
 
 ## Dependencies
 - **Uses:** preload-bridge (`fl.*`), extraction-core (`analyzePdf`, `result.images`), annotator (`Annot.open/close/mount/key/isOpen/docId`), pdfjs-dist (`pdfjsLib` global, worker at `../node_modules/pdfjs-dist/build/pdf.worker.min.js`), @fontsource (Figtree, Newsreader, Young Serif through CSS `@import`)
@@ -14,11 +14,13 @@ None. This is the top of the stack. It reacts to DOM events, `fl.onMenu` (includ
 ## Internal structure
 ```mermaid
 graph TD
-  html[index.html] --> pdfjs[pdf.min.js] --> pdflib[pdf-lib.min.js] --> core[core.js] --> annot[annotator.js] --> imgs[images.js] --> order[order.js] --> efmt[exportfmt.js] --> app[app.js]
+  html[index.html] --> pdfjs[pdf.min.js] --> pdflib[pdf-lib.min.js] --> core[core.js] --> annot[annotator.js] --> imgs[images.js] --> order[order.js] --> efmt[exportfmt.js] --> tour[tour.js] --> app[app.js]
   app -->|Images.crop / png| imgs
   app -->|Order.withImages / groupItems / filterImages| order
   app -->|ExportFmt.docText / docHtml / imageLines| efmt
   efmt -->|Order.withImages| order
+  app -->|Tour.start / pending / markShown / skipAll / ready| tour
+  tour -.->|querySelector on data-tour hooks + classes| app
   html --> css[styles.css]
   app -->|fetches via fl.importPdf path| sample[sample.pdf]
   app -->|brandImg| brand[assets/brand/*.svg]
@@ -36,13 +38,15 @@ graph TD
 - **layout:** `PANES` (min/max/default widths), `STRIP`, `READER_MIN`, `layout()` (normalises `settings.layout` in place), `applyLayout()`, `togglePane(k, open?)`, `resetLayout()`, `paneBtn(k)`, `strip(k, label?)`, `resizer(k)`, `syncResizer(h)`, `resizerKey(e, h)`, window `pointerdown`/`dblclick`/`resize` listeners
 - **render:** `renderSide`/`themeSwitch`/`navItem`/`go`, `renderList` (header `.head-acts`: Add PDFs, add-by-link, hide pane)/`renderDocs`/`visibleDocs`/`renderProgress`, `openDoc`, `renderReader`/`infoEl`/`infoRows`/`fmtDate`/`quoteEl`/`markEl`/`appendHits`/`TOPIC_SOURCE`/`filtered`/`filteredImages`/`withImages`/`spanCount`/`figureEl(d, img)` (Copy button + right-click menu: Copy image / Show page)/`copyImage(d, img)` (`Images.png` → `fl.copyImage`)/`IMG_ICON`/`renderBlank`, `renderSearch`/`renderResults`, `renderAll`
 - **add by identifier:** `addIdBtn(compact)`, `openAddId(prefill?)` (dialog with an auto-growing `<textarea>`; Enter submits, Shift+Enter adds a line; prefills from the clipboard when `looksLikeIds`), `closeAddId`, `addIdHint` (`fl.parseIds` → one label, or "N recognised · M not recognised"; Offline pill), `addIdBusy`, `addIdFail(reason, landingUrl)`, `addIdActs`, `ADD_OPEN` / `ADD_FAIL` (incl. `no-free-copy`), `submitAddId` (one item → the single flow; several → `addIdBatch(D)`: one `fl.fetchPdf` at a time, a status row per item via `addIdRow`, `stopAddBatch` / `addIdCancelLabel` for Cancel), `looksLikeIds(items)` (at least half recognised), `fl.onFetchProgress` handler
-- **input:** `chooseAndAdd`, `addSample`, window drag/drop (a dropped `text/uri-list` opens the add-by-identifier dialog with all its lines), `paste` (parseable text outside inputs opens it), keydown, `fl.onMenu`, `fl.onOpenFiles`, `fl.onTheme`, `boot()` (ends with `fl.ready()`)
+- **guided tour:** `startTour(name)` (passes `Tour.pending` steps; `onShow` → `Tour.markShown` + `save()`; Skip → `Tour.skipAll`; finishing the app chapter → `tourSoon()`), `maybeTour()` (no tour while the add dialog, an action menu or title editing is open; picks app → viewer (if `Annot.isOpen()`) → reader by `Tour.ready(Tour.pending(…))`), `tourSoon()` (500 ms debounce; called at the end of `renderReader` and from `annotate`). `data-tour` hooks: `add`, `add-id`, `search`, `all`, `starred`, `mine` (via `navItem({tour})`), `libraries` (h3 + ul), `foot`, `pane` (sidebar `paneBtn`), `list-tools`, `start` (`.list-empty` of an empty library and the `renderBlank` button row), `view`, `copy`, `export`
+- **input:** `chooseAndAdd`, `addSample`, window drag/drop (a dropped `text/uri-list` opens the add-by-identifier dialog with all its lines), `paste` (parseable text outside inputs opens it), keydown, `fl.onMenu` (`tour` → clears `settings.tour`, `startTour("app")`), `fl.onOpenFiles`, `fl.onTheme`, `boot()` (ends with `fl.ready()`, then `maybeTour` after 900 ms); the `paste` handler ignores pastes while the tour is open
 
 ## Data & state owned
 - `S` (in memory): `db` (the mirror of `faelights.json`), `view` (`{kind: library|all|starred|mine|tag|search, id?, tag?}`), `docId`, `docQuery`, `searchQuery`, `searchLib`, `off` (hidden colour keys), `busy` (progress), `renaming`, `editingTitle`, `jumpTo`, `theme` (a mirror of the main-process theme)
 - Doc record fields it writes: `origin` (`{kind: doi|arxiv|pmcid|pmid|isbn|ads|url, value, url}`, only on docs added by identifier, which have `sourcePath: null`), `id, libraryId, title, fileName, sourcePath, storedPath, hash, addedAt, tags[], starred, scannedMtime, scannedAt, meta, result, pages, count, colours[]`, `annotated` (cleared by `useOriginal`; set by annotator), and `mine` (boolean, "My publications"; set by `setMine`), `lookup` (`{source: crossref|arxiv, id, at, meta}`, written by `lookUp`; `rescan` leaves it alone) and `titleEdited` (set when the user renames a doc)
 - `meta` (optional; missing on docs scanned before F-006): `{title, authors[], abstract, publication, volume, issue, pages, date, doi, arxiv, issn, isbn, publisher, url, rights, keywords[], creator, producer, created, modified, pdfVersion}`. Empty fields are omitted; a failed lazy read leaves `{}` in memory only
 - Library record: `{id, name, createdAt, system?}`
+- `S.db.settings.tour` = `{app|reader|viewer: [step ids shown] | true}` (`true` after Skip tour; `{}` after Help › Show Tour; missing on a fresh install) — written through `Tour.markShown` / `Tour.skipAll`
 - `S.db.settings.mode | fmt | sort | layout | info | annotColor | images` (`fmt` adds `html`; `images` = boolean "With images", read by the reader and export; `info` = boolean, Info card shown; `layout` = `{side,list,rail: {w, closed}}`; `annotColor` written by annotator)
 
 ## Files
@@ -50,7 +54,7 @@ graph TD
 ### `renderer/app.js`
 - **Role:** UI controller and view layer
 - **Exports:** none (browser script; all functions are globals in the page)
-- **Imports (internal):** globals `fl` (preload), `analyzePdf` + `ANALYZER_VERSION` (core.js), `Images` (images.js), `Order` (order.js), `ExportFmt` (exportfmt.js), `pdfjsLib`
+- **Imports (internal):** globals `fl` (preload), `analyzePdf` + `ANALYZER_VERSION` (core.js), `Images` (images.js), `Order` (order.js), `ExportFmt` (exportfmt.js), `Tour` (tour.js), `pdfjsLib`
 - **Used by:** `index.html`
 - **Side effects:** every persistence and OS call goes through `fl.*`. It sets `pdfjsLib.GlobalWorkerOptions.workerSrc`, and registers window `dragenter/dragleave/dragover/drop/keydown/pointerdown/dblclick/resize` listeners. `boot()` appends the sidebar and list `.resizer` handles to `#app`; `renderReader` adds the rail one.
 - **Change impact:** export output format (`ExportFmt.docText`, `entryLines`) is what users paste into Notion and Obsidian. `ckey()` colour bucketing (rounded to multiples of 24) drives both list swatches and reader colour filters. DB field renames need a migration in `main.js loadDb`.
@@ -76,13 +80,21 @@ graph TD
 - **Used by:** `app.js` export section, `test/export.test.js`
 - **Change impact:** with no images, md/obsidian/plain output must stay byte-identical to the output before F-016 (tested).
 
+### `renderer/tour.js`
+- **Role:** first-run guided tour: step data per chapter plus the overlay that spotlights each step's target. Global `Tour`; `module.exports` for tests (the step data and helpers load in Node; the overlay needs a DOM).
+- **Exports:** `CHAPTERS` (`app`, `reader`, `viewer`: `[{id, sel?, first?, title, body, keys?}]`; `id` = slugged title; no `sel` = centred card; `first` = spotlight only the first match), `NAMES`, `pending(settings, ch)`, `seen(settings, ch)`, `markShown(settings, ch, step)`, `skipAll(settings)`, `ready(steps, hasFn?)` (some step's target is on screen), `nextIndex(steps, from, dir, has)`, `progress(steps, i, has)`, `start(name, {steps, onShow, onEnd, extra})`, `end(skipped, quiet)`, `isOpen()`, `chapter()`
+- **Imports (internal):** none. At runtime it reads the DOM by selector: `[data-tour=…]` hooks set in `app.js`/`annotator.js`, and classes/ids `#docs`, `.doc-row`, `.r-title`, `.r-meta`, `.info-btn`, `.r-tools .seg`, `.img-btn`, `#fmt`, `.rail .chips`, `.rail .toc`, `.r-main .ex`, `.copy1`, `.pv-seg`, `.pv-swatches`, `.pv-page-box`, `.pv-zoom`
+- **Used by:** `app.js` guided-tour section, `test/tour.test.js`
+- **Side effects:** while open, appends `.tour-shield` (eats clicks), `.tour-back` (dim layer, `clip-path` hole over the target), `.tour-ring` and `.tour-pop` (role `dialog`) to `<body>`; a capture-phase window `keydown` listener that stops every key reaching the page (←/→/Enter/Esc/Tab handled); re-places every 250 ms and on resize; moves on when the target disappears; adds `.tour-target` to spotlit elements (shows the hover-only `.copy1`). Restores focus on end.
+- **Change impact:** renaming a class or `data-tour` hook it targets silently skips that step (guarded by `test/tour.test.js`). Rewording a step title changes its id, so that step shows again for users who saw it.
+
 ### `renderer/index.html`
 - **Role:** page shell with three mount points `#side`, `#list`, `#reader`, plus `#drop` overlay (with the mote `<picture>`) and `#toast`. It links the light/dark favicons.
 - **Side effects:** CSP `default-src 'self'; script-src 'self'; worker-src 'self' blob:` and others. No inline scripts are allowed.
-- **Change impact:** script order matters: `pdf.min.js` → `pdf-lib.min.js` → `core.js` → `annotator.js` → `images.js` → `order.js` → `exportfmt.js` → `app.js` (`exportfmt.js` needs `Order`). `annotator.js` must come before `app.js` because `boot()` can resume between scripts.
+- **Change impact:** script order matters: `pdf.min.js` → `pdf-lib.min.js` → `core.js` → `annotator.js` → `images.js` → `order.js` → `exportfmt.js` → `tour.js` → `app.js` (`exportfmt.js` needs `Order`). `annotator.js` must come before `app.js` because `boot()` can resume between scripts.
 
 ### `renderer/styles.css`
-- **Role:** all styling. Design tokens on `:root` with a dark override, the three-column grid `.app` sized by `--side-w`/`--list-w` (`.wide` hides the list during search), column handles `.resizer`, collapsed `.strip`s and `*-closed` classes, `.pane-btn`, the reader split `.r-body` → `.rail-pane` + `.r-main` (each scrolls on its own; rail hidden by a `@container` query under 600 px), global `::-webkit-scrollbar` styling, and component classes used by `app.js` (`.amenu*` action menu, `.row-more` ⋯ triggers, `.doc-row` card wrapper, the add-by-identifier dialog block (`.addid*`, incl. the batch status rows), `.nav`, `.doc`, `.r-head`, `.group`, `.ex`, `mark.u`/`mark.s`, `.chip`, `.info`/`.info-grid`/`.info-btn`, `.s-hit`, `.toast`, `.drop`…), and the annotator's `.pv*` classes plus a trimmed copy of pdf.js's `.textLayer` rules. `.pg` is now a `button` (page number opens the viewer)
+- **Role:** all styling. Design tokens on `:root` with a dark override, the three-column grid `.app` sized by `--side-w`/`--list-w` (`.wide` hides the list during search), column handles `.resizer`, collapsed `.strip`s and `*-closed` classes, `.pane-btn`, the reader split `.r-body` → `.rail-pane` + `.r-main` (each scrolls on its own; rail hidden by a `@container` query under 600 px), global `::-webkit-scrollbar` styling, and component classes used by `app.js` (`.amenu*` action menu, `.row-more` ⋯ triggers, `.doc-row` card wrapper, the add-by-identifier dialog block (`.addid*`, incl. the batch status rows), the guided tour block (`.tour-shield`, `.tour-back`, `.tour-ring`, `.tour-pop`, `.tour-step`, `.tour-acts`, `.copy1.tour-target`), `.nav`, `.doc`, `.r-head`, `.group`, `.ex`, `mark.u`/`mark.s`, `.chip`, `.info`/`.info-grid`/`.info-btn`, `.s-hit`, `.toast`, `.drop`…), and the annotator's `.pv*` classes plus a trimmed copy of pdf.js's `.textLayer` rules. `.pg` is now a `button` (page number opens the viewer)
 - **Imports:** `@fontsource` CSS from `../node_modules/…`
 - **Change impact:** class names are string-coupled to `el(tag, cls)` calls in `app.js`. Highlight colour reaches CSS as the `--mc` custom property (`"r g b"`).
 

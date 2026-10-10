@@ -1,14 +1,14 @@
 # Module: tests
-> Path: test/ · Last synced commit: 736ffd2 · Related features: F-011, F-012, F-014, F-015, F-016, F-020
+> Path: test/ · Last synced commit: 43721ca · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022
 
 ## Purpose
-Automated checks run with Node's built-in `node:test` and `node:assert`, with no extra dependencies. They cover the pure parts of the app that load in plain Node: extraction (`core.js`, incl. image boxes), identifier parsing (`src/identify.js`), reader ordering (`renderer/order.js`), export formatting (`renderer/exportfmt.js`) and export path safety (`src/exportPaths.js`). They do not launch Electron or exercise the UI.
+Automated checks run with Node's built-in `node:test` and `node:assert`, with no extra dependencies. They cover the pure parts of the app that load in plain Node: extraction (`core.js`, incl. image boxes), identifier parsing (`src/identify.js`), reader ordering (`renderer/order.js`), the guided tour's step data and seen-tracking (`renderer/tour.js`), export formatting (`renderer/exportfmt.js`) and export path safety (`src/exportPaths.js`). They do not launch Electron or exercise the UI.
 
 ## Public interface
 - `npm test` → `node --test "test/**/*.test.js"`. Any `*.test.js` under `test/` is picked up automatically, and files in `test/helpers/` are not run as tests.
 
 ## Dependencies
-- **Uses:** extraction-core (`require("../renderer/core.js")` → `analyzePdf`, `ANALYZER_VERSION`, `imgStreamAt`, `imgSnapToFacts`), main-process (`require("../src/identify")`, `require("../src/exportPaths")`), renderer-ui (`renderer/order.js`, `renderer/exportfmt.js`), pdf-lib (fixture script only), pdfjs-dist 3.11.174 legacy build (`pdfjs-dist/legacy/build/pdf.js`)
+- **Uses:** extraction-core (`require("../renderer/core.js")` → `analyzePdf`, `ANALYZER_VERSION`, `imgStreamAt`, `imgSnapToFacts`), main-process (`require("../src/identify")`, `require("../src/exportPaths")`), renderer-ui (`renderer/order.js`, `renderer/exportfmt.js`, `renderer/tour.js`), pdf-lib (fixture script only), pdfjs-dist 3.11.174 legacy build (`pdfjs-dist/legacy/build/pdf.js`)
 - **Used by:** developers / CI (not wired into `.github/workflows/build.yml` yet)
 
 ## Data & state owned
@@ -20,6 +20,10 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. Writes nothing (the 
 - **Role:** snapshot tests of `analyzePdf` on `renderer/sample.pdf`: 2 pages, 8 marks, 7 entries, 0 loose, 5 font-size-heading topics, exact entries (page, topic, span colour/text/note, sentence), entry shape, reading order, known phrases, `v === ANALYZER_VERSION`, progress callback calls
 - **Imports (internal):** `test/helpers/pdf.js`, `renderer/core.js`
 - **Change impact:** any intentional change to extraction output must update the snapshot here (and bump `ANALYZER_VERSION`).
+
+### `test/tour.test.js`
+- **Role:** unit tests for `renderer/tour.js`: fresh/older DBs have nothing seen, per-step `markShown` / `pending`, the no-extracts case (extract tips stay pending, then `ready` once they appear), `skipAll`, Show Tour reset, unique step ids, `nextIndex` / `progress` skipping, and that every `data-tour` hook and class/id the steps target still appears in `app.js` / `annotator.js` source
+- **Imports (internal):** `renderer/tour.js`; reads `renderer/app.js`, `renderer/annotator.js` as text
 
 ### `test/identify.test.js`
 - **Role:** unit tests for `parseIdentifier` (accepted and rejected forms incl. ISBN-10/13 checksums, PMID forms, ADS bibcodes and URLs, trimming), `parseIdentifiers` (batch splitting, de-dupe), `findPdfLink`, `isPdf`, `fileNameFor` and `fetchFailureReason` (offline vs network mapping)

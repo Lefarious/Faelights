@@ -1,10 +1,10 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-10 · Current sprint: 4 (not planned) · main: green 69/69, pushed to GitHub 2026-10-10, released as v1.2.1_
+_Last updated: 2026-10-10 · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · push to GitHub awaits gate 2 (last push: v1.2.1)_
 
 ## Settings
 - Capacity: 3 parallel features per sprint · minor bugs/polish (XS/S) are exempt and don't count
-- Todo ids: `T-NNN`, next free: T-014 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Todo ids: `T-NNN`, next free: T-015 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
@@ -12,6 +12,10 @@ _Last updated: 2026-10-10 · Current sprint: 4 (not planned) · main: green 69/6
 ## To do
 
 Every todo has a todo id (`T-NNN`, never reused) and a type: `feature`, `enhancement`, `bug` or `polish`. The type is the branch prefix: `<type>/<todo-id>-<slug>`, e.g. `feature/T-001-meta-enrich`. Minor bugs and polish (size XS or S) don't count toward the sprint cap.
+
+**Sprint 4 (closed 2026-10-10, requested by user):** T-014 onboarding-tour, a guided tour that runs once after install and points at each main button in order.
+
+- [x] **T-014 onboarding-tour** (feature · M · Sprint 4 · merged 43721ca, F-022 · branch `feature/T-014-onboarding-tour`, requested by user 2026-10-10): a guided tooltip tour, shown once after install, that walks through the main buttons in order and explains each one. Three chapters, each shown the first time its part of the app is on screen: **app** (sidebar + PDF list, 11 steps incl. "Start here" on the empty-library buttons; "Your PDFs" waits until a PDF exists; ends with "Try a sample PDF" when the library is empty), **reader** (title, organise, View, Metadata, Full/Only, With images, Copy/Export, colour filter, topics, an extract, the per-extract copy button), **viewer** (tools, colours, page/zoom, Download, back). Next / Back / Skip tour, ←/→/Enter/Esc; steps whose button isn't on screen are skipped. Each step is remembered once shown (`settings.tour[chapter]` = step ids; Skip sets every chapter to true); a step skipped because its button was not on screen (e.g. extract tips on a PDF with no highlights) shows as a short follow-up the first time the button appears. Help › Show Tour replays it. Acceptance: fresh profile shows the welcome card; finishing app chapter + adding the sample starts the reader chapter; opening View starts the viewer chapter; after Skip, a restart shows no tour; keys pressed during the tour don't reach the app (Delete can't remove a PDF).
 
 **Sprint 3 (closed 2026-10-09):** T-001 meta-enrich, which fills in paper details from CrossRef and arXiv, stays optional, and keeps working offline; and T-012 copy-image, which copies a captured image from the extract to the clipboard. Any of the proposals below can join it if you approve them.
 
@@ -47,17 +51,34 @@ Polish (reported by user):
 | image-box | Capture-image tool in viewer: thin coloured outline Square annotation, recolour/note/delete/undo | renderer/annotator.js, styles.css (.pv block) | — | M | 1 | merged 40bb2c7 |
 | image-extract | core.js reads Square annots → result.images {id,n,page,rect,color,comment,at,topic}; image inside a fact sorts before it | renderer/core.js, test/core.test.js, test/fixtures/ | — | M | 1 | merged 40bb2c7 |
 | image-view | "With images" reader toggle, centred crops interleaved by `at`; images in colour filter | renderer/app.js (reader), styles.css (reader block) | image-extract, images.js scaffold | M | 1 | merged 40bb2c7 |
+| T-014 onboarding-tour | First-run guided tour, 3 chapters (app/reader/viewer), seen flags in settings.tour, Help › Show Tour | new renderer/tour.js, renderer/app.js (data-tour hooks, maybeTour/startTour, menu `tour`), renderer/annotator.js (2 hooks), renderer/index.html, renderer/styles.css (own block), src/main.js (Help menu), test/tour.test.js | — | M | 1 | merged 43721ca (F-022) |
 | image-export | Export formats: Markdown+images folder, Obsidian, HTML (self-contained), plain; doc + library | renderer/app.js (export), src/main.js (export:bundle), src/preload.js | image-extract, images.js scaffold | M | 1 | merged 40bb2c7 |
 
 ## Sprints
 
 | sprint | status | scope | result |
 |---|---|---|---|
+| 4 | **closed** 2026-10-10 (tag `sprint-4-end`, main 43721ca) | T-014 onboarding-tour | 81/81 |
 | 3 | **closed** 2026-10-09 (tag `sprint-3-end`, main 736ffd2) | T-012 copy-image, T-001 meta-enrich (+ T-013 exempt, just before) | 69/69 |
 | 2 | **closed** 2026-10-09 (tag `sprint-2-end`, main 40bb2c7) | add-ids, image-box, image-extract, image-view, image-export | 63/63 |
 | 1 | **closed** 2026-10-09 (tag `sprint-1-end`, c5c0dbe) | item-actions, add-by-identifier, test-harness | 23/23 |
 
 Newest first. "Between sprints" entries are small fixes merged outside a sprint.
+
+### Sprint 4 — closed (2026-10-10)
+- Scope: T-014 onboarding-tour (feature · M). A single feature, so it was built directly with no sub-agents.
+- Baseline on main e53e35e: `npm test` 69/69 green.
+- Backup: `backup/sprint-4-pre-20261010` · Tag: `sprint-4-start` (e53e35e)
+- Branch `feature/T-014-onboarding-tour`: 78/78 at first build, 81/81 after the user's follow-ups (9 new tests in test/tour.test.js, including a guard that every `data-tour` hook the steps use still exists in the renderer).
+- Checked in the running app (fresh profile via `--user-data-dir`, driven over DevTools): welcome card on first launch; all 11 app steps land on their targets; "Try a sample PDF" on the last step adds the sample and the reader chapter starts (9 of 10 steps; With images skipped as expected); View starts the viewer chapter (5 steps); Esc/Delete/J during the tour don't reach the app; Skip persists across a reload; light and dark themes.
+- Decision: the spotlight dims with a clip-path cut-out, not a 9999px box-shadow, because Chromium in this Electron didn't paint the huge shadow.
+- User feedback on the branch (all built on it before merge): a step for the per-extract copy icon (shown while spotlit); a PDF with no extracts used up the reader chapter, so seen-tracking became per step and skipped steps show later as a follow-up; a "Start here" step for the empty-library Add buttons ("Your PDFs" now waits for a PDF).
+- Merge log:
+  | order | id | merge sha | conflicts | tests after |
+  |---|---|---|---|---|
+  | 1 | T-014 onboarding-tour | 43721ca | none | 81/81 |
+- 2026-10-10: user gate 1 OK → merged into local main 43721ca; 81/81; tag `sprint-4-end`. Atlas synced at 43721ca; compass F-022, D-015. Push awaits gate 2.
+- Test rounds: 69 (baseline) → 78 → 81 (branch) → 81 (main 43721ca); new failures introduced: 0
 
 ### Sprint 3 — closed (2026-10-09)
 - Scope: T-012 copy-image (enhancement · S), T-001 meta-enrich (feature · M). 2 of 3 slots; third slot unused.
