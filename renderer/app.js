@@ -80,57 +80,7 @@ async function copyImage(d, img) {
 }
 
 /* ---------------- PDF analysis ---------------- */
-function cleanTitle(t) {
-  t = (t || "").replace(/^Microsoft (Word|PowerPoint) - /i, "").replace(/\.(docx?|pptx?|pdf)$/i, "").trim();
-  if (!t || /^untitled$/i.test(t) || t.length < 3) return "";
-  return t;
-}
-const DOI_RE = /\b(10\.\d{4,9}\/[^\s"<>]+[^\s"<>.,;:)\]])/i;
-const ARXIV_RE = /\barXiv:\s?(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?\/\d{7}(?:v\d+)?)/i;
-const pdfDate = s => { try { const d = s && pdfjsLib.PDFDateString.toDateObject(s); return d ? d.getTime() : null; } catch (_) { return null; } };
-// Bibliographic + file metadata, Zotero-style: XMP (dc / prism) first, then the Info dictionary, then a DOI / arXiv scan of page 1.
-async function readMeta(pdf) {
-  let info = {}, xmp = null;
-  try { const md = await pdf.getMetadata(); info = md.info || {}; xmp = md.metadata; } catch (_) {}
-  const x = (...keys) => { for (const k of keys) { const v = xmp && xmp.get(k); if (v && (!Array.isArray(v) || v.length)) return v; } return null; };
-  const str = v => (Array.isArray(v) ? v.join("; ") : typeof v === "string" ? v : "").replace(/\s+/g, " ").trim();
-  const list = v => (Array.isArray(v) ? v : String(v || "").split(/\s*[;,]\s*/)).map(s => s.trim()).filter(Boolean);
-  const authors = list(x("dc:creator") || (info.Author ? String(info.Author).split(/\s*(?:;|\band\b|&)\s*/) : []));
-  let doi = str(x("prism:doi", "pdfx:doi", "crossmark:doi")).replace(/^(https?:\/\/(dx\.)?doi\.org\/|doi:\s*)/i, "");
-  // only page 1: later pages start citing other papers' DOIs
-  let arxiv = "";
-  try {
-    const text = (await (await pdf.getPage(1)).getTextContent()).items.map(t => t.str).join(" ");
-    if (!doi) doi = (text.match(DOI_RE) || [])[1] || "";
-    arxiv = (text.match(ARXIV_RE) || [])[1] || "";
-  } catch (_) {}
-  const start = str(x("prism:startingpage")), end = str(x("prism:endingpage"));
-  const meta = {
-    title: str(x("dc:title")) || str(info.Title),
-    authors,
-    abstract: str(x("dc:description")) || str(info.Subject),
-    publication: str(x("prism:publicationname")),
-    volume: str(x("prism:volume")),
-    issue: str(x("prism:number")),
-    pages: str(x("prism:pagerange")) || (start ? start + (end ? "–" + end : "") : ""),
-    date: str(x("prism:coverdate", "prism:publicationdate")).slice(0, 10),
-    doi,
-    arxiv,
-    issn: str(x("prism:issn", "prism:eissn")),
-    isbn: str(x("prism:isbn")),
-    publisher: str(x("dc:publisher")),
-    url: str(x("prism:url")),
-    rights: str(x("dc:rights")),
-    keywords: list(x("dc:subject") || info.Keywords),
-    creator: str(x("xmp:creatortool")) || str(info.Creator),
-    producer: str(x("pdf:producer")) || str(info.Producer),
-    created: pdfDate(info.CreationDate),
-    modified: pdfDate(info.ModDate),
-    pdfVersion: str(info.PDFFormatVersion)
-  };
-  for (const k of Object.keys(meta)) if (meta[k] === "" || meta[k] == null || (Array.isArray(meta[k]) && !meta[k].length)) delete meta[k];
-  return meta;
-}
+const { cleanTitle, readMeta } = Meta;
 async function analyzeBytes(bytes, onProgress) {
   const pdf = await pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
   const meta = await readMeta(pdf);
@@ -184,12 +134,7 @@ async function lookUp(d, quiet) {
     : "Couldn't reach the metadata service. Try again later.");
 }
 lookUp.busy = new Set();
-function summary(result) {
-  const colours = new Map();
-  for (const e of result.entries) for (const s of e.spans) colours.set(ckey(s.color), s.color);
-  for (const img of Order.imagesOf(result)) if (!colours.has(ckey(img.color))) colours.set(ckey(img.color), img.color);
-  return { count: result.entries.reduce((n, e) => n + e.spans.length, 0) + result.loose.length, colours: [...colours.values()].slice(0, 6) };
-}
+const summary = Order.summary;
 
 // Analyse a PDF already copied into the library (fl.importPdf / fl.fetchPdf) and add it as a doc.
 // opts.origin: where a downloaded paper came from ({kind, value, url}); such docs have no original on disk.
@@ -1229,7 +1174,7 @@ function renderResults() {
   }
   let hits = 0;
   for (const d of docs) {
-    const matches = d.result.entries.filter(e => { const hay = (e.sentence + " " + e.spans.map(s => s.text + " " + s.comment).join(" ") + " " + (e.topic ? e.topic.path.join(" ") : "")).toLowerCase(); return terms.every(t => hay.includes(t)); });
+    const matches = d.result.entries.filter(e => Library.entryMatches(e, terms));
     if (!matches.length) continue;
     hits += matches.length;
     const sec = el("section", "s-doc");

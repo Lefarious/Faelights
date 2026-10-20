@@ -1,7 +1,7 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseIdentifier: parse, describe, findPdfLink, isPdf, fileNameFor, fetchFailureReason } = require("../src/identify.js");
+const { parseIdentifier: parse, describe, findPdfLink, isPdf, fileNameFor, fetchFailureReason } = require("../core/identify.js");
 
 const kv = t => { const r = parse(t); return r && [r.kind, r.value]; };
 
@@ -136,7 +136,7 @@ test("fetchFailureReason maps connection errors to offline", () => {
   assert.equal(fetchFailureReason(null), "network");
 });
 
-const { parseIdentifiers } = require("../src/identify.js");
+const { parseIdentifiers } = require("../core/identify.js");
 
 test("ISBN-10 and ISBN-13, normalised to ISBN-13", () => {
   for (const t of ["9780141439518", "978-0-14-143951-8", "978 0 14 143951 8", "ISBN 978-0-14-143951-8", "ISBN-13: 9780141439518", "isbn:9780141439518", "0141439513", "0-14-143951-3", "ISBN-10: 0 14 143951 3"])

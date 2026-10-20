@@ -4,7 +4,7 @@ _Last updated: 2026-10-10 · Current sprint: 4 closed (T-014 merged locally, 437
 
 ## Settings
 - Capacity: 3 parallel features per sprint · minor bugs/polish (XS/S) are exempt and don't count
-- Todo ids: `T-NNN`, next free: T-015 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Todo ids: `T-NNN`, next free: T-016 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
@@ -33,6 +33,8 @@ Proposals waiting for approval (each can join Sprint 3; "exempt" = doesn't count
 - [ ] **T-009** [polish · XS · exempt] ISBN lookup may pick a scan of another edition: show the edition title in the result row.
 - [ ] **T-010** [enhancement · S] Move and resize image boxes in the viewer (today: delete and redraw).
 - [ ] **T-011** [polish · XS · exempt] `ckey` is duplicated in order.js and app.js, and `groupsOf` overlaps `Order.groupItems`: fold both into order.js.
+
+- [ ] **T-015 cli** (feature · L · not in a sprint yet · branch `feature/T-015-cli`, cut from `refactor/headless-core` because it needs `core/`; requested by user 2026-10-21): a `faelights` command line over `core/` that covers the app's main actions. Reading: `extract <file>`, `export`, `text` (full text, `--pages`), `info`, `list` (`--tag`, `--starred`), `libraries`, `tags`. Adding: `add` from files or by DOI / arXiv / PMID / PMCID / ISBN / ADS / link (+ `--tag`, details from CrossRef/arXiv), `rescan` (`--all`), `lookup`. Organising: `library new|rename|delete`, `move`, `tag`/`untag`, `star`/`unstar`, `remove` (`--force` for docs annotated in the app). App: `search <words>` (the app's rule, now `Library.entryMatches`), `theme [system|light|dark]` (`theme.json`), `tour status|skip|restart` (`settings.tour` via `tour.js` `skipAll`; restart = Help › Show Tour). Moves to core: `readMeta`/`cleanTitle` → `core/meta.js`, `summary` → `Order.summary`, `src/identify.js` + `src/metadata.js` → `core/`, and the paper resolver + metadata lookup out of `main.js` into `core/fetch.js` (transport passed in: Electron `net` in the app, `nodeGet` with redirect cookies in the CLI). Captured images aren't exported (they need rendering). Verified on the branch: 142/142; the app starts in the theme the CLI set, runs the tour after `tour restart`, and its search uses the shared matcher; the app opens a CLI-built library (tags, stars, libraries, details, origins) and its own add-by-identifier and lookup still work through `core/fetch.js` (arXiv download, CrossRef lookup, Nature → paywalled). Live CLI downloads: arXiv 1706.03762, PLOS DOI; Nature DOI → paywalled.
 
 Polish (reported by user):
 

@@ -42,7 +42,15 @@ const Order = (() => {
     return gs;
   }
 
-  return { ckey, imagesOf, filterImages, withImages, groupItems };
+  // The doc fields the list shows: count (marks incl. loose) and up to 6 colours (extracts first, then images)
+  function summary(result) {
+    const colours = new Map();
+    for (const e of result.entries) for (const s of e.spans) colours.set(ckey(s.color), s.color);
+    for (const img of imagesOf(result)) if (!colours.has(ckey(img.color))) colours.set(ckey(img.color), img.color);
+    return { count: result.entries.reduce((n, e) => n + e.spans.length, 0) + result.loose.length, colours: [...colours.values()].slice(0, 6) };
+  }
+
+  return { ckey, imagesOf, filterImages, withImages, groupItems, summary };
 })();
 
 if (typeof module !== "undefined") module.exports = Order;

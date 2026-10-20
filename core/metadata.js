@@ -1,6 +1,6 @@
 // Faelights — online metadata (CrossRef for DOIs, the arXiv API for arXiv ids)
-// Pure mapping from API responses to the doc `meta` shape that renderer/app.js readMeta() produces.
-// No network here: src/main.js fetches, this module only parses. Used by the `meta:lookup` IPC and the tests.
+// Pure mapping from API responses to the doc `meta` shape that core/meta.js readMeta() produces.
+// No network here: core/fetch.js fetches, this module only parses. Used by the `meta:lookup` IPC and the tests.
 "use strict";
 
 const ARXIV_DOI = /^10\.48550\/arxiv\.(.+)$/i;
