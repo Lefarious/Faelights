@@ -1174,7 +1174,7 @@ function renderResults() {
   }
   let hits = 0;
   for (const d of docs) {
-    const matches = d.result.entries.filter(e => { const hay = (e.sentence + " " + e.spans.map(s => s.text + " " + s.comment).join(" ") + " " + (e.topic ? e.topic.path.join(" ") : "")).toLowerCase(); return terms.every(t => hay.includes(t)); });
+    const matches = d.result.entries.filter(e => Library.entryMatches(e, terms));
     if (!matches.length) continue;
     hits += matches.length;
     const sec = el("section", "s-doc");

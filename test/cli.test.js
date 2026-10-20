@@ -144,6 +144,38 @@ test("remove drops the doc and the library's copy, and refuses annotated docs wi
   assert.deepEqual(JSON.parse(lib("list", "--json")).map(r => r.title), ["Notes on Bioluminescence"]);
 });
 
+test("search finds highlights with every word, like the app's search", () => {
+  const hits = JSON.parse(lib("search", "deep", "SEA", "--json"));
+  assert.deepEqual(hits.map(d => [d.title, d.matches.map(m => m.page)]), [["Notes on Bioluminescence", [2, 2]]]);
+  assert.match(lib("search", "cold", "light"), /^  - .*called cold light\. \(p\. 1\)\n    - Note: Good term for the essay intro\n      › Notes on Bioluminescence › 1\. How the light is made$/m);
+  assert.match(lib("search", "deep", "sea", "-f", "md"), /\*\*three quarters of deep-sea animals\*\*/);
+  assert.match(lib("search", "essay", "intro"), /1 match in 1 PDF/);        // notes count
+  assert.match(lib("search", "fireflies", "flash"), /2\. Why fireflies flash/);  // so does the topic
+  assert.match(lib("search", "zzz"), /^No highlights contain all of those words/);
+  assert.equal(run("--data-dir", dir, "search").status, 2);
+});
+
+test("theme reads and writes the app's theme.json", () => {
+  assert.equal(lib("theme").trim(), "system");
+  assert.match(lib("theme", "Dark"), /Theme set to dark/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, "theme.json"), "utf8")), { theme: "dark" });
+  assert.equal(lib("theme").trim(), "dark");
+  assert.equal(run("--data-dir", dir, "theme", "purple").status, 2);
+});
+
+test("tour skip and restart write settings.tour as the app's Skip and Help › Show Tour do", () => {
+  const Tour = require("../renderer/tour.js");
+  const settings = () => JSON.parse(fs.readFileSync(path.join(dir, "library", "faelights.json"), "utf8")).settings;
+  assert.match(lib("tour"), /^app +not started/m);
+  lib("tour", "skip");
+  assert.deepEqual(settings().tour, Object.fromEntries(Tour.NAMES.map(n => [n, true])));
+  assert.ok(JSON.parse(lib("tour", "--json")).every(r => r.skipped));
+  lib("tour", "restart");
+  assert.deepEqual(settings().tour, {});
+  assert.ok(Tour.NAMES.every(ch => Tour.pending(settings(), ch).length === Tour.CHAPTERS[ch].length));
+  assert.equal(run("--data-dir", dir, "tour", "later").status, 2);
+});
+
 test("add rejects text that is neither a file nor an identifier, before touching anything", () => {
   const r = run("--data-dir", dir, "add", "not an id");
   assert.equal(r.status, 2);

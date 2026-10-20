@@ -17,6 +17,7 @@ const ExportFmt = require("../core/export.js");
 const Library = require("../core/library.js");
 const Identify = require("../core/identify.js");
 const Fetch = require("../core/fetch.js");
+const Tour = require("../renderer/tour.js");   // pure helpers; the tour itself runs in the app
 const { version } = require("../package.json");
 
 const HELP = `Faelights ${version} — pull highlights out of annotated PDFs
@@ -33,6 +34,8 @@ Reading
   list [library]                  Your PDFs (all, or one library; --tag, --starred to filter)
   libraries                       Your libraries
   tags                            Every tag and how many PDFs have it
+  search <words>...               Highlights containing every word (in the sentence, highlight,
+                                  note or topic), across your library or one --library
 
 Adding and scanning
   add <file.pdf | id>...          Add PDFs from disk, or download papers by DOI, arXiv id, PMID,
@@ -53,6 +56,11 @@ Organising
   remove <pdf>                    Remove a PDF and the library's copy (your original isn't touched;
                                   --force for one annotated in the app, since those marks live only there)
 
+App
+  theme [system|light|dark]       Show or set the app's theme (applies the next time it starts)
+  tour [status|skip|restart]      The first-run guided tour: see what's been shown, turn it off,
+                                  or have it run again the next time the app opens
+
 Options
   -f, --format <fmt>      md (default), obsidian, html, plain, or json
   -m, --mode <mode>       full: whole sentences with the highlights marked (default); only: just the marks
@@ -65,7 +73,7 @@ Options
       --force             Remove a PDF annotated in the app
       --no-lookup         Don't fetch paper details after adding by identifier
       --frontmatter       Start md/obsidian exports with YAML frontmatter
-      --json              Machine-readable output for list, libraries, tags, info, add, rescan
+      --json              Machine-readable output for list, libraries, tags, search, info, add, rescan, tour
       --data-dir <dir>    The app's data folder (default: where Faelights keeps it, or FAELIGHTS_DATA_DIR)
   -h, --help              Show this help
   -v, --version           Show the version
@@ -272,6 +280,36 @@ async function cmdList(store, args, o) {
   const w = Math.max(...rows.map(r => r.id.length));
   emit(rows.map(r => `${r.id.padEnd(w)}  ${String(r.highlights ?? 0).padStart(4)} hl  ${r.starred ? "★ " : ""}${r.title}` +
     `  [${r.library}]${r.tags.length ? "  #" + r.tags.join(" #") : ""}${r.stale ? "  (changed since scan)" : ""}${r.sourceMissing ? "  (original moved)" : ""}`).join("\n") + "\n");
+}
+
+async function cmdSearch(store, args, o) {
+  const terms = Library.searchTerms(args.join(" "));
+  if (!terms.length) throw usage("search <words>... [--library <name>]");
+  const db = await store.loadDb();
+  const lid = o.library ? findLibrary(db, o.library).id : null;
+  const docs = db.docs.filter(d => d.result && (!lid || d.libraryId === lid));
+  const found = docs.map(d => ({ d, hits: d.result.entries.filter(e => Library.entryMatches(e, terms)) })).filter(x => x.hits.length);
+  if (o.format === "json") o.json = true;
+  if (o.json) {
+    return emit(json(found.map(({ d, hits }) => ({ id: d.id, title: d.title, library: libName(db, d.libraryId),
+      matches: hits.map(e => ({ n: e.n, page: e.page, topic: e.topic ? e.topic.path : null, sentence: e.sentence,
+        highlights: e.spans.map(s => ({ text: s.text, comment: s.comment, color: s.color, type: s.type })) })) }))), o.out);
+  }
+  if (!found.length) return emit(`No highlights contain all of those words (searched ${plural(docs.length, "PDF")}).\n`);
+  // plain text unless a format was asked for; md / obsidian mark the highlighted words
+  const fmt = o.formatSet && o.format !== "html" ? o.format : "plain", mode = o.mode || db.settings.mode;
+  const out = [];
+  for (const { d, hits } of found) {
+    out.push(`${d.title}  [${libName(db, d.libraryId)}] · ${plural(hits.length, "match", "matches")}  (${d.id})`);
+    for (const e of hits) {
+      out.push(...ExportFmt.entryLines(e, fmt, mode).map(l => "  " + l));
+      if (e.topic) out.push("      › " + e.topic.path.join(" › "));
+    }
+    out.push("");
+  }
+  const total = found.reduce((n, x) => n + x.hits.length, 0);
+  out.push(`${plural(total, "match", "matches")} in ${plural(found.length, "PDF")}`);
+  emit(out.join("\n") + "\n", o.out);
 }
 
 /* ---- adding and scanning ---- */
@@ -503,6 +541,45 @@ async function cmdRemove(store, args, o) {
   changed();
 }
 
+/* ---- app settings ---- */
+// Same file and values as the app (main.js THEME_PATH / THEMES); read once at startup
+const THEMES = ["system", "light", "dark"];
+async function cmdTheme(store, args, o) {
+  const file = path.join(store.paths.userData, "theme.json");
+  let cur = "system";
+  try { const t = JSON.parse(fs.readFileSync(file, "utf8")).theme; if (THEMES.includes(t)) cur = t; } catch (_) {}
+  if (!args.length) return console.log(cur);
+  const t = check(args[0].toLowerCase(), THEMES, "theme");
+  if (args.length > 1) throw usage("theme [system|light|dark]");
+  fs.mkdirSync(store.paths.userData, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ theme: t }), "utf8");
+  console.log(t === cur ? `The theme is already ${t}` : `Theme set to ${t}. Faelights uses it the next time it starts.`);
+}
+
+// settings.tour, as the app keeps it: per chapter, true (skipped / all seen) or the ids of the steps shown
+async function cmdTour(store, args, o) {
+  const [sub = "status"] = args;
+  if (args.length > 1) throw usage("tour [status|skip|restart]");
+  if (sub === "status") {
+    const settings = (await store.loadDb()).settings;
+    const rows = Tour.NAMES.map(ch => {
+      const all = Tour.CHAPTERS[ch].length, left = Tour.pending(settings, ch).length, v = settings.tour && settings.tour[ch];
+      return { chapter: ch, steps: all, shown: all - left, skipped: v === true };
+    });
+    if (o.json) return emit(json(rows));
+    const w = Math.max(...rows.map(r => r.chapter.length));
+    return emit(rows.map(r => `${r.chapter.padEnd(w)}  ${r.skipped ? "done (skipped or finished)" : r.shown ? `${r.shown} of ${r.steps} steps shown` : `not started (${plural(r.steps, "step")})`}`).join("\n") + "\n");
+  }
+  if (sub === "skip") {
+    await store.update(db => { Tour.skipAll(db.settings); });
+    console.log("The tour won't show again. Bring it back with: faelights tour restart");
+  } else if (sub === "restart") {
+    await store.update(db => { db.settings.tour = {}; });   // what Help › Show Tour does
+    console.log("The tour will run the next time Faelights opens (or now: Help › Show Tour in the app).");
+  } else throw new Fail(`Unknown tour command "${sub}". Use status, skip or restart.`, 2);
+  changed();
+}
+
 async function main(argv) {
   const { values: o, positionals } = parse(argv);
   if (o.version) return console.log(version);
@@ -510,6 +587,7 @@ async function main(argv) {
   if (o.help || !cmd || cmd === "help") return console.log(HELP);
   check(o.format, FORMATS, "format");
   check(o.mode, MODES, "mode");
+  o.formatSet = o.format !== undefined;
   o.format = o.format || "md";
   if (cmd === "extract") return cmdExtract(args, o);
   const store = Library.at(o["data-dir"] || Library.userDataDir());
@@ -517,7 +595,8 @@ async function main(argv) {
     export: cmdExport, text: cmdText, info: cmdInfo, list: cmdList, ls: cmdList, libraries: cmdLibraries, tags: cmdTags,
     add: cmdAdd, rescan: cmdRescan, lookup: cmdLookup, library: cmdLibrary, move: cmdMove, remove: cmdRemove, rm: cmdRemove,
     tag: (s, a, o) => cmdTag(s, a, o, false), untag: (s, a, o) => cmdTag(s, a, o, true),
-    star: (s, a, o) => cmdStar(s, a, o, true), unstar: (s, a, o) => cmdStar(s, a, o, false)
+    star: (s, a, o) => cmdStar(s, a, o, true), unstar: (s, a, o) => cmdStar(s, a, o, false),
+    search: cmdSearch, find: cmdSearch, theme: cmdTheme, tour: cmdTour
   }[cmd];
   if (!run) throw new Fail(`Unknown command "${cmd}". Run faelights --help for usage.`, 2);
   return run(store, args, o);

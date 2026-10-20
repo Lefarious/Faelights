@@ -82,6 +82,13 @@ const Library = (() => {
     return d.starred;
   }
 
+  // Search highlights: every word must appear in the sentence, a highlight, its note or the topic path
+  const searchTerms = q => String(q || "").toLowerCase().split(/\s+/).filter(Boolean);
+  function entryMatches(e, terms) {
+    const hay = (e.sentence + " " + e.spans.map(s => s.text + " " + s.comment).join(" ") + " " + (e.topic ? e.topic.path.join(" ") : "")).toLowerCase();
+    return terms.every(t => hay.includes(t));
+  }
+
   /* ---------------- Node: files ---------------- */
   const LOCK_WAIT_MS = 10000;     // give up waiting for the other process after this long
   const LOCK_STALE_MS = 30000;    // a lock older than this was left by a crashed process
@@ -237,7 +244,7 @@ const Library = (() => {
   }
 
   return { APP_NAME, INBOX, EMPTY_DB, normalize, findDoc, findLibrary, docsIn, addLibrary, renameLibrary, removeLibrary, moveDoc,
-    cleanTag, addTag, removeTag, tagCounts, setStar, userDataDir, at };
+    cleanTag, addTag, removeTag, tagCounts, setStar, searchTerms, entryMatches, userDataDir, at };
 })();
 
 if (typeof module !== "undefined") module.exports = Library;
