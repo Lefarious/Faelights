@@ -1,5 +1,5 @@
 /* Faelights — image captures
-   Cuts the region of an image box (a Square annotation, see core.js `result.images`) out of the stored PDF as a PNG.
+   Cuts the region of an image box (a Square annotation, see core/extract.js `result.images`) out of the stored PDF as a PNG.
    Shared by the reader ("With images") and export. Renders without annotations so the box outline and nearby
    highlights don't end up in the picture. Results are cached per doc version; renders run one at a time. */
 "use strict";

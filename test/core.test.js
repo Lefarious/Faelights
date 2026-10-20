@@ -1,5 +1,5 @@
 "use strict";
-// Smoke tests for the extraction engine (renderer/core.js) against the
+// Smoke tests for the extraction engine (core/extract.js) against the
 // bundled annotated sample, renderer/sample.pdf.
 //
 // The numbers and strings below are a snapshot of the current analyzer output.
@@ -8,7 +8,7 @@
 const { test, before } = require("node:test");
 const assert = require("node:assert/strict");
 const { withPdf, repoPath } = require("./helpers/pdf");
-const { analyzePdf, ANALYZER_VERSION } = require("../renderer/core.js");
+const { analyzePdf, ANALYZER_VERSION } = require("../core/extract.js");
 
 const SAMPLE = repoPath("renderer", "sample.pdf");
 

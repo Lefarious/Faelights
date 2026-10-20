@@ -49,7 +49,7 @@ function planAssets(dir, assets, max = MAX_ASSET_BYTES) {
   });
 }
 
-// Markdown link form of one path segment (matches renderer/exportfmt.js mdLink)
+// Markdown link form of one path segment (matches core/export.js mdLink)
 const mdSeg = s => encodeURIComponent(s).replace(/[()']/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase());
 
 // Single-file exports name their images folder after the file the user picked: "<base> images".

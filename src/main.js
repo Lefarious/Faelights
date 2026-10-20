@@ -8,10 +8,11 @@ const crypto = require("crypto");
 const { parseIdentifier, parseIdentifiers, describe, findPdfLink, isPdf, fileNameFor, fetchFailureReason } = require("./identify");
 const { lookupTarget, fromCrossref, fromArxivAtom } = require("./metadata");
 const exportPaths = require("./exportPaths");
+const Library = require("../core/library");
 
-const DATA_DIR = () => path.join(app.getPath("userData"), "library");
-const DB_PATH = () => path.join(DATA_DIR(), "faelights.json");
-const FILES_DIR = () => path.join(DATA_DIR(), "files");
+// The library file and stored PDF copies (core/library.js), under userData so --user-data-dir still applies
+const store = () => Library.at(app.getPath("userData"));
+const DATA_DIR = () => store().paths.dir;
 
 let win = null;
 let splash = null, splashShownAt = 0;
@@ -22,40 +23,8 @@ const SPLASH_MAX_MS = 8000;  // show the app even if the renderer never reports 
 let pendingOpen = []; // PDFs passed on the command line / "Open with"
 
 /* ---------------- storage ---------------- */
-const EMPTY_DB = () => ({
-  version: 1,
-  libraries: [{ id: "inbox", name: "Inbox", createdAt: Date.now(), system: true }],
-  docs: [],
-  settings: { mode: "full", fmt: "md", sort: "added" }
-});
-
-async function loadDb() {
-  try {
-    const raw = await fsp.readFile(DB_PATH(), "utf8");
-    const db = JSON.parse(raw);
-    if (!db.libraries?.some(l => l.id === "inbox")) db.libraries.unshift(EMPTY_DB().libraries[0]);
-    db.settings = { ...EMPTY_DB().settings, ...(db.settings || {}) };
-    db.docs = db.docs || [];
-    return db;
-  } catch (e) {
-    if (e.code !== "ENOENT") {
-      // keep a copy of an unreadable file instead of overwriting it
-      try { await fsp.copyFile(DB_PATH(), DB_PATH() + ".broken-" + Date.now()); } catch (_) {}
-    }
-    return EMPTY_DB();
-  }
-}
-
-let writeChain = Promise.resolve();
-function saveDb(db) {
-  writeChain = writeChain.then(async () => {
-    await fsp.mkdir(DATA_DIR(), { recursive: true });
-    const tmp = DB_PATH() + ".tmp";
-    await fsp.writeFile(tmp, JSON.stringify(db), "utf8");
-    await fsp.rename(tmp, DB_PATH());
-  }).catch(err => console.error("save failed", err));
-  return writeChain;
-}
+// Write failures are logged, as before; the renderer keeps its in-memory copy and saves again on the next change.
+const saveDb = db => store().saveDb(db).catch(err => console.error("save failed", err));
 
 async function statOrNull(p) { try { return await fsp.stat(p); } catch (_) { return null; } }
 
@@ -189,17 +158,8 @@ function buildAppMenu() {
 }
 
 /* ---------------- IPC ---------------- */
-ipcMain.handle("db:load", async () => {
-  const db = await loadDb();
-  // flag docs whose source PDF changed or went missing since the last scan
-  await Promise.all(db.docs.map(async d => {
-    const st = d.sourcePath ? await statOrNull(d.sourcePath) : null;
-    d.sourceMissing = !!d.sourcePath && !st;
-    // annotated docs live on in the library copy, so edits to the original no longer apply
-    d.stale = !d.annotated && !!st && st.mtimeMs > (d.scannedMtime || 0) + 1000;
-  }));
-  return db;
-});
+// docs whose source PDF changed or went missing since the last scan are flagged (sourceMissing / stale)
+ipcMain.handle("db:load", async () => store().checkSources(await store().loadDb()));
 ipcMain.handle("db:save", async (_e, db) => { await saveDb(db); return true; });
 ipcMain.on("app:ready", revealMain);
 ipcMain.handle("theme:get", () => nativeTheme.themeSource);
@@ -212,17 +172,7 @@ ipcMain.handle("pdf:choose", async () => {
 });
 
 // Copy a PDF into the library folder and return info about it
-async function importPdf(srcPath) {
-  const st = await fsp.stat(srcPath);
-  const buf = await fsp.readFile(srcPath);
-  const hash = crypto.createHash("sha1").update(buf).digest("hex");
-  const id = "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  await fsp.mkdir(FILES_DIR(), { recursive: true });
-  const stored = path.join(FILES_DIR(), id + ".pdf");
-  await fsp.writeFile(stored, buf);
-  return { id, hash, fileName: path.basename(srcPath), sourcePath: srcPath, storedPath: stored, mtime: st.mtimeMs, size: st.size };
-}
-ipcMain.handle("pdf:import", (_e, srcPath) => importPdf(srcPath));
+ipcMain.handle("pdf:import", (_e, srcPath) => store().importPdf(srcPath));
 
 /* ---------------- add from DOI / link ---------------- */
 // The only code that touches the network, and only when the user asks for a paper or its details (no background calls).
@@ -373,7 +323,7 @@ ipcMain.handle("pdf:fetch", async (_e, text) => {
     sendProgress({ stage: "import" });
     tmp = path.join(app.getPath("temp"), `faelights-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}.pdf`);
     await fsp.writeFile(tmp, r.buf);
-    const info = await importPdf(tmp);
+    const info = await store().importPdf(tmp);
     // no original on disk to track, like the sample PDF
     Object.assign(info, { sourcePath: null, fileName: fileNameFor(id, r.url) });
     return { ok: true, info, origin: { kind: id.kind, value: id.value, url: r.url }, title: r.title || null };
@@ -425,55 +375,28 @@ ipcMain.handle("app:openExternal", (_e, url) => {
 });
 ipcMain.handle("clip:read", () => clipboard.readText().slice(0, 4096));
 
-// Read the freshest copy: the original if it still exists, otherwise the stored copy.
-// When the original is newer, refresh the stored copy too. Docs annotated in the app always read the stored copy.
-ipcMain.handle("pdf:read", async (_e, doc) => {
-  const src = doc.sourcePath && !doc.annotated ? await statOrNull(doc.sourcePath) : null;
-  if (src) {
-    const buf = await fsp.readFile(doc.sourcePath);
-    if (src.mtimeMs > (doc.scannedMtime || 0) + 1000 && doc.storedPath) { try { await fsp.writeFile(doc.storedPath, buf); } catch (_) {} }
-    return { bytes: new Uint8Array(buf), mtime: src.mtimeMs, from: "source" };
-  }
-  const buf = await fsp.readFile(doc.storedPath);
-  return { bytes: new Uint8Array(buf), mtime: doc.scannedMtime || 0, from: "copy" };
-});
+// The freshest copy: the original if it still exists (refreshing the stored copy), otherwise the stored copy
+ipcMain.handle("pdf:read", (_e, doc) => store().readPdf(doc));
 
 ipcMain.handle("pdf:stat", async (_e, p) => { const st = await statOrNull(p); return st ? { mtime: st.mtimeMs } : null; });
 ipcMain.handle("pdf:open", async (_e, doc) => {
-  const p = doc.sourcePath && fs.existsSync(doc.sourcePath) ? doc.sourcePath : doc.storedPath;
-  const err = await shell.openPath(p); return err || true;
+  const err = await shell.openPath(store().pdfPath(doc)); return err || true;
 });
 ipcMain.handle("pdf:reveal", async (_e, doc) => {
-  const p = doc.sourcePath && fs.existsSync(doc.sourcePath) ? doc.sourcePath : doc.storedPath;
-  shell.showItemInFolder(p); return true;
+  shell.showItemInFolder(store().pdfPath(doc)); return true;
 });
 ipcMain.handle("pdf:relink", async (_e, doc) => {
   const r = await dialog.showOpenDialog(win, { title: `Find “${doc.fileName}”`, properties: ["openFile"], filters: [{ name: "PDF", extensions: ["pdf"] }] });
   return r.canceled ? null : r.filePaths[0];
 });
-const isStored = p => !!p && path.dirname(p) === FILES_DIR();
 // Annotated bytes only ever replace the library's copy, never the user's original
-let pdfWrites = Promise.resolve();
-ipcMain.handle("pdf:writeStored", (_e, { storedPath, bytes }) => {
-  if (!isStored(storedPath) || !(bytes instanceof Uint8Array)) return false;
-  const job = pdfWrites.then(async () => {
-    const tmp = storedPath + ".tmp";
-    await fsp.writeFile(tmp, bytes);
-    await fsp.rename(tmp, storedPath);
-    return true;
-  });
-  pdfWrites = job.catch(err => { console.error("pdf write failed", err); return false; });
-  return pdfWrites;
-});
+ipcMain.handle("pdf:writeStored", (_e, { storedPath, bytes }) => store().writeStored(storedPath, bytes));
 ipcMain.handle("pdf:saveAs", async (_e, { name, bytes }) => {
   const r = await dialog.showSaveDialog(win, { title: "Save PDF", defaultPath: name, filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (r.canceled || !r.filePath) return null;
   await fsp.writeFile(r.filePath, bytes); return r.filePath;
 });
-ipcMain.handle("pdf:removeStored", async (_e, storedPath) => {
-  if (isStored(storedPath)) { try { await fsp.unlink(storedPath); } catch (_) {} }
-  return true;
-});
+ipcMain.handle("pdf:removeStored", (_e, storedPath) => store().removeStored(storedPath));
 
 ipcMain.handle("export:file", async (_e, { name, text }) => {
   const r = await dialog.showSaveDialog(win, { title: "Export highlights", defaultPath: name, filters: [{ name: "Markdown", extensions: ["md"] }, { name: "Text", extensions: ["txt"] }] });
