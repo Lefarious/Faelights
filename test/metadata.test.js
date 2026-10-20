@@ -1,7 +1,7 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { lookupTarget, fromCrossref, fromArxivAtom } = require("../src/metadata.js");
+const { lookupTarget, fromCrossref, fromArxivAtom } = require("../core/metadata.js");
 
 test("lookupTarget: DOI → CrossRef, arXiv id or arXiv DOI → arXiv, nothing → null", () => {
   assert.deepEqual(lookupTarget({ doi: "10.1038/nature14539" }), { source: "crossref", id: "10.1038/nature14539" });

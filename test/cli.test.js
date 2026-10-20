@@ -90,6 +90,66 @@ test("unknown libraries and ambiguous or unknown PDFs fail with a message", () =
   assert.match(many.stderr, /matches 2 PDFs/);
 });
 
+test("libraries: new, rename, delete (PDFs go to the Inbox); the Inbox stays", () => {
+  assert.match(lib("library", "new", "Thesis"), /^Created library Thesis/);
+  assert.match(run("--data-dir", dir, "library", "new", "thesis").stderr, /already a library called "thesis"/);
+  lib("move", "biolum", "thesis");
+  assert.match(lib("move", "biolum", "Thesis"), /already in Thesis/);
+  assert.match(lib("library", "rename", "Thesis", "PhD"), /Renamed Thesis → PhD/);
+  assert.deepEqual(JSON.parse(lib("list", "PhD", "--json")).map(r => r.title), ["Notes on Bioluminescence"]);
+  assert.match(lib("library", "delete", "PhD"), /1 PDF moved to the Inbox/);
+  assert.deepEqual(JSON.parse(lib("libraries", "--json")).map(l => [l.name, l.pdfs]), [["Inbox", 2]]);
+  assert.equal(run("--data-dir", dir, "library", "delete", "inbox").status, 1);
+});
+
+test("tags and stars, and filtering the list by them", () => {
+  assert.match(lib("tag", "biolum", "#light", "essay", "light"), /#light #essay$/m);
+  assert.match(lib("untag", "biolum", "essay"), /: #light$/m);
+  lib("tag", "images", "light", "moths");
+  assert.deepEqual(JSON.parse(lib("tags", "--json")), [{ tag: "light", pdfs: 2 }, { tag: "moths", pdfs: 1 }]);
+  lib("star", "images");
+  assert.match(lib("star", "images"), /no change/);
+  assert.deepEqual(JSON.parse(lib("list", "--starred", "--json")).map(r => r.title), ["images"]);
+  assert.deepEqual(JSON.parse(lib("list", "-t", "light", "-t", "moths", "--json")).map(r => r.title), ["images"]);
+  lib("unstar", "images");
+  assert.equal(JSON.parse(lib("list", "--starred", "--json")).length, 0);
+});
+
+test("info, text and rescan", () => {
+  const info = JSON.parse(lib("info", "biolum", "--json"));
+  assert.equal(info.title, "Notes on Bioluminescence");
+  assert.equal(info.highlights, 8);
+  assert.deepEqual(info.tags, ["light"]);
+  assert.match(lib("info", "biolum"), /^Title +Notes on Bioluminescence$/m);
+  const text = JSON.parse(lib("text", "biolum", "--pages", "2", "-f", "json"));
+  assert.deepEqual(text.pages.map(p => p.page), [2]);
+  assert.match(text.pages[0].text, /deep-sea animals/);
+  assert.match(ok("text", SAMPLE), /^\[Page 1\]\n\nNotes on Bioluminescence/);
+  assert.match(lib("rescan"), /up to date/);
+  assert.equal(JSON.parse(lib("rescan", "--all", "--json")).length, 2);
+});
+
+test("remove drops the doc and the library's copy, and refuses annotated docs without --force", () => {
+  const file = path.join(dir, "library", "faelights.json");
+  const db = JSON.parse(fs.readFileSync(file, "utf8"));
+  const d = db.docs.find(x => x.title === "images");
+  d.annotated = true;
+  fs.writeFileSync(file, JSON.stringify(db));
+  const r = run("--data-dir", dir, "remove", "images");
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /annotated in Faelights/);
+  assert.match(lib("remove", "images", "--force"), /^Removed images\. Your original is still at/);
+  assert.equal(fs.existsSync(d.storedPath), false);
+  assert.ok(fs.existsSync(IMAGES));
+  assert.deepEqual(JSON.parse(lib("list", "--json")).map(r => r.title), ["Notes on Bioluminescence"]);
+});
+
+test("add rejects text that is neither a file nor an identifier, before touching anything", () => {
+  const r = run("--data-dir", dir, "add", "not an id");
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /doesn't look like an ISBN, DOI/);
+});
+
 test("core/meta.js reads metadata in Node and cleans titles", async () => {
   const meta = await withPdf(SAMPLE, pdf => Meta.readMeta(pdf));
   assert.equal(meta.title, "Notes on Bioluminescence");
