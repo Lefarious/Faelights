@@ -644,7 +644,7 @@ const Annot = (() => {
     const inBox = (q, pad) => px >= q[0] - pad && px <= q[2] + pad && py >= q[1] - pad && py <= q[3] + pad;
     let best = null, bestArea = Infinity;
     for (const x of list) {
-      const quads = x.quadPoints && x.quadPoints.length ? normQuads(x) : null;
+      const quads = x.quadPoints && x.quadPoints.length ? Extract.normQuads(x) : null;
       const r = pdfjsLib.Util.normalizeRect(x.rect);
       // image boxes leave their inside to the text under them: only the border picks them (anywhere with the Capture tool)
       const hit = x.subtype === "Square" ? inBox(r, edge) && (a.tool === "image" || !inBox(r, -edge))

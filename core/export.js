@@ -1,6 +1,7 @@
-/* Faelights — export formatting (pure; no DOM, no IPC)
-   Builds the text of an export from a doc's result: Markdown, Obsidian, plain text and self-contained HTML,
-   optionally with image boxes (core.js `result.images`) interleaved. Loaded before app.js; also required by tests. */
+/* Faelights — export formatting (headless core; no DOM, no IPC)
+   Builds the text of an export from a doc's result: Markdown (**highlight**), Obsidian (==highlight==), plain text
+   and self-contained HTML, with optional YAML frontmatter and image boxes (extract.js `result.images`) interleaved.
+   Loaded by a <script> tag in the renderer (global `ExportFmt`, after order.js) and by require() in Node. */
 "use strict";
 
 const ExportFmt = (() => {

@@ -4,7 +4,7 @@
 const { test, describe, before } = require("node:test");
 const assert = require("node:assert/strict");
 const { withPdf, repoPath } = require("./helpers/pdf");
-const { analyzePdf, imgStreamAt, imgSnapToFacts } = require("../renderer/core.js");
+const { analyzePdf, imgStreamAt, imgSnapToFacts } = require("../core/extract.js");
 
 const RED = [255, 0, 0];
 const BLUE = [0, 0, 255];

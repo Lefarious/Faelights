@@ -70,7 +70,7 @@ const ckey = c => c.map(v => Math.round(v / 24) * 24).join(",");
 const plural = (n, a, b) => n + " " + (n === 1 ? a : (b || a + "s"));
 // extracts that come before the first topic (title page, abstract) are grouped under this label
 const PRE_TOPIC = "Abstract";
-const outdated = d => !d.result || (d.result.v || 1) < ANALYZER_VERSION;
+const outdated = d => !d.result || (d.result.v || 1) < Extract.ANALYZER_VERSION;
 
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2200); }
 async function copyText(text, what) { await fl.copy(text); toast(what + " copied"); }
@@ -134,7 +134,7 @@ async function readMeta(pdf) {
 async function analyzeBytes(bytes, onProgress) {
   const pdf = await pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
   const meta = await readMeta(pdf);
-  const result = await analyzePdf(pdf, onProgress);
+  const result = await Extract.analyzePdf(pdf, onProgress);
   pdf.destroy();
   return { title: cleanTitle(meta.title), meta, result };
 }
@@ -256,8 +256,7 @@ async function rescanAll() {
 
 /* ---------------- libraries ---------------- */
 function newLibrary() {
-  const id = "l" + Date.now().toString(36);
-  S.db.libraries.push({ id, name: "New library", createdAt: Date.now() });
+  const { id } = Library.addLibrary(S.db);
   S.renaming = id; S.view = { kind: "library", id }; S.docId = null; save(); renderAll();
 }
 async function deleteLibrary(id) {
@@ -265,8 +264,7 @@ async function deleteLibrary(id) {
   const n = S.db.docs.filter(d => d.libraryId === id).length;
   const ok = await fl.confirm(`Delete the library “${l.name}”?`, n ? `Its ${plural(n, "PDF")} will move to Inbox. No highlights are lost.` : "It's empty.", "Delete library");
   if (!ok) return;
-  S.db.docs.forEach(d => { if (d.libraryId === id) d.libraryId = "inbox"; });
-  S.db.libraries = S.db.libraries.filter(x => x.id !== id);
+  Library.removeLibrary(S.db, id);
   if (S.view.kind === "library" && S.view.id === id) S.view = { kind: "library", id: "inbox" };
   save(); renderAll();
 }
@@ -459,7 +457,7 @@ async function docMenu(d, at, opts) {
   if (r === "reveal") fl.revealPdf(d);
   if (r === "rescan") { await rescan(d); renderAll(); }
   if (r === "relink") relink(d);
-  if (r === "star") { d.starred = !d.starred; save(); renderAll(); }
+  if (r === "star") { Library.setStar(d); save(); renderAll(); }
   if (r === "mine") setMine(d, !d.mine);
   if (r.startsWith("move:")) moveDoc(d, r.slice(5));
   if (r === "export") exportDoc(d);
@@ -474,8 +472,8 @@ function setMine(d, on) {
 }
 function process_platform() { return navigator.userAgent.includes("Mac") ? "darwin" : "other"; }
 function moveDoc(d, libId) {
-  if (d.libraryId === libId) return;
-  d.libraryId = libId; save();
+  if (!Library.moveDoc(d, libId)) return;
+  save();
   toast(`Moved to ${lib(libId).name}`);
   renderAll();
 }
@@ -505,7 +503,7 @@ async function relink(d) {
 }
 
 /* ---------------- export ---------------- */
-// Text builders live in exportfmt.js (pure, unit-tested); these names stay for the rest of app.js
+// Text builders live in core/export.js (pure, unit-tested); these names stay for the rest of app.js
 const wrapHl = ExportFmt.wrapHl, entryLines = ExportFmt.entryLines, groupsOf = ExportFmt.groupsOf;
 const exportOpts = d => ({ mode: S.db.settings.mode, libraryName: (lib(d.libraryId) || {}).name || "", preTopic: PRE_TOPIC });
 // images (optional): image boxes to interleave — with `path` they link to a file, without it they become "[Image, p. N]"
@@ -748,7 +746,7 @@ function renderSide() {
       icon: svg(l.system ? ICON.inbox : ICON.lib), name: l.name, count: n,
       current: S.view.kind === "library" && S.view.id === l.id,
       editing: S.renaming === l.id,
-      onRename: v => { if (v) l.name = v; S.renaming = null; save(); renderAll(); },
+      onRename: v => { if (v) Library.renameLibrary(S.db, l.id, v); S.renaming = null; save(); renderAll(); },
       onClick: () => go({ kind: "library", id: l.id }),
       onMenu: (at, o) => libraryMenu(l.id, at, o),
       onDrop: e => {
@@ -761,8 +759,7 @@ function renderSide() {
   }
   sc.append(ul);
 
-  const tags = new Map();
-  for (const d of S.db.docs) for (const t of d.tags || []) tags.set(t, (tags.get(t) || 0) + 1);
+  const tags = Library.tagCounts(S.db);
   if (tags.size) {
     sc.append(Object.assign(el("h3"), { textContent: "Tags" }));
     const tl = el("ul", "nav");
@@ -1025,16 +1022,16 @@ function renderReader() {
   meta.append(lb, el("span", null, d.fileName), el("span", null, plural(d.pages, "page")), el("span", null, plural(d.count, "highlight")));
   if (allImgs.length) meta.append(el("span", null, plural(allImgs.length, "image")));
   meta.append(el("span", null, "Added " + new Date(d.addedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })));
-  const star = el("button", "lib", d.starred ? "★ Starred" : "☆ Star"); star.onclick = () => { d.starred = !d.starred; save(); renderAll(); }; meta.append(star);
+  const star = el("button", "lib", d.starred ? "★ Starred" : "☆ Star"); star.onclick = () => { Library.setStar(d); save(); renderAll(); }; meta.append(star);
   const mine = el("button", "lib"); mine.append(svg(ICON.pub), document.createTextNode(d.mine ? "My publication" : "Mark as mine"));
   mine.querySelector("svg").style.width = "13px"; mine.setAttribute("aria-pressed", !!d.mine);
   mine.title = d.mine ? "Remove from My publications" : "Mark as my publication"; mine.onclick = () => setMine(d, !d.mine); meta.append(mine);
   const tools = el("div", "r-tools");
   const tagedit = el("div", "tagedit");
-  for (const t of d.tags) { const g = el("span", "tg", t); const x = el("button", null, "×"); x.title = "Remove tag"; x.setAttribute("aria-label", "Remove tag " + t); x.onclick = () => { d.tags = d.tags.filter(z => z !== t); save(); renderAll(); }; g.append(x); tagedit.append(g); }
+  for (const t of d.tags) { const g = el("span", "tg", t); const x = el("button", null, "×"); x.title = "Remove tag"; x.setAttribute("aria-label", "Remove tag " + t); x.onclick = () => { Library.removeTag(d, t); save(); renderAll(); }; g.append(x); tagedit.append(g); }
   const ti = el("input"); ti.id = "tagin"; ti.placeholder = "+ tag"; ti.setAttribute("aria-label", "Add tag");
   const known = [...new Set(S.db.docs.flatMap(x => x.tags))]; if (known.length) { const dl = el("datalist"); dl.id = "tagsdl"; for (const k of known) { const o = el("option"); o.value = k; dl.append(o); } tagedit.append(dl); ti.setAttribute("list", "tagsdl"); }
-  ti.onkeydown = e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); const v = ti.value.trim().replace(/^#/, ""); if (v && !d.tags.includes(v)) { d.tags.push(v); save(); renderAll(); setTimeout(() => $("tagin")?.focus(), 0); } } };
+  ti.onkeydown = e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); if (Library.addTag(d, ti.value)) { save(); renderAll(); setTimeout(() => $("tagin")?.focus(), 0); } } };
   tagedit.append(ti); meta.append(tagedit);
 
   const ib = btn("info-btn", "Metadata", "info", "Show the PDF's metadata"); ib.setAttribute("aria-pressed", !!S.db.settings.info);
@@ -1153,7 +1150,7 @@ const TOPIC_SOURCE = {
 function filtered(d) {
   return d.result.entries.map(e => ({ ...e, spans: e.spans.filter(s => !S.off.has(ckey(s.color))) })).filter(e => e.spans.length);
 }
-// Captured images whose colour isn't hidden (renderer/order.js; [] for results without images)
+// Captured images whose colour isn't hidden (core/order.js; [] for results without images)
 const filteredImages = d => Order.filterImages(Order.imagesOf(d.result), S.off);
 // entries + images → [{kind: "entry", entry, topic} | {kind: "image", image, topic}] in reading order
 const withImages = (entries, images) => Order.withImages(entries, images);

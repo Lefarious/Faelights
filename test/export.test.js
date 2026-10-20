@@ -1,10 +1,10 @@
 "use strict";
-// Export: path validation (src/exportPaths.js) and text/HTML builders (renderer/exportfmt.js).
+// Export: path validation (src/exportPaths.js) and text/HTML builders (core/export.js).
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const X = require("../src/exportPaths.js");
-const F = require("../renderer/exportfmt.js");
+const F = require("../core/export.js");
 
 /* ---------------- path validation ---------------- */
 test("asset paths: safe relative paths are accepted", () => {

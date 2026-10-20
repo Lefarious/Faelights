@@ -19,16 +19,27 @@ To run one file: `node --test test/core.test.js`.
 
    ```js
    const { withPdf, repoPath } = require("./helpers/pdf");
-   const { analyzePdf } = require("../renderer/core.js");
+   const { analyzePdf } = require("../core/extract.js");
 
    const result = await withPdf(repoPath("renderer", "sample.pdf"), (pdf) => analyzePdf(pdf));
    ```
 
-   `loadPdf(pathOrBytes)` returns a pdf.js document proxy (the `pdfjs-dist` 3.11.174 legacy build, with no worker and font faces turned off). Call `pdf.destroy()` when you are done with it. `withPdf` does this for you.
+   `loadPdf(pathOrBytes)` is `core/extract.js` `openPdf`: a pdf.js document proxy from the `pdfjs-dist` 3.11.174 legacy build, with no worker and font faces turned off. Call `pdf.destroy()` when you are done with it. `withPdf` does this for you. For a whole result in one call, use `extractPdf(pathOrBytes)` from `core/extract.js`.
+
+## Headless core (`test/core/`)
+
+`test/core/*.test.js` test the `core/` modules in plain Node, with no Electron and no DOM:
+
+- `extract.test.js`: opening a path or bytes, reading order, the flat `highlights()` list (full sentence and highlight-only text), Underline / Squiggly / StrikeOut, loose marks.
+- `topics.test.js`: font-size headings on `sample.pdf`, bookmarks winning over headings (with nesting), the wording and per-page fallbacks.
+- `export.test.js`: Markdown, Obsidian, plain text and HTML in both modes (full sentence / highlights only), YAML frontmatter.
+- `library.test.js`: the userData folder per platform and `FAELIGHTS_DATA_DIR`, atomic saves, the lock file (also between two processes), tags, stars, libraries and stored PDF copies. Each test uses its own temp folder, never the real library.
+
+`test/helpers/annotate.js` adds markup annotations and bookmarks to a PDF in memory with pdf-lib, finding the words to mark through pdf.js. The extract and topic tests use it on `sample.pdf` to cover mark types and bookmarks that the sample doesn't have.
 
 ## Snapshot in `core.test.js`
 
-`core.test.js` checks the exact current output of `analyzePdf` on `renderer/sample.pdf`: page count, mark count, every entry's spans, colours, comments and sentence, and the detected topics. If you change extraction on purpose, check that the new output is better, update the expected values in the test, and bump `ANALYZER_VERSION` in `renderer/core.js`.
+`core.test.js` checks the exact current output of `analyzePdf` on `renderer/sample.pdf`: page count, mark count, every entry's spans, colours, comments and sentence, and the detected topics. If you change extraction on purpose, check that the new output is better, update the expected values in the test, and bump `ANALYZER_VERSION` in `core/extract.js`.
 
 ## Fixtures
 

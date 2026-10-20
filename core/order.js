@@ -1,6 +1,6 @@
-/* Faelights — reading order of extracts and captured images
+/* Faelights — reading order of extracts and captured images (headless core)
    Pure helpers (no DOM, no state): the reader's "With images" view and export both use them.
-   An image goes before entry `e` when `img.at <= e.at`, otherwise after (core.js `result.images`). */
+   An image goes before entry `e` when `img.at <= e.at`, otherwise after (extract.js `result.images`). */
 "use strict";
 
 const Order = (() => {

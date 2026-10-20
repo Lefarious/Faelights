@@ -1,9 +1,9 @@
 "use strict";
-// Pure helpers behind the reader's "With images" view (renderer/order.js):
+// Pure helpers behind the reader's "With images" view (core/order.js):
 // merging captured images into the extract stream, topic grouping and colour filtering.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { ckey, imagesOf, filterImages, withImages, groupItems } = require("../renderer/order.js");
+const { ckey, imagesOf, filterImages, withImages, groupItems } = require("../core/order.js");
 
 const YELLOW = [255, 219, 51];
 const BLUE = [128, 191, 255];
