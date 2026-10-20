@@ -4,7 +4,7 @@ _Last updated: 2026-10-10 · Current sprint: 4 closed (T-014 merged locally, 437
 
 ## Settings
 - Capacity: 3 parallel features per sprint · minor bugs/polish (XS/S) are exempt and don't count
-- Todo ids: `T-NNN`, next free: T-015 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Todo ids: `T-NNN`, next free: T-016 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
@@ -33,6 +33,8 @@ Proposals waiting for approval (each can join Sprint 3; "exempt" = doesn't count
 - [ ] **T-009** [polish · XS · exempt] ISBN lookup may pick a scan of another edition: show the edition title in the result row.
 - [ ] **T-010** [enhancement · S] Move and resize image boxes in the viewer (today: delete and redraw).
 - [ ] **T-011** [polish · XS · exempt] `ckey` is duplicated in order.js and app.js, and `groupsOf` overlaps `Order.groupItems`: fold both into order.js.
+
+- [ ] **T-015 cli** (feature · M · not in a sprint yet · branch `feature/T-015-cli`, cut from `refactor/headless-core` because it needs `core/`; requested by user 2026-10-21): a `faelights` command line over `core/`. `extract <pdf>` (md / obsidian / html / plain / json, full or only), plus `libraries`, `list`, `add`, `export` on the app's own library (`--data-dir` or `FAELIGHTS_DATA_DIR`). `readMeta`/`cleanTitle` moved from app.js to new `core/meta.js`, and `summary` to `Order.summary`, so CLI-added docs match app-added ones. Captured images aren't exported (they need rendering). Built and tested on the branch: 126/126; the app opens a library the CLI wrote, and the same PDF added by the CLI and by the app gives identical `meta`/`result`/`count`/`colours`.
 
 Polish (reported by user):
 
