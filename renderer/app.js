@@ -1207,6 +1207,7 @@ function addSample() {
 const ADD_FAIL = {
   invalid: "That doesn't look like an ISBN, DOI, PMID, arXiv ID, ADS bibcode or web link.",
   offline: "You're offline. Connect to the internet to fetch this paper, or add a PDF from your computer.",
+  unreachable: "Couldn't find that site. Check the link for typos, or open it in your browser.",
   paywalled: "The publisher didn't hand over the PDF. It may need a subscription or sign-in. Open the page in your browser, download it there, then add the file.",
   "not-pdf": "Couldn't find a PDF there. Open the page in your browser to download it, then add the file.",
   "not-found": "Nothing was found for that. Check it for typos.",
@@ -1216,7 +1217,7 @@ const ADD_FAIL = {
   "too-many": "That's too much to add at once. Paste up to 200 items at a time."
 };
 const ADD_MAX = 200, ADD_MAX_CHARS = 100000;   // what id:parseMany and parseIdentifiers handle in one go
-const ADD_OPEN = ["paywalled", "not-pdf", "no-free-copy"];   // failures where the landing page is worth opening
+const ADD_OPEN = ["paywalled", "not-pdf", "no-free-copy", "unreachable"];   // failures where the landing page is worth opening
 let addDlg = null;  // {back, box, input, hint, off, msg, list, ok, cancel, items, ids, busy, batch, stop, cur, seq, opener}
 function addIdBtn(compact) {
   const b = compact ? btn("icon add-id", "", "link", "Add by identifier") : btn("", "Add by identifier", "link");

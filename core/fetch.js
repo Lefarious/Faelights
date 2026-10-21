@@ -11,7 +11,7 @@ const { lookupTarget, fromCrossref, fromArxivAtom } = require("./metadata.js");
 
 const FETCH_HEAD_MS = 15000, FETCH_STALL_MS = 30000, MAX_PDF = 150 * 1024 * 1024, MAX_HTML = 5 * 1024 * 1024;
 const ACCEPT_ANY = "application/pdf,text/html;q=0.9,*/*;q=0.8";
-// reasons: invalid, offline, network, not-found, paywalled, not-pdf, too-large, no-free-copy, cancelled
+// reasons: invalid, offline, unreachable, network, not-found, paywalled, not-pdf, too-large, no-free-copy, cancelled
 class FetchFail extends Error { constructor(reason) { super(reason); this.reason = reason; } }
 const hardFail = e => e.reason === "cancelled" || e.reason === "offline";   // stop trying alternatives
 
@@ -121,7 +121,7 @@ function resolver(get, progress = () => {}) {
     if (id.kind !== "doi") return pdfFrom(id.url);
     try { return await pdfFrom("https://doi.org/" + id.value.split("/").map(encodeURIComponent).join("/").replace(/%2F/g, "/")); }
     catch (err) {
-      if (!["paywalled", "not-pdf"].includes(err.reason)) throw err;
+      if (!["paywalled", "not-pdf", "unreachable"].includes(err.reason)) throw err;   // unreachable: the publisher's host is down or gone
       // CrossRef sometimes lists a full-text PDF link the landing page doesn't expose
       try {
         const cr = await get("https://api.crossref.org/works/" + encodeURIComponent(id.value), "application/json", MAX_HTML);
@@ -129,7 +129,7 @@ function resolver(get, progress = () => {}) {
         for (const l of links) { try { return await pdfFrom(l.URL, 0); } catch (e) { if (hardFail(e)) throw e; } }
       } catch (e) { if (hardFail(e)) throw e; }
       // a publisher page with no reachable PDF is access-controlled (or bot-walled) far more often than PDF-less
-      throw new FetchFail("paywalled");
+      throw new FetchFail(err.reason === "unreachable" ? "unreachable" : "paywalled");
     }
   }
 
@@ -202,7 +202,7 @@ function nodeGet({ userAgent = "Faelights (PDF highlights)", signal: outerSignal
         const headers = { "User-Agent": userAgent, Accept: accept };
         const ck = cookieFor(at); if (ck) headers.Cookie = ck;
         try { res = await fetch(at, { headers, redirect: "manual", signal: ctl.signal }); }
-        catch (e) { throw ctl.signal.aborted ? new FetchFail(why) : new FetchFail(fetchFailureReason(e)); }
+        catch (e) { throw ctl.signal.aborted ? new FetchFail(why) : new FetchFail(fetchFailureReason(e, at)); }
         keep(at, res);
         if (res.status < 300 || res.status > 399 || !res.headers.get("location")) break;
         const next = new URL(res.headers.get("location"), at).href;
@@ -223,7 +223,7 @@ function nodeGet({ userAgent = "Faelights (PDF highlights)", signal: outerSignal
           if (got > cap) { ctl.abort(); throw new FetchFail(html ? "not-pdf" : "too-large"); }
           if (!html && !opts.quiet && onProgress && got > 65536) onProgress({ stage: "download", got, total: len });
         }
-      } catch (e) { if (e instanceof FetchFail) throw e; throw ctl.signal.aborted ? new FetchFail(why) : new FetchFail(fetchFailureReason(e)); }
+      } catch (e) { if (e instanceof FetchFail) throw e; throw ctl.signal.aborted ? new FetchFail(why) : new FetchFail(fetchFailureReason(e, at)); }
       return { url: at, type, html, buf: Buffer.concat(chunks) };
     } finally {
       clearTimeout(timer);

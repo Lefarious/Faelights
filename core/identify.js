@@ -161,13 +161,26 @@ function fileNameFor(id, pdfUrl) {
   return (clean(({ arxiv: "arXiv_", pmid: "PMID_", isbn: "ISBN_" }[id.kind] || "") + id.value) || "download") + ".pdf";
 }
 
-// Map a thrown fetch error (Chromium net::ERR_* from Electron's net.fetch, or a Node errno) to a failure reason.
-// No connection at all → "offline" so the UI can suggest adding from disk; anything else → "network".
-const OFFLINE_CODES = /\b(ERR_INTERNET_DISCONNECTED|ERR_NAME_NOT_RESOLVED|ERR_NAME_RESOLUTION_FAILED|ERR_ADDRESS_UNREACHABLE|ERR_NETWORK_ACCESS_DENIED|ERR_PROXY_CONNECTION_FAILED|ERR_CONNECTION_REFUSED|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ENETDOWN)\b/;
-function fetchFailureReason(err) {
+// Map a thrown fetch error (Chromium net::ERR_* from Electron's net.fetch, or a Node errno) and the URL it was for to a reason.
+// No connection at all → "offline" so the UI can suggest adding from disk; a site that can't be found or reached →
+// "unreachable" (usually a mistyped link); anything else → "network".
+// Only ever mean no connection: no network, the OS/firewall blocking us, or the system proxy down (every request goes through it).
+const OFFLINE_CODES = /\b(ERR_INTERNET_DISCONNECTED|ERR_NETWORK_ACCESS_DENIED|ERR_PROXY_CONNECTION_FAILED|ENETUNREACH|ENETDOWN)\b/;
+// DNS / connection failures: a bad host, or no connection (DNS fails offline too), depending on the host
+const NO_HOST_CODES = /\b(ERR_NAME_NOT_RESOLVED|ERR_NAME_RESOLUTION_FAILED|ERR_ADDRESS_UNREACHABLE|ERR_CONNECTION_REFUSED|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EHOSTUNREACH)\b/;
+// Services the app itself calls (core/fetch.js, core/metadata.js): always up, so failing to reach one means we're offline
+const SERVICE_HOSTS = ["doi.org", "crossref.org", "arxiv.org", "ncbi.nlm.nih.gov", "pmc-oa-opendata.s3.amazonaws.com", "europepmc.org", "openlibrary.org", "archive.org", "adsabs.harvard.edu"];
+function isServiceHost(url) {
+  let h; try { h = new URL(url).hostname.toLowerCase(); } catch (_) { return false; }
+  return SERVICE_HOSTS.some(s => h === s || h.endsWith("." + s));
+}
+// url is optional; without it a DNS / connection failure stays "offline", as before: it stops a run of fetches early instead of retrying each
+function fetchFailureReason(err, url) {
   if (!err) return "network";
   const text = [err.code, err.cause && err.cause.code, err.message, err.cause && err.cause.message].filter(Boolean).join(" ");
-  return OFFLINE_CODES.test(text) ? "offline" : "network";
+  if (OFFLINE_CODES.test(text)) return "offline";
+  if (NO_HOST_CODES.test(text)) return !url || isServiceHost(url) ? "offline" : "unreachable";
+  return "network";
 }
 
 // Batch input → [{text, id}] (id null when unrecognised), exact duplicates dropped.
