@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-21 · **Sprint 5 closed** (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; push awaits user gate 2) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
+_Last updated: 2026-10-21 · **Sprint 6 open** (integration `feature/s6-integration`, worktree `../fl-s6`) · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
@@ -105,7 +105,7 @@ Polish (reported by user):
 | 9 | planned | T-030 ocr, T-031 ai-merge | — |
 | 8 | planned | T-025 markdown-notes, T-029 shelves | — |
 | 7 | planned | T-021 multi-select, T-027 section-numbering, T-028 loose-marks-as-clips | — |
-| 6 | planned | T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read | — |
+| 6 | **open** 2026-10-21 (tag `sprint-6-start`, main 3cbd93e) | T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read | — |
 | 5 | **closed** 2026-10-21 (tag `sprint-5-end`, main 20a8e58) | bugs: T-017, T-018, T-019, T-002, T-008 (all exempt) | 156/156 |
 | 4 | **closed** 2026-10-10 (tag `sprint-4-end`, main 43721ca) | T-014 onboarding-tour | 81/81 |
 | 3 | **closed** 2026-10-09 (tag `sprint-3-end`, main 736ffd2) | T-012 copy-image, T-001 meta-enrich (+ T-013 exempt, just before) | 69/69 |
@@ -113,6 +113,14 @@ Polish (reported by user):
 | 1 | **closed** 2026-10-09 (tag `sprint-1-end`, c5c0dbe) | item-actions, add-by-identifier, test-harness | 23/23 |
 
 Newest first. "Between sprints" entries are small fixes merged outside a sprint.
+
+### Sprint 6 — open (2026-10-21)
+- Scope (5 slots): T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read (all enhancement · S).
+- Backup: `backup/sprint-6-pre-20261021` · Tag: `sprint-6-start` (3cbd93e) · Baseline: `npm test` 156/156 green
+- Merge flow: branches merge into `feature/s6-integration` (worktree `../fl-s6`); user tries the build (gate 1) → main; push = gate 2
+- Scaffold (tech lead): `refactor/library-doc-fields` — `normalize` fills `d.read`, `d.lastPage` (0 = never opened), `db.tagColours`; helpers `setRead`, `setLastPage`, `setTagColour`, `tagColour`; new docs get read/lastPage in app.js. 159/159. Merged into s6-integration d6de5cc. Shelves/notes fields left for Sprint 8.
+- Dispatch: 4 agents in parallel, worktrees `../fl-T-020`, `../fl-T-022`, `../fl-T-024`, `../fl-T-026`, all cut from s6-integration d6de5cc. T-022 → T-023 run by one agent in sequence (same search panel; T-023 branch cut from T-022). The library scope select already existed, so T-023 = default scope to the library you came from + "Search this library" in the library menu.
+- app.js regions: T-020 `annotate()` + reader `r-actions`; T-022/23 search view, `libraryMenu`, keyboard handler; T-024 sidebar tags + `tags-inline` line + reader `tagedit`; T-026 `docMenu`, list header/tools, doc row, `visibleDocs`, reader `r-meta`. Each appends its own styles.css block. Expected textual overlap: T-024/T-026 in the list row, styles.css EOF.
 
 ### Sprint 5 — closed (2026-10-21)
 - Scope: all bugs (each exempt, 0 slots): T-018, T-019, T-017, T-008, T-002.
@@ -125,7 +133,7 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 - T-002 started after T-017 and T-008 merged (worktree `../fl-T-002`, harness worktree isolation failed on a path-case check), so it may also edit core/fetch.js.
 - T-002: new reason `unreachable` ("Couldn't find that site…", Open in browser). `fetchFailureReason(err, url)`: no-connection codes → offline; DNS/refused → offline for the app's own service hosts (doi.org, crossref, arxiv, ncbi, PMC bucket, europepmc, openlibrary, archive.org, adsabs), else unreachable; no url → offline (old behaviour). DOI path now also tries CrossRef links when the publisher host is unreachable. Wi-Fi-without-internet limit fixed on user request (1ee74af): before reporting `unreachable`, `resolvePdf` checks that doi.org answers; if it is offline too → `offline`. Costs one extra request only on that failure.
 - 2026-10-21: all 5 merged on feature/s5-integration @ dafb4c9, 156/156 green. Gate-1 launch blocked by the installed app holding the single-instance lock; user reviewed the report, asked for the two leftovers to be fixed (follow-ups 6, 7), then said merge.
-- 2026-10-21: user OK → merged into local main 20a8e58; 156/156; tag `sprint-5-end`. Atlas synced (fbf5430), compass F-025, D-018, D-019. Push awaits gate 2.
+- 2026-10-21: user OK → merged into local main 20a8e58; 156/156; tag `sprint-5-end`. Atlas synced (fbf5430), compass F-025, D-018, D-019. User gate 2 OK → pushed 7ead2d6..3cbd93e; CI run 39585050117 green (tests + all three builds). No version tag.
 - Test rounds: 142 (baseline) → 142 → 145 → 147 → 152 → 156 → 156 → 156 (integration) → 156 (main 20a8e58); new failures introduced: 0
 - Cause of T-002 found while reading: `ERR_NAME_NOT_RESOLVED` / `ENOTFOUND` are in `OFFLINE_CODES`, so a mistyped domain reads as "offline".
 - Merge log (into feature/s5-integration):
