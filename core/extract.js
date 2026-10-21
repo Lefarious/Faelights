@@ -10,8 +10,10 @@ const Extract = (() => {
   const T = typeof Topics !== "undefined" ? Topics : require("./topics.js");
   const MARK_TYPES = { Highlight: "Highlight", Underline: "Underline", Squiggly: "Squiggly", StrikeOut: "Strike" };
   const ABBR = /\b(?:e\.g|i\.e|et al|etc|vs|cf|Fig|Figs|Eq|Eqs|Dr|Mr|Mrs|Ms|Prof|St|No|Vol|pp|approx|Ch|Sec)\.$/i;
+  // "et al." / "etc." often do end a sentence: they do when a capital follows. "No." is "number" only before a digit.
+  const ABBR_END = /\b(?:et al|etc)\.$/i, ABBR_NUM = /\bNo\.$/i;
   // Bump when the shape or quality of results changes so saved docs get rescanned.
-  const ANALYZER_VERSION = 3;
+  const ANALYZER_VERSION = 4;
 
   function normQuads(a) {
     const q = a.quadPoints, out = [];
@@ -140,27 +142,32 @@ const Extract = (() => {
 
     // ---- sentences ----
     const isBreak = k => text[k] === "\n" && text[k + 1] === "\n";
+    const closer = c => /["'”’)\]]/.test(c || "");
+    // does a sentence end at k? "." / "!" / "?", maybe followed by closing quotes or brackets ('"stop." Then'), then space
+    function isEnd(k) {
+      if (!/\s/.test(text[k + 1] || " ")) return false;
+      let i = k; while (i > 0 && closer(text[i])) i--;
+      if (!/[.!?]/.test(text[i])) return false;
+      const before = text.slice(Math.max(0, i - 8), i + 1), next = text.slice(k + 1, k + 40).match(/\S/);
+      if (ABBR_NUM.test(before)) return !next || !/\d/.test(next[0]);
+      if (ABBR_END.test(before)) return !next || /\p{Lu}/u.test(next[0]);
+      return !ABBR.test(before) && !/\b[A-Z]\.$/.test(before);
+    }
     function sentenceBounds(a, b) {
       let s = a;
       while (s > 0) {
         const k = s - 1;
         if (text[k] === "\n" && text[k - 1] === "\n") break;
-        if (/[.!?]/.test(text[k]) && /\s/.test(text[k + 1] || " ") && k < a) {
-          const before = text.slice(Math.max(0, k - 8), k + 1);
-          if (!ABBR.test(before) && !/\b[A-Z]\.$/.test(before)) break;
-        }
+        if (k < a && isEnd(k)) break;
         s--;
       }
       let e = b;
       while (e < text.length - 1) {
         if (isBreak(e + 1)) break;
-        if (/[.!?]/.test(text[e]) && e >= b && /\s/.test(text[e + 1] || " ")) {
-          const before = text.slice(Math.max(0, e - 8), e + 1);
-          if (!ABBR.test(before) && !/\b[A-Z]\.$/.test(before)) break;
-        }
+        if (e >= b && isEnd(e)) break;
         e++;
       }
-      while (/["'”’)\]]/.test(text[e + 1] || "")) e++;
+      while (closer(text[e + 1])) e++;
       while (s < a && /\s/.test(text[s])) s++;
       // keep very long "sentences" readable
       if (a - s > 320) s = text.lastIndexOf(" ", a - 240) + 1;
@@ -170,11 +177,13 @@ const Extract = (() => {
 
     // snap highlight edges to whole words (glyph widths are approximated)
     const wc = c => /[\p{L}\p{N}'’-]/u.test(c || "");
+    const endRun = k => { let i = k; while (/[.!?]/.test(text[i] || "") || closer(text[i])) i++; return i > k && /\s/.test(text[i] || " ") ? i : k; };
     const hitIn = (a, i, j) => { let n = 0; for (let k = i; k <= j; k++) if (meta[k].hl === a.id) n++; return n; };
     for (const a of annots) {
       if (a.first === -1) continue;
       let f = a.first, l = a.lastIdx;
-      while (f < l && /\s/.test(text[f])) f++;
+      // a mark that starts on the previous sentence's ". " (padded quads, guessed glyph widths) starts after it
+      for (let j; f < l && (j = /\s/.test(text[f]) ? f + 1 : endRun(f)) > f;) f = Math.min(j, l);
       while (l > f && /\s/.test(text[l])) l--;
       if (wc(text[f]) && wc(text[f - 1])) {
         let ws = f, we = f; while (ws > 0 && wc(text[ws - 1])) ws--; while (we < text.length - 1 && wc(text[we + 1])) we++;
