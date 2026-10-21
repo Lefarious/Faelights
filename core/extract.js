@@ -12,6 +12,8 @@ const Extract = (() => {
   const ABBR = /\b(?:e\.g|i\.e|et al|etc|vs|cf|Fig|Figs|Eq|Eqs|Dr|Mr|Mrs|Ms|Prof|St|No|Vol|pp|approx|Ch|Sec)\.$/i;
   // "et al." / "etc." often do end a sentence: they do when a capital follows. "No." is "number" only before a digit.
   const ABBR_END = /\b(?:et al|etc)\.$/i, ABBR_NUM = /\bNo\.$/i;
+  // words that start sentences but rarely follow an initial; a space must follow, so the initial in "J. A. Smith" isn't one
+  const OPENER = /^(?:The|This|These|That|Those|There|Then|Thus|It|Its|In|On|At|As|An?|We|Our|They|Their|He|She|His|Her|However|Here|Hence|Therefore|Moreover|Furthermore|Also|But|And|For|From|When|While|Since|After|Before|If|With|By|Such|Each|All|Both|Some|Most|Many|No|Not|One|What|Which|Why|How|Although|Because|Finally|First|Overall|Similarly|Instead|Indeed|Yet|So)(?=[\s,])/;
   // Bump when the shape or quality of results changes so saved docs get rescanned.
   const ANALYZER_VERSION = 4;
 
@@ -151,7 +153,9 @@ const Extract = (() => {
       const before = text.slice(Math.max(0, i - 8), i + 1), next = text.slice(k + 1, k + 40).match(/\S/);
       if (ABBR_NUM.test(before)) return !next || !/\d/.test(next[0]);
       if (ABBR_END.test(before)) return !next || /\p{Lu}/u.test(next[0]);
-      return !ABBR.test(before) && !/\b[A-Z]\.$/.test(before);
+      if (ABBR.test(before)) return false;
+      // "J. Smith" is an initial, but a lone capital before a common sentence opener ends one ("vitamin C. The dog")
+      return !/\b[A-Z]\.$/.test(before) || OPENER.test(text.slice(k + 1, k + 40).trimStart());
     }
     function sentenceBounds(a, b) {
       let s = a;

@@ -105,7 +105,8 @@ const DOG = "The dog ran in the park.";
 
 test("a full stop then a space splits extracts, even after quotes, brackets, 'no.' or 'et al.'", async () => {
   for (const [first, find] of [['He said "stop."', "He said"], ["It works (mostly.)", "It works"],
-    ["The answer was no.", "answer"], ["This was shown by Smith et al.", "shown"], ["See the list etc.", "See the"]])
+    ["The answer was no.", "answer"], ["This was shown by Smith et al.", "shown"], ["See the list etc.", "See the"],
+    ["We took vitamin C.", "We took"]])
     assert.deepEqual(await sentencesOf([first + " " + DOG], [find, "dog ran"]), [first, DOG], first);
 });
 
@@ -117,7 +118,7 @@ test("a highlight across two sentences and abbreviations or decimals still give 
   assert.deepEqual(await sentencesOf(["The cat sat on the mat. " + DOG], ["mat. The dog"]), ["The cat sat on the mat. " + DOG]);
   for (const s of ["See e.g. the cat and the dog.", "See Fig. 3 for the cat and the dog.", "It was Smith et al. who saw the dog.",
     "Smith et al. (2020) saw the dog.", "Cats etc. are seen with the dog.", "It was item No. 5 of the dog.",
-    "The value was 3.5 for the dog."])
+    "The value was 3.5 for the dog.", "It was J. Smith who saw the dog.", "Written by J. A. Smith for the dog."])
     assert.deepEqual(await sentencesOf([s], [s.split(" ").slice(0, 2).join(" "), "the dog"]), [s], s);
 });
 
