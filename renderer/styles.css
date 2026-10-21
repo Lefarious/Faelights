@@ -336,6 +336,7 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 .amenu-item .ai-ico { width: 16px; height: 16px; flex: none; display: grid; place-items: center; color: var(--muted); }
 .amenu-item .ico { width: 16px; height: 16px; }
 .amenu-item[role="menuitemcheckbox"] .ai-ico { color: var(--accent); }
+.amenu-item .ai-sw { width: 12px; height: 12px; flex: none; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .18); margin-right: -2px; }
 .amenu-item .ai-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .amenu-item .ai-hint { color: var(--muted); font-size: 12px; margin-left: 16px; font-variant-numeric: tabular-nums; }
 .amenu-item .ai-sub { width: 14px; height: 14px; color: var(--muted); margin-right: -4px; }
