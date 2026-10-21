@@ -125,15 +125,39 @@ test("fileNameFor", () => {
   assert.equal(fileNameFor(parse("https://example.com/")), "example.com.pdf");
 });
 
-test("fetchFailureReason maps connection errors to offline", () => {
-  for (const m of ["net::ERR_INTERNET_DISCONNECTED", "net::ERR_NAME_NOT_RESOLVED", "net::ERR_NAME_RESOLUTION_FAILED", "net::ERR_ADDRESS_UNREACHABLE",
-    "net::ERR_CONNECTION_REFUSED", "net::ERR_PROXY_CONNECTION_FAILED", "getaddrinfo ENOTFOUND arxiv.org", "connect ECONNREFUSED 1.2.3.4:443"])
-    assert.equal(fetchFailureReason(new Error(m)), "offline", m);
-  assert.equal(fetchFailureReason(Object.assign(new Error("fetch failed"), { cause: { code: "EAI_AGAIN" } })), "offline");
-  assert.equal(fetchFailureReason({ code: "ENETUNREACH" }), "offline");
+test("fetchFailureReason: a site that can't be found is 'unreachable', our own services failing means 'offline'", () => {
+  const dns = ["net::ERR_NAME_NOT_RESOLVED", "net::ERR_NAME_RESOLUTION_FAILED", "net::ERR_ADDRESS_UNREACHABLE", "net::ERR_CONNECTION_REFUSED",
+    "getaddrinfo ENOTFOUND www.natrue.com", "connect ECONNREFUSED 1.2.3.4:443"];
+  for (const m of dns) {
+    assert.equal(fetchFailureReason(new Error(m), "https://www.natrue.com/articles/x"), "unreachable", m);
+    for (const u of ["https://doi.org/10.1/x", "https://api.crossref.org/works/x", "https://export.arxiv.org/api/query", "https://eutils.ncbi.nlm.nih.gov/x",
+      "https://pmc-oa-opendata.s3.amazonaws.com/x", "https://ia800300.us.archive.org/x.pdf", "https://ui.adsabs.harvard.edu/link_gateway/x"])
+      assert.equal(fetchFailureReason(new Error(m), u), "offline", m + " " + u);
+  }
+  const node = Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
+  assert.equal(fetchFailureReason(node, "https://www.natrue.com/x"), "unreachable");
+  assert.equal(fetchFailureReason(node, "https://doi.org/10.1/x"), "offline");
+  assert.equal(fetchFailureReason({ code: "EAI_AGAIN" }, "https://notdoi.org/x"), "unreachable");   // a look-alike isn't one of ours
+  assert.equal(fetchFailureReason({ code: "EHOSTUNREACH" }, "not a url"), "unreachable");
+});
+
+test("fetchFailureReason: no connection at all is 'offline' whatever the host", () => {
+  for (const m of ["net::ERR_INTERNET_DISCONNECTED", "net::ERR_NETWORK_ACCESS_DENIED", "net::ERR_PROXY_CONNECTION_FAILED"])
+    for (const u of ["https://www.natrue.com/x", "https://doi.org/10.1/x", undefined])
+      assert.equal(fetchFailureReason(new Error(m), u), "offline", m);
+  assert.equal(fetchFailureReason({ code: "ENETUNREACH" }, "https://www.natrue.com/x"), "offline");
+  assert.equal(fetchFailureReason(Object.assign(new Error("fetch failed"), { cause: { code: "ENETDOWN" } }), "https://example.org/"), "offline");
+});
+
+test("fetchFailureReason: anything else is 'network'; without a URL a DNS failure stays 'offline'", () => {
   for (const m of ["net::ERR_CONNECTION_RESET", "net::ERR_TIMED_OUT", "net::ERR_CERT_AUTHORITY_INVALID", "This operation was aborted", "boom"])
-    assert.equal(fetchFailureReason(new Error(m)), "network", m);
+    for (const u of ["https://www.natrue.com/x", "https://doi.org/10.1/x", undefined])
+      assert.equal(fetchFailureReason(new Error(m), u), "network", m);
+  assert.equal(fetchFailureReason(null, "https://www.natrue.com/x"), "network");
   assert.equal(fetchFailureReason(null), "network");
+  // no host to judge by: keep the old answer, which stops a batch rather than failing every item one by one
+  assert.equal(fetchFailureReason(new Error("getaddrinfo ENOTFOUND x")), "offline");
+  assert.equal(fetchFailureReason({ code: "ECONNREFUSED" }, ""), "offline");
 });
 
 const { parseIdentifiers } = require("../core/identify.js");
@@ -208,4 +232,37 @@ test("parseIdentifiers splits batch input", () => {
   assert.deepEqual(parseIdentifiers("banana\n10.1038/x\n10.1038/x, banana").map(x => [x.text, !!x.id]), [["banana", false], ["10.1038/x", true]]);
   assert.deepEqual(parseIdentifiers("  \n\n"), []);
   assert.deepEqual(parseIdentifiers(null), []);
+});
+
+test("long and messy pastes (T-017)", () => {
+  const items = t => parseIdentifiers(t).map(x => [x.text, x.id && x.id.kind]);
+  // a multi-line reference list with tabs, CRLF, non-breaking and zero-width spaces
+  assert.deepEqual(items("\u200B10.1038/nature12373\uFEFF\r\n\u00A0PMID:\u00A031452104\t2101.00001\r\n\r\nhttps://arxiv.org/abs/1706.03762\u200B\n"),
+    [["10.1038/nature12373", "doi"], ["PMID: 31452104", "pmid"], ["2101.00001", "arxiv"], ["https://arxiv.org/abs/1706.03762", "arxiv"]]);
+  assert.deepEqual(kv("10.10\u00AD38/nature12373"), ["doi", "10.1038/nature12373"]);   // soft hyphen from a PDF
+  // a link with kilobytes of tracking parameters is still a link
+  const long = "https://www.example.com/article/123?utm_source=feed&ref=" + "x".repeat(6000);
+  assert.deepEqual(kv(long), ["url", long]);
+  assert.deepEqual(items(long + "\n10.1038/nature12373").map(x => x[1]), ["url", "doi"]);
+  // prose or a bibliography entry: the DOI is picked out, the words are kept as unrecognised
+  const prose = items("As shown by Smith et al. (doi:10.1038/nature12373), it works.");
+  assert.deepEqual(prose.filter(x => x[1]), [["(doi:10.1038/nature12373)", "doi"]]);
+  assert.ok(prose.length > 1);
+  const bib = items("Smith, J. (2020). A title. Nature, 500(7460), 1-5. https://doi.org/10.1038/nature12373");
+  assert.deepEqual(bib.filter(x => x[1]), [["https://doi.org/10.1038/nature12373", "doi"]]);
+  // many ids
+  assert.equal(parseIdentifiers(Array.from({ length: 60 }, (_, i) => "10.1000/abc" + i).join("\n")).filter(x => x.id).length, 60);
+  // past 100000 chars the cut lands on whitespace, never mid-identifier
+  assert.ok(parseIdentifiers("10.1000/abc ".repeat(8333) + "10.1000/zzzzzzzzz").every(x => x.id));
+});
+
+test("large pastes parse quickly (T-017)", () => {
+  const time = f => { const t = performance.now(); f(); return performance.now() - t; };
+  const big = "lorem ipsum dolor sit amet, consectetur 10.1038/nature12373 ".repeat(850);
+  assert.ok(big.length >= 50000);
+  for (const t of [big, big.replace(/\s/g, ""), big.replace(/ /g, "\n"), ". ".repeat(25000), ")".repeat(50000), "1 ".repeat(25000)])
+    assert.ok(time(() => parseIdentifiers(t)) < 200, JSON.stringify(t.slice(0, 20)));
+  // worst cases for the trailing-punctuation trim, at the longest single identifier accepted
+  for (const t of ["x" + ". ".repeat(8000) + "x", "a" + ")".repeat(16000), "https://example.com/" + "(".repeat(8000) + ")".repeat(8000)])
+    assert.ok(time(() => parse(t)) < 200, JSON.stringify(t.slice(0, 20)));
 });

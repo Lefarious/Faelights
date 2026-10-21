@@ -56,14 +56,37 @@ test("status codes, caps and loops map to the app's failure reasons", async () =
   assert.equal(await reason(get("ftp://example.org/x.pdf", F.ACCEPT_ANY, F.MAX_PDF)), "invalid");
 });
 
-test("a refused connection is 'offline'; an aborted signal is 'cancelled'", async () => {
+test("a refused connection to a site is 'unreachable'; an aborted signal is 'cancelled'", async () => {
   const dead = http.createServer();
   await new Promise(r => dead.listen(0, "127.0.0.1", r));
   const port = dead.address().port;
   await new Promise(r => dead.close(r));
-  assert.equal(await reason(F.nodeGet()(`http://127.0.0.1:${port}/`, F.ACCEPT_ANY, F.MAX_PDF)), "offline");
+  assert.equal(await reason(F.nodeGet()(`http://127.0.0.1:${port}/`, F.ACCEPT_ANY, F.MAX_PDF)), "unreachable");
   const ctl = new AbortController(); ctl.abort();
   assert.equal(await reason(F.nodeGet({ signal: ctl.signal })(base + "/pdf", F.ACCEPT_ANY, F.MAX_PDF)), "cancelled");
+});
+
+// Node's fetch replaced by one that fails DNS for every host not in `up`: a mistyped link while online, or everything offline
+test("a mistyped link is 'unreachable' and tries on; offline (doi.org down too) it is 'offline'; a DNS failure on doi.org stops", async () => {
+  const real = globalThis.fetch, seen = [];
+  let up = [];
+  globalThis.fetch = async url => {
+    seen.push(url); const host = new URL(url).hostname;
+    if (up.includes(host)) return new Response("<html></html>", { status: 200, headers: { "content-type": "text/html" } });
+    throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error(`getaddrinfo ENOTFOUND ${host}`), { code: "ENOTFOUND" }) });
+  };
+  try {
+    const { parseIdentifier } = require("../../core/identify.js");
+    const res = () => F.resolver(F.nodeGet());
+    up = ["doi.org"];   // online: only the mistyped host is missing
+    assert.equal(await reason(res().resolvePdf(parseIdentifier("https://www.natrue.com/articles/x"))), "unreachable");
+    up = []; seen.length = 0;   // Wi-Fi with no internet: nothing resolves
+    assert.equal(await reason(res().resolvePdf(parseIdentifier("https://www.natrue.com/articles/x"))), "offline");
+    assert.deepEqual(seen, ["https://www.natrue.com/articles/x", "https://doi.org/"]);
+    seen.length = 0;
+    assert.equal(await reason(res().resolvePdf(parseIdentifier("10.1038/nature14539"))), "offline");
+    assert.deepEqual(seen, ["https://doi.org/10.1038/nature14539"]);   // no CrossRef try after it
+  } finally { globalThis.fetch = real; }
 });
 
 // A fake transport: url → {status-ish reason} | {html} | {pdf}
@@ -117,4 +140,93 @@ test("lookupMeta: CrossRef for a DOI, arXiv for an arXiv id, 'invalid' with neit
   assert.equal(r.meta.title, "A paper");
   assert.deepEqual(await F.lookupMeta(get, {}, null), { ok: false, reason: "invalid" });
   assert.deepEqual(await F.lookupMeta(fake({}), { doi: "10.1/none" }, null), { ok: false, reason: "not-found" });
+});
+
+// PMC: NCBI's open-access bucket first, then Europe PMC, then PMC's own page (now a JavaScript bot check)
+const OA = "https://pmc-oa-opendata.s3.amazonaws.com/";
+const BOT = { html: "<html><title>Preparing to download ...</title><script>/* proof of work */</script></html>" };
+const pmcRoutes = (v, extra = {}) => ({
+  [`${OA}?list-type=2&prefix=metadata%2F${v}.`]: { html: "<ListBucketResult></ListBucketResult>" },   // not in the OA subset
+  [`https://europepmc.org/articles/${v}?pdf=render`]: { fail: "paywalled" },   // Cloudflare's 403
+  [`https://pmc.ncbi.nlm.nih.gov/articles/${v}/`]: { html: `<meta name="citation_pdf_url" content="https://pmc.ncbi.nlm.nih.gov/articles/${v}/pdf/x.pdf">` },
+  [`https://pmc.ncbi.nlm.nih.gov/articles/${v}/pdf/x.pdf`]: BOT,
+  ...extra
+});
+const pmcid = v => ({ kind: "pmcid", value: v, url: `https://pmc.ncbi.nlm.nih.gov/articles/${v}/` });
+
+test("PMCID: the newest version in NCBI's open-access bucket, with its title", async () => {
+  const seen = [];
+  const get = fake(pmcRoutes("PMC1", {
+    [`${OA}?list-type=2&prefix=metadata%2FPMC1.`]: { html: "<Contents><Key>metadata/PMC1.1.json</Key></Contents><Contents><Key>metadata/PMC1.2.json</Key></Contents>" },
+    [`${OA}PMC1.2/PMC1.2.json`]: { json: { title: "GenBank", pdf_url: "s3://pmc-oa-opendata/PMC1.2/PMC1.2.pdf?md5=abc" } },
+    [`${OA}PMC1.2/PMC1.2.pdf`]: { pdf: true }
+  }), seen);
+  const r = await F.resolver(get).resolvePdf(pmcid("PMC1"));
+  assert.equal(r.url, `${OA}PMC1.2/PMC1.2.pdf`);
+  assert.equal(r.title, "GenBank");
+  assert.equal(seen.length, 3);   // PMC's bot-walled page never asked
+});
+
+test("PMCID: PMC's bot-check page instead of the PDF falls back to Europe PMC", async () => {
+  const get = fake(pmcRoutes("PMC2", { "https://europepmc.org/articles/PMC2?pdf=render": { pdf: true } }));
+  const r = await F.resolver(get).resolvePdf(pmcid("PMC2"));
+  assert.equal(r.url, "https://europepmc.org/articles/PMC2?pdf=render");
+  // and PMC itself is still used when it does hand over the PDF
+  const pmc = fake(pmcRoutes("PMC3", { "https://pmc.ncbi.nlm.nih.gov/articles/PMC3/pdf/x.pdf": { pdf: true } }));
+  assert.equal((await F.resolver(pmc).resolvePdf(pmcid("PMC3"))).url, "https://pmc.ncbi.nlm.nih.gov/articles/PMC3/pdf/x.pdf");
+});
+
+test("PMCID: nothing gives a PDF → 'no-free-copy' (not a paywall); an unknown PMCID → 'not-found'", async () => {
+  const seen = [];
+  assert.equal(await reason(F.resolver(fake(pmcRoutes("PMC4"), seen)).resolvePdf(pmcid("PMC4"))), "no-free-copy");
+  assert.equal(seen.length, 4);   // bucket listing, Europe PMC, PMC page, PMC's bot check
+  const gone = pmcRoutes("PMC5", { "https://pmc.ncbi.nlm.nih.gov/articles/PMC5/": { fail: "not-found" } });
+  assert.equal(await reason(F.resolver(fake(gone)).resolvePdf(pmcid("PMC5"))), "not-found");
+});
+
+test("PMCID: offline stops at once, with no further sources tried", async () => {
+  const seen = [];
+  const get = fake(pmcRoutes("PMC6", { [`${OA}?list-type=2&prefix=metadata%2FPMC6.`]: { fail: "offline" } }), seen);
+  assert.equal(await reason(F.resolver(get).resolvePdf(pmcid("PMC6"))), "offline");
+  assert.equal(seen.length, 1);
+});
+
+test("an unreachable source isn't fatal: PMC moves on, a DOI's publisher host down still tries CrossRef's link", async () => {
+  const seen = [];
+  const get = fake(pmcRoutes("PMC7", { [`${OA}?list-type=2&prefix=metadata%2FPMC7.`]: { fail: "unreachable" }, "https://europepmc.org/articles/PMC7?pdf=render": { fail: "unreachable" } }), seen);
+  assert.equal(await reason(F.resolver(get).resolvePdf(pmcid("PMC7"))), "no-free-copy");
+  assert.equal(seen.length, 4);
+  const doi = fake({
+    "https://doi.org/10.1/u": { fail: "unreachable" },
+    "https://api.crossref.org/works/10.1%2Fu": { json: { message: { link: [{ URL: "https://mirror.example/u.pdf", "content-type": "application/pdf" }] } } },
+    "https://mirror.example/u.pdf": { pdf: true }
+  });
+  assert.equal((await F.resolver(doi).resolvePdf({ kind: "doi", value: "10.1/u" })).url, "https://mirror.example/u.pdf");
+  // and with no other copy it stays 'unreachable', not 'paywalled'
+  assert.equal(await reason(F.resolver(fake({ "https://doi.org/10.1/v": { fail: "unreachable" } })).resolvePdf({ kind: "doi", value: "10.1/v" })), "unreachable");
+});
+
+test("PMID: the ID converter's PMCID goes through the PMC fallbacks; its DOI is the last resort", async () => {
+  const conv = n => `https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=${n}&format=json&tool=faelights`;
+  const seen = [];
+  const get = fake(pmcRoutes("PMC0007", {
+    [conv("7")]: { json: { records: [{ pmcid: "PMC0007", doi: "10.1000/p7" }] } },
+    "https://europepmc.org/articles/PMC0007?pdf=render": { pdf: true }
+  }), seen);
+  assert.equal((await F.resolver(get).resolvePdf({ kind: "pmid", value: "7" })).url, "https://europepmc.org/articles/PMC0007?pdf=render");
+  assert.ok(!seen.some(u => u.includes("doi.org")));
+  // every PMC source fails → the DOI route, which ends as it always has
+  const all = fake(pmcRoutes("PMC0008", {
+    [conv("8")]: { json: { records: [{ pmcid: "PMC0008", doi: "10.1000/p8" }] } },
+    "https://doi.org/10.1000/p8": { html: "<html>sign in</html>" },
+    "https://api.crossref.org/works/10.1000%2Fp8": { json: { message: {} } }
+  }));
+  assert.equal(await reason(F.resolver(all).resolvePdf({ kind: "pmid", value: "8" })), "paywalled");
+  // offline on the way stops there too
+  const off = [], o = fake(pmcRoutes("PMC0009", {
+    [conv("9")]: { json: { records: [{ pmcid: "PMC0009", doi: "10.1000/p9" }] } },
+    "https://europepmc.org/articles/PMC0009?pdf=render": { fail: "offline" }
+  }), off);
+  assert.equal(await reason(F.resolver(o).resolvePdf({ kind: "pmid", value: "9" })), "offline");
+  assert.equal(off.length, 3);
 });

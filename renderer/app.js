@@ -1018,7 +1018,7 @@ function renderReader() {
   const colours = new Map();
   for (const e of d.result.entries) for (const s of e.spans) { const k = ckey(s.color); const c = colours.get(k) || { color: s.color, n: 0 }; c.n++; colours.set(k, c); }
   if (showImg) for (const img of allImgs) { const k = ckey(img.color); const c = colours.get(k) || { color: img.color, n: 0 }; c.n++; colours.set(k, c); }
-  if (colours.size > 1) {
+  if (colours.size) {   // even one colour: hiding it made the filter look tied to "With images"
     const sec = el("section"); sec.append(el("p", "label", "Filter by colour"));
     const chips = el("div", "chips");
     for (const [k, c] of colours) {
@@ -1207,14 +1207,17 @@ function addSample() {
 const ADD_FAIL = {
   invalid: "That doesn't look like an ISBN, DOI, PMID, arXiv ID, ADS bibcode or web link.",
   offline: "You're offline. Connect to the internet to fetch this paper, or add a PDF from your computer.",
+  unreachable: "Couldn't find that site. Check the link for typos, or open it in your browser.",
   paywalled: "The publisher didn't hand over the PDF. It may need a subscription or sign-in. Open the page in your browser, download it there, then add the file.",
   "not-pdf": "Couldn't find a PDF there. Open the page in your browser to download it, then add the file.",
   "not-found": "Nothing was found for that. Check it for typos.",
   "no-free-copy": "No free PDF was found for this. Open it in your browser, or add a PDF you already have.",
   network: "Couldn't reach the server, or it took too long. Try again in a moment.",
-  "too-large": "That PDF is over 150 MB, so it wasn't downloaded."
+  "too-large": "That PDF is over 150 MB, so it wasn't downloaded.",
+  "too-many": "That's too much to add at once. Paste up to 200 items at a time."
 };
-const ADD_OPEN = ["paywalled", "not-pdf", "no-free-copy"];   // failures where the landing page is worth opening
+const ADD_MAX = 200, ADD_MAX_CHARS = 100000;   // what id:parseMany and parseIdentifiers handle in one go
+const ADD_OPEN = ["paywalled", "not-pdf", "no-free-copy", "unreachable"];   // failures where the landing page is worth opening
 let addDlg = null;  // {back, box, input, hint, off, msg, list, ok, cancel, items, ids, busy, batch, stop, cur, seq, opener}
 function addIdBtn(compact) {
   const b = compact ? btn("icon add-id", "", "link", "Add by identifier") : btn("", "Add by identifier", "link");
@@ -1275,9 +1278,14 @@ function closeAddId() {
 function addIdCancelLabel(t) { const D = addDlg; if (D && D.cancel.lastChild) D.cancel.lastChild.textContent = t; }
 async function addIdHint() {
   const D = addDlg; if (!D) return;
-  const v = D.input.value, s = ++D.seq;
-  const items = v.trim() ? await fl.parseIds(v) : [];
+  const v = D.input.value, s = ++D.seq, huge = v.length > ADD_MAX_CHARS;
+  const items = v.trim() && !huge ? await fl.parseIds(v) : [];
   if (addDlg !== D || s !== D.seq) return;
+  // refuse rather than quietly add only the first part of an oversized paste
+  if (huge || items.length > ADD_MAX) {
+    Object.assign(D, { items: [], ids: 0 }); D.hint.textContent = "Too many to add at once"; D.hint.classList.add("bad");
+    D.ok.disabled = true; addIdFail("too-many"); return;
+  }
   const ids = items.filter(x => x.id).length, bad = items.length - ids;
   Object.assign(D, { items, ids }); D.msg.hidden = true;
   D.hint.textContent = !items.length ? "" : items.length === 1 ? (ids ? items[0].id.label : "Not recognised") : `${ids} recognised${bad ? ` · ${bad} not recognised` : ""}`;

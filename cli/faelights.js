@@ -88,6 +88,7 @@ const plural = (n, a, b) => n + " " + (n === 1 ? a : (b || a + "s"));
 const ADD_FAIL = {
   invalid: "That doesn't look like an ISBN, DOI, PMID, arXiv ID, ADS bibcode or web link.",
   offline: "You're offline. Connect to the internet to fetch this paper, or add a PDF from your computer.",
+  unreachable: "Couldn't find that site. Check the link for typos, or open it in your browser.",
   paywalled: "The publisher didn't hand over the PDF. It may need a subscription or sign-in. Open the page in your browser, download it there, then add the file.",
   "not-pdf": "Couldn't find a PDF there. Open the page in your browser to download it, then add the file.",
   "not-found": "Nothing was found for that. Check it for typos.",

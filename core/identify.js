@@ -10,16 +10,25 @@ const PMCID = /^PMC\d{4,9}$/i;
 const BIBCODE = /^\d{4}[A-Za-z][A-Za-z&.]{4}[\w.]{4}[\w.][\w.]{4}[A-Za-z.]$/;
 const PMID = /^\d{1,8}$/, BARE_PMID = /^\d{6,8}$/;
 
+// Long enough for a link carrying kilobytes of tracking parameters (real ones stay well under this)
+const MAX_ID = 16384;
+// Invisible characters copied along from web pages and PDFs: zero-width space / joiners, word joiner, soft hyphen
+const INVISIBLE = /[\u200B-\u200D\u2060\u00AD]/g;
+// Drop trailing chars matching a one-char class by walking back: a `[…]+$` regex backtracks quadratically on long input
+const trimEnd = (s, re) => { let e = s.length; while (e && re.test(s[e - 1])) e--; return s.slice(0, e); };
+
 // Strip surrounding quotes / brackets and trailing sentence punctuation.
 // A closing ) or ] is only dropped when it is unbalanced: DOIs such as 10.1016/S0140-6736(20)30183-5 contain parens.
+// Bracket counts are kept up to date as chars are dropped, so this stays linear on long input.
 function tidy(text) {
-  let s = String(text).trim().replace(/^[\s<"'“‘(\[{]+/, "");
+  const s = String(text).trim().replace(/^[\s<"'“‘(\[{]+/, ""), n = { "(": 0, ")": 0, "[": 0, "]": 0 }, open = { ")": "(", "]": "[" };
+  for (const c of s) if (c in n) n[c]++;
+  let e = s.length;
   for (;;) {
-    const t = s.replace(/[\s>"'”’.,;:!?}]+$/, "");
-    const last = t.slice(-1);
-    const unbalanced = (o, c) => last === c && t.split(o).length < t.split(c).length;
-    s = unbalanced("(", ")") || unbalanced("[", "]") ? t.slice(0, -1) : t;
-    if (s === t) return s;
+    const c = s[e - 1];
+    if (e && /[\s>"'”’.,;:!?}]/.test(c)) e--;
+    else if (open[c] && n[open[c]] < n[c]) { n[c]--; e--; }
+    else return s.slice(0, e);
   }
 }
 
@@ -45,9 +54,10 @@ const isbn = text => { const v = isbn13(text); return v && { kind: "isbn", value
 // text → {kind: "doi"|"arxiv"|"pmcid"|"url", value, url} or null.
 // `url` is the human landing page (what "Open in browser" shows), not necessarily the PDF.
 function parseIdentifier(text) {
-  if (typeof text !== "string" || text.length > 2048) return null;
+  if (typeof text !== "string" || text.length > MAX_ID) return null;
+  text = text.replace(INVISIBLE, "");
   // a bibcode may end in "." padding, which tidy() strips: check before it, with and without one trailing dot
-  const raw = String(text).trim().replace(/^[\s<"'“‘(\[{]+/, "").replace(/[\s>"'”’,;:!?}\])]+$/, "").replace(/^bibcode:\s*/i, "");
+  const raw = trimEnd(text.trim().replace(/^[\s<"'“‘(\[{]+/, ""), /[\s>"'”’,;:!?}\])]/).replace(/^bibcode:\s*/i, "");
   if (BIBCODE.test(raw)) return ads(raw);
   if (raw.endsWith(".") && BIBCODE.test(raw.slice(0, -1))) return ads(raw.slice(0, -1));
   let s = tidy(text), m;
@@ -151,13 +161,26 @@ function fileNameFor(id, pdfUrl) {
   return (clean(({ arxiv: "arXiv_", pmid: "PMID_", isbn: "ISBN_" }[id.kind] || "") + id.value) || "download") + ".pdf";
 }
 
-// Map a thrown fetch error (Chromium net::ERR_* from Electron's net.fetch, or a Node errno) to a failure reason.
-// No connection at all → "offline" so the UI can suggest adding from disk; anything else → "network".
-const OFFLINE_CODES = /\b(ERR_INTERNET_DISCONNECTED|ERR_NAME_NOT_RESOLVED|ERR_NAME_RESOLUTION_FAILED|ERR_ADDRESS_UNREACHABLE|ERR_NETWORK_ACCESS_DENIED|ERR_PROXY_CONNECTION_FAILED|ERR_CONNECTION_REFUSED|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ENETDOWN)\b/;
-function fetchFailureReason(err) {
+// Map a thrown fetch error (Chromium net::ERR_* from Electron's net.fetch, or a Node errno) and the URL it was for to a reason.
+// No connection at all → "offline" so the UI can suggest adding from disk; a site that can't be found or reached →
+// "unreachable" (usually a mistyped link); anything else → "network".
+// Only ever mean no connection: no network, the OS/firewall blocking us, or the system proxy down (every request goes through it).
+const OFFLINE_CODES = /\b(ERR_INTERNET_DISCONNECTED|ERR_NETWORK_ACCESS_DENIED|ERR_PROXY_CONNECTION_FAILED|ENETUNREACH|ENETDOWN)\b/;
+// DNS / connection failures: a bad host, or no connection (DNS fails offline too), depending on the host
+const NO_HOST_CODES = /\b(ERR_NAME_NOT_RESOLVED|ERR_NAME_RESOLUTION_FAILED|ERR_ADDRESS_UNREACHABLE|ERR_CONNECTION_REFUSED|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EHOSTUNREACH)\b/;
+// Services the app itself calls (core/fetch.js, core/metadata.js): always up, so failing to reach one means we're offline
+const SERVICE_HOSTS = ["doi.org", "crossref.org", "arxiv.org", "ncbi.nlm.nih.gov", "pmc-oa-opendata.s3.amazonaws.com", "europepmc.org", "openlibrary.org", "archive.org", "adsabs.harvard.edu"];
+function isServiceHost(url) {
+  let h; try { h = new URL(url).hostname.toLowerCase(); } catch (_) { return false; }
+  return SERVICE_HOSTS.some(s => h === s || h.endsWith("." + s));
+}
+// url is optional; without it a DNS / connection failure stays "offline", as before: it stops a run of fetches early instead of retrying each
+function fetchFailureReason(err, url) {
   if (!err) return "network";
   const text = [err.code, err.cause && err.cause.code, err.message, err.cause && err.cause.message].filter(Boolean).join(" ");
-  return OFFLINE_CODES.test(text) ? "offline" : "network";
+  if (OFFLINE_CODES.test(text)) return "offline";
+  if (NO_HOST_CODES.test(text)) return !url || isServiceHost(url) ? "offline" : "unreachable";
+  return "network";
 }
 
 // Batch input → [{text, id}] (id null when unrecognised), exact duplicates dropped.
@@ -167,7 +190,10 @@ const PREFIX = /^(?:doi|arxiv|pmid|bibcode|isbn(?:-1[03])?):?$/i;
 function parseIdentifiers(text) {
   const out = [], seen = new Set();
   const push = t => { if (!t || seen.has(t)) return; seen.add(t); out.push({ text: t, id: parseIdentifier(t) }); };
-  for (let line of String(text ?? "").slice(0, 100000).split(/\r?\n/)) {
+  // past 100000 chars, cut at the last whitespace so no identifier is cut in half (the dialog refuses that much anyway)
+  let all = String(text ?? "").replace(INVISIBLE, "");
+  if (all.length > 100000) all = /\s/.test(all[100000]) ? all.slice(0, 100000) : all.slice(0, 100000).replace(/\S+$/, "");
+  for (let line of all.split(/\r?\n/)) {
     line = line.trim(); if (!line) continue;
     if (/\s/.test(line) && !/[,;]\s/.test(line) && parseIdentifier(line)) { push(line); continue; }
     const toks = line.split(/\s+|[,;](?=\s|$)/).filter(Boolean);

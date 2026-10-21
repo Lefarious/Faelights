@@ -1,5 +1,5 @@
 /* Faelights — finding and downloading papers (headless core, Node only)
-   From a parsed identifier (identify.js) to PDF bytes: arXiv, DOI (+ CrossRef's full-text links), PMID / PMCID,
+   From a parsed identifier (identify.js) to PDF bytes: arXiv, DOI (+ CrossRef's full-text links), PMID / PMCID (+ NCBI's open-access bucket),
    ADS bibcodes, ISBN (public scans only) and plain links; plus paper details from CrossRef / arXiv (metadata.js).
    The HTTP transport is passed in, so the desktop app keeps Electron's net stack (system proxy, session cookies)
    and scripts use nodeGet() below. A transport is get(url, accept, maxBytes, opts) → {url, type, html, buf}
@@ -11,7 +11,7 @@ const { lookupTarget, fromCrossref, fromArxivAtom } = require("./metadata.js");
 
 const FETCH_HEAD_MS = 15000, FETCH_STALL_MS = 30000, MAX_PDF = 150 * 1024 * 1024, MAX_HTML = 5 * 1024 * 1024;
 const ACCEPT_ANY = "application/pdf,text/html;q=0.9,*/*;q=0.8";
-// reasons: invalid, offline, network, not-found, paywalled, not-pdf, too-large, no-free-copy, cancelled
+// reasons: invalid, offline, unreachable, network, not-found, paywalled, not-pdf, too-large, no-free-copy, cancelled
 class FetchFail extends Error { constructor(reason) { super(reason); this.reason = reason; } }
 const hardFail = e => e.reason === "cancelled" || e.reason === "offline";   // stop trying alternatives
 
@@ -42,7 +42,36 @@ function resolver(get, progress = () => {}) {
     try { return JSON.parse(r.buf.toString("utf8")) || {}; } catch (_) { throw new FetchFail("network"); }
   }
 
-  async function resolvePdf(id) {
+  /* PMC's article PDFs now sit behind a JavaScript proof-of-work page no plain HTTP client passes (europepmc.org is
+     behind a similar Cloudflare check), so the open-access copy comes first: NCBI's PMC Open Access bucket on AWS, no
+     bot wall. Then Europe PMC's mirror and PMC itself, in case either lets us through. A source that answers with a
+     page instead of %PDF (the bot check) just moves on to the next. */
+  async function pmcPdf(id) {
+    const v = id.value, OA = "https://pmc-oa-opendata.s3.amazonaws.com/";
+    let big = null, gone = false;
+    const attempt = async (f, pmc) => {
+      try { return await f(); }
+      catch (e) { if (hardFail(e)) throw e; if (e.reason === "too-large") big = e; if (pmc && e.reason === "not-found") gone = true; return null; }
+    };
+    const oa = await attempt(async () => {   // list the article's versions, read the newest one's record, fetch its PDF
+      const ls = (await get(`${OA}?list-type=2&prefix=metadata%2F${v}.`, "application/xml", MAX_HTML)).buf.toString("utf8");
+      const n = Math.max(0, ...[...ls.matchAll(new RegExp(`<Key>metadata/${v}\\.(\\d+)\\.json</Key>`, "g"))].map(m => +m[1]));
+      if (!n) return null;   // not in the open-access subset
+      const rec = await fetchJson(`${OA}${v}.${n}/${v}.${n}.json`);
+      const key = /^s3:\/\/pmc-oa-opendata\/([\w./-]+\.pdf)(\?|$)/.exec(rec.pdf_url || "");
+      if (!key) return null;
+      progress({ stage: "download" });
+      const r = await get(OA + key[1], "application/pdf", MAX_PDF);
+      return isPdf(r.buf) ? { ...r, title: typeof rec.title === "string" ? rec.title.slice(0, 500) : null } : null;
+    });
+    const r = oa || await attempt(() => pdfFrom(`https://europepmc.org/articles/${v}?pdf=render`, 0))
+      || await attempt(() => pdfFrom(id.url), true);
+    if (r) return r;
+    // PMC copies are free to read, so this isn't a paywall: a browser gets past the bot check
+    throw big || new FetchFail(gone ? "not-found" : "no-free-copy");
+  }
+
+  async function findPdf(id) {
     progress({ stage: "find" });
     const ax = id.kind === "doi" && /^10\.48550\/arxiv\.(.+)$/i.exec(id.value);  // arXiv's own DOIs
     if (id.kind === "arxiv" || ax) {   // the abs page gives the title too; fall back to the PDF URL if it has no citation link
@@ -59,14 +88,14 @@ function resolver(get, progress = () => {}) {
       }
       const pmc = rec.pmcid && parseIdentifier(rec.pmcid), viaDoi = rec.doi && parseIdentifier("doi:" + rec.doi);
       if (pmc && pmc.kind === "pmcid") {
-        try { return await resolvePdf(pmc); } catch (e) { if (!viaDoi || hardFail(e)) throw e; }
+        try { return await findPdf(pmc); } catch (e) { if (!viaDoi || hardFail(e)) throw e; }
       }
-      if (viaDoi && viaDoi.kind === "doi") return resolvePdf(viaDoi);
+      if (viaDoi && viaDoi.kind === "doi") return findPdf(viaDoi);
       throw new FetchFail("no-free-copy");
     }
     if (id.kind === "ads") {
       const ax = /^\d{4}arXiv(\d{4})\.?(\d{4,5})[A-Z.]$/.exec(id.value);   // e.g. 2020arXiv200112345A → 2001.12345
-      if (ax) return resolvePdf({ kind: "arxiv", value: ax[1] + "." + ax[2] });
+      if (ax) return findPdf({ kind: "arxiv", value: ax[1] + "." + ax[2] });
       // ADS's link gateway redirects to the e-print, the publisher's PDF or ADS's own scan; no API token needed
       let big = null;
       for (const t of ["EPRINT_PDF", "PUB_PDF", "ADS_PDF"]) {
@@ -88,10 +117,11 @@ function resolver(get, progress = () => {}) {
       }
       throw new FetchFail("no-free-copy");
     }
+    if (id.kind === "pmcid") return pmcPdf(id);
     if (id.kind !== "doi") return pdfFrom(id.url);
     try { return await pdfFrom("https://doi.org/" + id.value.split("/").map(encodeURIComponent).join("/").replace(/%2F/g, "/")); }
     catch (err) {
-      if (!["paywalled", "not-pdf"].includes(err.reason)) throw err;
+      if (!["paywalled", "not-pdf", "unreachable"].includes(err.reason)) throw err;   // unreachable: the publisher's host is down or gone
       // CrossRef sometimes lists a full-text PDF link the landing page doesn't expose
       try {
         const cr = await get("https://api.crossref.org/works/" + encodeURIComponent(id.value), "application/json", MAX_HTML);
@@ -99,8 +129,15 @@ function resolver(get, progress = () => {}) {
         for (const l of links) { try { return await pdfFrom(l.URL, 0); } catch (e) { if (hardFail(e)) throw e; } }
       } catch (e) { if (hardFail(e)) throw e; }
       // a publisher page with no reachable PDF is access-controlled (or bot-walled) far more often than PDF-less
-      throw new FetchFail("paywalled");
+      throw new FetchFail(err.reason === "unreachable" ? "unreachable" : "paywalled");
     }
+  }
+
+  // On Wi-Fi with no internet DNS fails for every host, so before blaming the link, check a service the app uses answers
+  const offline = () => get("https://doi.org/", "text/html", MAX_HTML, { quiet: true }).then(() => false, e => e.reason === "offline");
+  async function resolvePdf(id) {
+    try { return await findPdf(id); }
+    catch (e) { if (e.reason === "unreachable" && await offline()) throw new FetchFail("offline"); throw e; }
   }
 
   return { pdfFrom, fetchJson, resolvePdf };
@@ -172,7 +209,7 @@ function nodeGet({ userAgent = "Faelights (PDF highlights)", signal: outerSignal
         const headers = { "User-Agent": userAgent, Accept: accept };
         const ck = cookieFor(at); if (ck) headers.Cookie = ck;
         try { res = await fetch(at, { headers, redirect: "manual", signal: ctl.signal }); }
-        catch (e) { throw ctl.signal.aborted ? new FetchFail(why) : new FetchFail(fetchFailureReason(e)); }
+        catch (e) { throw ctl.signal.aborted ? new FetchFail(why) : new FetchFail(fetchFailureReason(e, at)); }
         keep(at, res);
         if (res.status < 300 || res.status > 399 || !res.headers.get("location")) break;
         const next = new URL(res.headers.get("location"), at).href;
@@ -193,7 +230,7 @@ function nodeGet({ userAgent = "Faelights (PDF highlights)", signal: outerSignal
           if (got > cap) { ctl.abort(); throw new FetchFail(html ? "not-pdf" : "too-large"); }
           if (!html && !opts.quiet && onProgress && got > 65536) onProgress({ stage: "download", got, total: len });
         }
-      } catch (e) { if (e instanceof FetchFail) throw e; throw ctl.signal.aborted ? new FetchFail(why) : new FetchFail(fetchFailureReason(e)); }
+      } catch (e) { if (e instanceof FetchFail) throw e; throw ctl.signal.aborted ? new FetchFail(why) : new FetchFail(fetchFailureReason(e, at)); }
       return { url: at, type, html, buf: Buffer.concat(chunks) };
     } finally {
       clearTimeout(timer);

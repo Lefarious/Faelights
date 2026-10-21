@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const { repoPath } = require("../helpers/pdf");
 const { annotate } = require("../helpers/annotate");
+const { textPdf } = require("../helpers/textpdf");
 const X = require("../../core/extract.js");
 
 const SAMPLE = repoPath("renderer", "sample.pdf");
@@ -95,6 +96,30 @@ test("a mark over no text is reported as loose, not as an entry", () => {
   assert.deepEqual(marked.loose, [{ page: 2, color: [255, 217, 51], type: "Highlight", comment: "figure note" }]);
   assert.ok(!X.highlights(marked).some(h => h.comment === "figure note"));
   assert.deepEqual(sample.loose, []);
+});
+
+// T-019: highlights in two sentences must give two extracts; one across both, or abbreviations, keep one.
+const sentencesOf = async (lines, finds) => (await X.extractPdf(await annotate(await textPdf(lines),
+  { marks: finds.map(find => ({ page: 1, find, subtype: "Highlight" })) }))).entries.map(e => e.sentence);
+const DOG = "The dog ran in the park.";
+
+test("a full stop then a space splits extracts, even after quotes, brackets, 'no.' or 'et al.'", async () => {
+  for (const [first, find] of [['He said "stop."', "He said"], ["It works (mostly.)", "It works"],
+    ["The answer was no.", "answer"], ["This was shown by Smith et al.", "shown"], ["See the list etc.", "See the"],
+    ["We took vitamin C.", "We took"]])
+    assert.deepEqual(await sentencesOf([first + " " + DOG], [find, "dog ran"]), [first, DOG], first);
+});
+
+test("a highlight starting on the previous sentence's full stop belongs to its own sentence", async () => {
+  assert.deepEqual(await sentencesOf(["The cat sat on the mat. " + DOG], ["cat sat", ". The dog"]), ["The cat sat on the mat.", DOG]);
+});
+
+test("a highlight across two sentences and abbreviations or decimals still give one extract", async () => {
+  assert.deepEqual(await sentencesOf(["The cat sat on the mat. " + DOG], ["mat. The dog"]), ["The cat sat on the mat. " + DOG]);
+  for (const s of ["See e.g. the cat and the dog.", "See Fig. 3 for the cat and the dog.", "It was Smith et al. who saw the dog.",
+    "Smith et al. (2020) saw the dog.", "Cats etc. are seen with the dog.", "It was item No. 5 of the dog.",
+    "The value was 3.5 for the dog.", "It was J. Smith who saw the dog.", "Written by J. A. Smith for the dog."])
+    assert.deepEqual(await sentencesOf([s], [s.split(" ").slice(0, 2).join(" "), "the dog"]), [s], s);
 });
 
 test("normQuads handles flat and point-list quads and falls back to rect", () => {

@@ -208,7 +208,7 @@ function fetchUrl(url, accept, maxBytes, opts = {}) {
       if (++hops > 10 || !/^https?:\/\//i.test(next)) return done(new FetchFail(hops > 10 ? "network" : "not-pdf"));
       finalUrl = next; req.followRedirect();
     });
-    req.on("error", e => done(new FetchFail(fetchFailureReason(e))));
+    req.on("error", e => done(new FetchFail(fetchFailureReason(e, finalUrl))));
     req.on("response", res => {
       const status = res.statusCode, type = header(res, "content-type").toLowerCase(), len = +header(res, "content-length") || 0;
       const html = /html|xml/.test(type), cap = html ? MAX_HTML : maxBytes;
@@ -224,7 +224,7 @@ function fetchUrl(url, accept, maxBytes, opts = {}) {
         if (!html && !opts.quiet && got > 65536) sendProgress({ stage: "download", got, total: len });
       });
       res.on("end", () => done(null, { url: finalUrl, type, html, buf: Buffer.concat(chunks) }));
-      res.on("error", e => done(new FetchFail(fetchFailureReason(e))));
+      res.on("error", e => done(new FetchFail(fetchFailureReason(e, finalUrl))));
     });
     req.end();
   });
@@ -270,7 +270,8 @@ ipcMain.handle("meta:lookup", async (_e, q = {}) => {
   finally { clearTimeout(timer); }
 });
 ipcMain.handle("id:parse", (_e, text) => { const id = parseIdentifier(text); return id && { ...id, label: describe(id) }; });
-ipcMain.handle("id:parseMany", (_e, text) => parseIdentifiers(text).slice(0, 200).map(({ text, id }) => ({ text, id: id && { ...id, label: describe(id) } })));
+// one past the 200 the dialog accepts, so it can tell a list that was too long from one that fit
+ipcMain.handle("id:parseMany", (_e, text) => parseIdentifiers(text).slice(0, 201).map(({ text, id }) => ({ text, id: id && { ...id, label: describe(id) } })));
 ipcMain.handle("app:openExternal", (_e, url) => {
   let u; try { u = new URL(String(url)); } catch (_) { return false; }
   if (u.protocol !== "http:" && u.protocol !== "https:") return false;
