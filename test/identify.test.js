@@ -125,15 +125,39 @@ test("fileNameFor", () => {
   assert.equal(fileNameFor(parse("https://example.com/")), "example.com.pdf");
 });
 
-test("fetchFailureReason maps connection errors to offline", () => {
-  for (const m of ["net::ERR_INTERNET_DISCONNECTED", "net::ERR_NAME_NOT_RESOLVED", "net::ERR_NAME_RESOLUTION_FAILED", "net::ERR_ADDRESS_UNREACHABLE",
-    "net::ERR_CONNECTION_REFUSED", "net::ERR_PROXY_CONNECTION_FAILED", "getaddrinfo ENOTFOUND arxiv.org", "connect ECONNREFUSED 1.2.3.4:443"])
-    assert.equal(fetchFailureReason(new Error(m)), "offline", m);
-  assert.equal(fetchFailureReason(Object.assign(new Error("fetch failed"), { cause: { code: "EAI_AGAIN" } })), "offline");
-  assert.equal(fetchFailureReason({ code: "ENETUNREACH" }), "offline");
+test("fetchFailureReason: a site that can't be found is 'unreachable', our own services failing means 'offline'", () => {
+  const dns = ["net::ERR_NAME_NOT_RESOLVED", "net::ERR_NAME_RESOLUTION_FAILED", "net::ERR_ADDRESS_UNREACHABLE", "net::ERR_CONNECTION_REFUSED",
+    "getaddrinfo ENOTFOUND www.natrue.com", "connect ECONNREFUSED 1.2.3.4:443"];
+  for (const m of dns) {
+    assert.equal(fetchFailureReason(new Error(m), "https://www.natrue.com/articles/x"), "unreachable", m);
+    for (const u of ["https://doi.org/10.1/x", "https://api.crossref.org/works/x", "https://export.arxiv.org/api/query", "https://eutils.ncbi.nlm.nih.gov/x",
+      "https://pmc-oa-opendata.s3.amazonaws.com/x", "https://ia800300.us.archive.org/x.pdf", "https://ui.adsabs.harvard.edu/link_gateway/x"])
+      assert.equal(fetchFailureReason(new Error(m), u), "offline", m + " " + u);
+  }
+  const node = Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
+  assert.equal(fetchFailureReason(node, "https://www.natrue.com/x"), "unreachable");
+  assert.equal(fetchFailureReason(node, "https://doi.org/10.1/x"), "offline");
+  assert.equal(fetchFailureReason({ code: "EAI_AGAIN" }, "https://notdoi.org/x"), "unreachable");   // a look-alike isn't one of ours
+  assert.equal(fetchFailureReason({ code: "EHOSTUNREACH" }, "not a url"), "unreachable");
+});
+
+test("fetchFailureReason: no connection at all is 'offline' whatever the host", () => {
+  for (const m of ["net::ERR_INTERNET_DISCONNECTED", "net::ERR_NETWORK_ACCESS_DENIED", "net::ERR_PROXY_CONNECTION_FAILED"])
+    for (const u of ["https://www.natrue.com/x", "https://doi.org/10.1/x", undefined])
+      assert.equal(fetchFailureReason(new Error(m), u), "offline", m);
+  assert.equal(fetchFailureReason({ code: "ENETUNREACH" }, "https://www.natrue.com/x"), "offline");
+  assert.equal(fetchFailureReason(Object.assign(new Error("fetch failed"), { cause: { code: "ENETDOWN" } }), "https://example.org/"), "offline");
+});
+
+test("fetchFailureReason: anything else is 'network'; without a URL a DNS failure stays 'offline'", () => {
   for (const m of ["net::ERR_CONNECTION_RESET", "net::ERR_TIMED_OUT", "net::ERR_CERT_AUTHORITY_INVALID", "This operation was aborted", "boom"])
-    assert.equal(fetchFailureReason(new Error(m)), "network", m);
+    for (const u of ["https://www.natrue.com/x", "https://doi.org/10.1/x", undefined])
+      assert.equal(fetchFailureReason(new Error(m), u), "network", m);
+  assert.equal(fetchFailureReason(null, "https://www.natrue.com/x"), "network");
   assert.equal(fetchFailureReason(null), "network");
+  // no host to judge by: keep the old answer, which stops a batch rather than failing every item one by one
+  assert.equal(fetchFailureReason(new Error("getaddrinfo ENOTFOUND x")), "offline");
+  assert.equal(fetchFailureReason({ code: "ECONNREFUSED" }, ""), "offline");
 });
 
 const { parseIdentifiers } = require("../core/identify.js");

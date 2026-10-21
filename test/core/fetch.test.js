@@ -56,14 +56,28 @@ test("status codes, caps and loops map to the app's failure reasons", async () =
   assert.equal(await reason(get("ftp://example.org/x.pdf", F.ACCEPT_ANY, F.MAX_PDF)), "invalid");
 });
 
-test("a refused connection is 'offline'; an aborted signal is 'cancelled'", async () => {
+test("a refused connection to a site is 'unreachable'; an aborted signal is 'cancelled'", async () => {
   const dead = http.createServer();
   await new Promise(r => dead.listen(0, "127.0.0.1", r));
   const port = dead.address().port;
   await new Promise(r => dead.close(r));
-  assert.equal(await reason(F.nodeGet()(`http://127.0.0.1:${port}/`, F.ACCEPT_ANY, F.MAX_PDF)), "offline");
+  assert.equal(await reason(F.nodeGet()(`http://127.0.0.1:${port}/`, F.ACCEPT_ANY, F.MAX_PDF)), "unreachable");
   const ctl = new AbortController(); ctl.abort();
   assert.equal(await reason(F.nodeGet({ signal: ctl.signal })(base + "/pdf", F.ACCEPT_ANY, F.MAX_PDF)), "cancelled");
+});
+
+// Node's fetch replaced by one that fails DNS for every host, as it does for a mistyped link (and for everything offline)
+test("a mistyped link is 'unreachable' and tries on; a DNS failure on doi.org is 'offline' and stops", async () => {
+  const real = globalThis.fetch, seen = [];
+  globalThis.fetch = async url => { seen.push(url); throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error(`getaddrinfo ENOTFOUND ${new URL(url).hostname}`), { code: "ENOTFOUND" }) }); };
+  try {
+    const { parseIdentifier } = require("../../core/identify.js");
+    const res = () => F.resolver(F.nodeGet());
+    assert.equal(await reason(res().resolvePdf(parseIdentifier("https://www.natrue.com/articles/x"))), "unreachable");
+    seen.length = 0;
+    assert.equal(await reason(res().resolvePdf(parseIdentifier("10.1038/nature14539"))), "offline");
+    assert.deepEqual(seen, ["https://doi.org/10.1038/nature14539"]);   // no CrossRef try after it
+  } finally { globalThis.fetch = real; }
 });
 
 // A fake transport: url → {status-ish reason} | {html} | {pdf}
@@ -166,6 +180,21 @@ test("PMCID: offline stops at once, with no further sources tried", async () => 
   const get = fake(pmcRoutes("PMC6", { [`${OA}?list-type=2&prefix=metadata%2FPMC6.`]: { fail: "offline" } }), seen);
   assert.equal(await reason(F.resolver(get).resolvePdf(pmcid("PMC6"))), "offline");
   assert.equal(seen.length, 1);
+});
+
+test("an unreachable source isn't fatal: PMC moves on, a DOI's publisher host down still tries CrossRef's link", async () => {
+  const seen = [];
+  const get = fake(pmcRoutes("PMC7", { [`${OA}?list-type=2&prefix=metadata%2FPMC7.`]: { fail: "unreachable" }, "https://europepmc.org/articles/PMC7?pdf=render": { fail: "unreachable" } }), seen);
+  assert.equal(await reason(F.resolver(get).resolvePdf(pmcid("PMC7"))), "no-free-copy");
+  assert.equal(seen.length, 4);
+  const doi = fake({
+    "https://doi.org/10.1/u": { fail: "unreachable" },
+    "https://api.crossref.org/works/10.1%2Fu": { json: { message: { link: [{ URL: "https://mirror.example/u.pdf", "content-type": "application/pdf" }] } } },
+    "https://mirror.example/u.pdf": { pdf: true }
+  });
+  assert.equal((await F.resolver(doi).resolvePdf({ kind: "doi", value: "10.1/u" })).url, "https://mirror.example/u.pdf");
+  // and with no other copy it stays 'unreachable', not 'paywalled'
+  assert.equal(await reason(F.resolver(fake({ "https://doi.org/10.1/v": { fail: "unreachable" } })).resolvePdf({ kind: "doi", value: "10.1/v" })), "unreachable");
 });
 
 test("PMID: the ID converter's PMCID goes through the PMC fallbacks; its DOI is the last resort", async () => {
