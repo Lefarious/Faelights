@@ -74,9 +74,11 @@ after(async () => {
 
 test("lists every tool and the pdf resource template", async () => {
   const names = (await reader.listTools()).tools.map(t => t.name).sort();
-  assert.deepEqual(names, ["add_by_identifier", "add_pdf", "export_library", "export_pdf", "get_extracts", "list_libraries", "list_pdfs", "list_tags", "mark_read", "search", "set_tag_colour", "star_pdf", "tag_pdf"]);
+  assert.deepEqual(names, ["add_by_identifier", "add_pdf", "create_shelf", "delete_shelf", "export_library", "export_pdf", "get_extracts", "list_libraries", "list_pdfs", "list_shelves", "list_tags", "mark_read", "rename_shelf", "search", "set_tag_colour", "shelve_pdfs", "star_pdf", "tag_pdf"]);
   const { tools } = await reader.listTools();
-  for (const n of ["add_pdf", "add_by_identifier", "tag_pdf", "star_pdf", "mark_read", "set_tag_colour"]) assert.match(tools.find(t => t.name === n).description, /only 6 tools that change/);
+  const writes = ["add_pdf", "add_by_identifier", "tag_pdf", "star_pdf", "mark_read", "set_tag_colour", "create_shelf", "rename_shelf", "delete_shelf", "shelve_pdfs"];
+  for (const n of writes) assert.match(tools.find(t => t.name === n).description, new RegExp(`only ${writes.length} tools that change`));
+  assert.equal(tools.find(t => t.name === "delete_shelf").annotations.destructiveHint, true);
   assert.equal(tools.find(t => t.name === "add_by_identifier").annotations.openWorldHint, true);
   const { resourceTemplates } = await reader.listResourceTemplates();
   assert.equal(resourceTemplates[0].uriTemplate, "faelights://pdf/{id}");
@@ -230,6 +232,54 @@ test("write tools: add_pdf, tag_pdf, star_pdf, mark_read, set_tag_colour on a te
   assert.deepEqual(fs.readdirSync(path.join(writeDir, "library")).filter(f => /\.tmp$|\.lock$/.test(f)), []);
 });
 
+test("shelves: create, list, shelve_pdfs on and off, rename, delete (PDFs stay in the library)", async () => {
+  const dir = tmp("shelves");
+  const [p1, p2] = cli(dir, "add", SAMPLE, scannedPdf);
+  run(dir, "library", "new", "Biology");
+  const c = await connect(dir);
+  try {
+    const { shelf: s } = await call(c, "create_shelf", { library: "biology", name: "Methods" });
+    assert.deepEqual([s.name, s.library, s.pdfs], ["Methods", "Biology", 0]);
+    await rejects(call(c, "create_shelf", { library: "Biology", name: "methods" }), "invalid_input");
+    await rejects(call(c, "create_shelf", { library: "Nowhere", name: "x" }), "unknown_library");
+    await call(c, "create_shelf", { library: "Inbox", name: "Methods" });
+    assert.deepEqual((await call(c, "list_shelves")).shelves.map(x => [x.library, x.name]), [["Biology", "Methods"], ["Inbox", "Methods"]]);
+    assert.deepEqual((await call(c, "list_shelves", { library: "Biology" })).shelves.map(x => x.id), [s.id]);
+
+    // a name in two libraries needs the library; a shelf in another library moves the PDFs there
+    await rejects(call(c, "shelve_pdfs", { pdf_ids: [p1.id], shelf: "Methods" }), "invalid_input");
+    await rejects(call(c, "shelve_pdfs", { pdf_ids: [p1.id, "nope"], shelf: s.id }), "unknown_pdf");
+    await rejects(call(c, "shelve_pdfs", { pdf_ids: [p1.id], shelf: "Nope" }), "unknown_shelf");
+    const on = await call(c, "shelve_pdfs", { pdf_ids: [p1.id, p2.id], shelf: "Methods", library: "Biology" });
+    assert.deepEqual(on.changed, [p1.id, p2.id]);
+    assert.deepEqual(on.pdfs.map(p => [p.library, p.shelf, p.shelf_id]), [["Biology", "Methods", s.id], ["Biology", "Methods", s.id]]);
+    assert.deepEqual((await call(c, "shelve_pdfs", { pdf_ids: [p1.id], shelf: s.id })).changed, []);
+    assert.deepEqual((await call(c, "list_pdfs", { shelf: s.id })).pdfs.map(p => p.id), [p1.id, p2.id]);
+    assert.equal((await call(c, "list_pdfs", { library: "Inbox", shelf: "Methods" })).pdfs.length, 0);
+
+    const off = await call(c, "shelve_pdfs", { pdf_ids: [p2.id], shelf: null });
+    assert.deepEqual([off.changed, off.pdfs[0].library, off.pdfs[0].shelf], [[p2.id], "Biology", null]);
+
+    const r = await call(c, "rename_shelf", { shelf: s.id, name: "Background" });
+    assert.deepEqual([r.from, r.shelf.name, r.changed], ["Methods", "Background", true]);
+
+    const del = await call(c, "delete_shelf", { shelf: "Background" });
+    assert.deepEqual([del.deleted.name, del.deleted.library, del.unshelved_pdfs], ["Background", "Biology", [p1.id]]);
+    const db = JSON.parse(fs.readFileSync(path.join(dir, "library", "faelights.json"), "utf8"));
+    assert.deepEqual(db.shelves.map(x => x.name), ["Methods"]);
+    assert.deepEqual(db.docs.map(d => [d.libraryId, d.shelfId]), [[s.library_id, null], [s.library_id, null]]);
+
+    // the app open: shelf writes refuse too
+    const app = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    fs.writeFileSync(path.join(dir, "library", "faelights.app"), JSON.stringify({ pid: app.pid, at: Date.now() }));
+    try {
+      await rejects(call(c, "create_shelf", { library: "Biology", name: "Later" }), "library_in_use");
+      await rejects(call(c, "shelve_pdfs", { pdf_ids: [p1.id], shelf: null }), "library_in_use");
+      assert.equal((await call(c, "list_shelves")).shelves.length, 1, "reads still work");
+    } finally { app.kill(); }
+  } finally { await c.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("writes refuse with library_in_use while the app is open or the lock is held", async () => {
   const { pdfs: [p] } = await call(writer, "list_pdfs");
 
@@ -296,4 +346,27 @@ test("add_by_identifier downloads a paper by link, skips duplicates and reports 
     fs.writeFileSync(path.join(dir, "library", "faelights.app"), JSON.stringify({ pid: app.pid, at: Date.now() }));
     try { await rejects(call(c, "add_by_identifier", { identifier: base + "/other.pdf" }), "library_in_use"); } finally { app.kill(); }
   } finally { await c.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test("add_by_identifier: the landing page's title beats the PDF's own, and a rescan keeps it (T-035)", async () => {
+  const dir = tmp("srctitle");
+  // a landing page naming the paper (citation_title) and linking the sample PDF, which embeds another title
+  const site = http.createServer((req, res) => {
+    if (req.url === "/paper.pdf") { res.writeHead(200, { "Content-Type": "application/pdf" }); return res.end(fs.readFileSync(SAMPLE)); }
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(`<html><head><meta name="citation_title" content="  The Real   Title "><meta name="citation_pdf_url" content="/paper.pdf"></head></html>`);
+  });
+  await new Promise(r => site.listen(0, "127.0.0.1", r));
+  const c = await connect(dir);
+  try {
+    const r = await call(c, "add_by_identifier", { identifier: `http://127.0.0.1:${site.address().port}/landing`, lookup: false });
+    assert.equal(r.pdf.title, "The Real Title");
+    const dbFile = path.join(dir, "library", "faelights.json"), load = () => JSON.parse(fs.readFileSync(dbFile, "utf8"));
+    const d = load().docs.find(x => x.id === r.pdf.id);
+    assert.deepEqual([d.sourceTitle, d.meta.title], ["The Real Title", "Notes on Bioluminescence"]);
+    await c.close();
+    assert.equal(cli(dir, "rescan", d.id)[0].title, "The Real Title");
+    // a title the user typed survives a rescan
+    const db = load(); Object.assign(db.docs[0], { title: "Mine", titleEdited: true }); fs.writeFileSync(dbFile, JSON.stringify(db));
+    assert.equal(cli(dir, "rescan", d.id)[0].title, "Mine");
+  } finally { await c.close(); site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

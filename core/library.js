@@ -1,8 +1,8 @@
 /* Faelights — libraries on disk (headless core)
    The library file (<userData>/library/faelights.json) holds libraries, docs (with their extraction results), tags,
-   stars and settings; stored PDF copies live in <userData>/library/files/.
+   stars, shelves, notes and settings; stored PDF copies live in <userData>/library/files/.
    Two halves:
-   - pure operations on a loaded db (libraries, tags, stars): no I/O, shared with the renderer (global `Library`);
+   - pure operations on a loaded db (libraries, shelves, notes, tags, stars): no I/O, shared with the renderer (global `Library`);
    - Node only (`Library.at(userData)`): load/save with atomic writes and a lock file, and the stored PDF copies.
      The desktop app's main process uses it with app.getPath("userData"); scripts get the same folder from
      userDataDir() (or FAELIGHTS_DATA_DIR). The lock means a script and the open app never interleave writes. */
@@ -17,20 +17,25 @@ const Library = (() => {
     version: 1,
     libraries: [{ id: INBOX, name: "Inbox", createdAt: Date.now(), system: true }],
     docs: [],
+    shelves: [],
     tagColours: {},
     settings: { mode: "full", fmt: "md", sort: "added" }
   });
 
-  // Fill in what older or hand-edited files may lack: the Inbox, default settings, a docs list, tag colours,
-  // and per doc the read flag and the viewer's last page (0 = never opened)
+  // Fill in what older or hand-edited files may lack: the Inbox, default settings, a docs list, tag colours, shelves
+  // (dropping any whose library is gone), and per doc the read flag, the viewer's last page (0 = never opened),
+  // its shelf (null = the library's root; cleared if the shelf is gone or in another library) and its notes
   function normalize(db) {
     if (!db.libraries?.some(l => l.id === INBOX)) db.libraries.unshift(EMPTY_DB().libraries[0]);
     db.settings = { ...EMPTY_DB().settings, ...(db.settings || {}) };
     db.docs = db.docs || [];
     db.tagColours = db.tagColours || {};
+    db.shelves = (Array.isArray(db.shelves) ? db.shelves : []).filter(s => db.libraries.some(l => l.id === s.libraryId));
     for (const d of db.docs) {
       if (typeof d.read !== "boolean") d.read = false;
       if (!Number.isInteger(d.lastPage) || d.lastPage < 0) d.lastPage = 0;
+      if (!db.shelves.some(s => s.id === d.shelfId && s.libraryId === d.libraryId)) d.shelfId = null;
+      if (!Array.isArray(d.notes)) d.notes = [];
     }
     return db;
   }
@@ -49,20 +54,84 @@ const Library = (() => {
     if (l) l.name = name;
     return l || null;
   }
-  // Its PDFs move to the Inbox; nothing is lost. The Inbox (system) can't be removed. → removed?
+  // Its PDFs move to the Inbox's root and its shelves go; nothing is lost. The Inbox (system) can't be removed. → removed?
   function removeLibrary(db, id) {
     const l = findLibrary(db, id);
     if (!l || l.system) return false;
-    db.docs.forEach(d => { if (d.libraryId === id) d.libraryId = INBOX; });
+    db.docs.forEach(d => { if (d.libraryId === id) { d.libraryId = INBOX; d.shelfId = null; } });
     db.libraries = db.libraries.filter(x => x.id !== id);
+    db.shelves = (db.shelves || []).filter(s => s.libraryId !== id);
     return true;
   }
-  // → changed?
+  // Another library means the doc leaves its shelf (shelves belong to one library). → changed?
   function moveDoc(d, libId) {
     if (d.libraryId === libId) return false;
     d.libraryId = libId;
+    d.shelfId = null;
     return true;
   }
+
+  /* Shelves: one level of sub-libraries, {id, libraryId, name, createdAt} in db.shelves. A doc sits on at most one
+     shelf of its own library (d.shelfId), or at the library's root (null). */
+  const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const findShelf = (db, id) => (db.shelves || []).find(s => s.id === id);
+  const shelvesIn = (db, libId) => (db.shelves || []).filter(s => s.libraryId === libId);
+  const docsOnShelf = (db, shelfId) => db.docs.filter(d => d.shelfId === shelfId);
+  // → the shelf, or null if the library doesn't exist
+  function addShelf(db, libId, name = "New shelf") {
+    if (!findLibrary(db, libId)) return null;
+    const s = { id: newId("s"), libraryId: libId, name, createdAt: Date.now() };
+    (db.shelves = db.shelves || []).push(s);
+    return s;
+  }
+  function renameShelf(db, id, name) {
+    const s = findShelf(db, id);
+    if (s) s.name = name;
+    return s || null;
+  }
+  // Its PDFs go back to the library's root. → removed?
+  function removeShelf(db, id) {
+    if (!findShelf(db, id)) return false;
+    db.docs.forEach(d => { if (d.shelfId === id) d.shelfId = null; });
+    db.shelves = db.shelves.filter(s => s.id !== id);
+    return true;
+  }
+  // shelfId null → the root of the doc's library; a shelf in another library moves the doc there too.
+  // → changed? (false also for an unknown shelf)
+  function moveToShelf(db, d, shelfId) {
+    if (shelfId == null) { if (d.shelfId == null) return false; d.shelfId = null; return true; }
+    const s = findShelf(db, shelfId);
+    if (!s || (d.shelfId === s.id && d.libraryId === s.libraryId)) return false;
+    d.libraryId = s.libraryId;
+    d.shelfId = s.id;
+    return true;
+  }
+
+  /* Notes: the user's own Markdown between extracts, {id, at, text, createdAt, updatedAt} in d.notes. `at` is a
+     reading position like an entry's or image's (extract.js); a note starting with "#" is a section heading.
+     Where a note sits among the extracts is Order's job. */
+  // → the note
+  function addNote(d, at, text = "") {
+    const n = { id: newId("n"), at: Number(at) || 0, text: String(text), createdAt: Date.now(), updatedAt: Date.now() };
+    (d.notes = d.notes || []).push(n);
+    return n;
+  }
+  // → the note, or null if it isn't there
+  function updateNote(d, id, text) {
+    const n = (d.notes || []).find(x => x.id === id);
+    if (!n) return null;
+    n.text = String(text);
+    n.updatedAt = Date.now();
+    return n;
+  }
+  // → removed?
+  function removeNote(d, id) {
+    const k = (d.notes || []).length;
+    d.notes = (d.notes || []).filter(x => x.id !== id);
+    return d.notes.length !== k;
+  }
+  // A copy of the doc's notes in reading order (ties keep the order they were added)
+  const notesOf = d => (d.notes || []).slice().sort((a, b) => a.at - b.at);
 
   // Tags are trimmed, lose a leading "#", and appear once per doc. → the tag added, or "" if nothing changed
   const cleanTag = t => String(t || "").trim().replace(/^#/, "");
@@ -294,6 +363,8 @@ const Library = (() => {
   }
 
   return { APP_NAME, INBOX, EMPTY_DB, normalize, findDoc, findLibrary, docsIn, addLibrary, renameLibrary, removeLibrary, moveDoc,
+    findShelf, shelvesIn, docsOnShelf, addShelf, renameShelf, removeShelf, moveToShelf,
+    addNote, updateNote, removeNote, notesOf,
     cleanTag, addTag, removeTag, tagCounts, setStar, setRead, setLastPage, setTagColour, tagColour, searchTerms, entryMatches, userDataDir, at };
 })();
 

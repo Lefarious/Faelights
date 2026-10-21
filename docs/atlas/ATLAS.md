@@ -1,5 +1,5 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-21 · Synced at commit: c9791cc
+> Last synced: 2026-10-21 · Synced at commit: 1167137
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
@@ -13,7 +13,7 @@ Faelights is an Electron 31 desktop app with no bundler and no framework, plus a
 | Electron main | `src/main.js` (`package.json` → `"main"`) | Single-instance lock, theme, app menu, splash + main `BrowserWindow`, all `ipcMain` channels |
 | Splash | `renderer/splash.html` | Frameless window from `createSplash()`; destroyed by `revealMain()` |
 | Preload | `src/preload.js` | Exposes `window.fl` bridge via `contextBridge` |
-| Renderer page | `renderer/index.html` | Loads `pdf.min.js` → `pdf-lib.min.js` → `../core/topics.js` → `extract.js` → `meta.js` → `order.js` → `export.js` → `library.js` → `annotator.js` → `images.js` → `tour.js` → `select.js` → `app.js` |
+| Renderer page | `renderer/index.html` | Loads `pdf.min.js` → `pdf-lib.min.js` → `../core/topics.js` → `extract.js` → `meta.js` → `order.js` → `markdown.js` → `export.js` → `library.js` → `annotator.js` → `images.js` → `tour.js` → `select.js` → `app.js` |
 | Renderer boot | `renderer/app.js` `boot()` IIFE | Loads DB + theme, renders UI, sends `app:ready`, consumes pending "Open with" files |
 | OS file open | `src/main.js` `pdfArgs()`, `second-instance`, `open-file` | PDFs passed on the app's argv or macOS "Open with" |
 | Command line | `cli/faelights.js` (`package.json` `bin.faelights`, `npm run cli`) | `main(argv)`: extract / export / text / info / list / search / add / rescan / lookup / library / move / tag / star / remove / theme / tour on the app's library folder |
@@ -55,7 +55,7 @@ Two deliberate two-way edges: renderer-ui ↔ annotator (app.js opens/mounts the
 |---|---|---|---|---|---|
 | main-process | `src/main.js`, `src/exportPaths.js` | Splash/main windows, theme, dialogs, menus, shell, clipboard, exports (text + image assets, path-checked); the library store, identifier resolving and CrossRef/arXiv lookups through core, with Electron's `net` as the transport (the app's only network use) | electron (incl. `net`, `session`), core, node fs/path/crypto | preload-bridge (IPC), tests (`exportPaths.js`) | [main-process.md](modules/main-process.md) |
 | preload-bridge | `src/preload.js` | Maps `window.fl.*` → IPC channels | electron `contextBridge`, `ipcRenderer`, `webUtils` | renderer-ui | [preload-bridge.md](modules/preload-bridge.md) |
-| core | `core/` (`extract.js`, `topics.js`, `meta.js`, `order.js`, `export.js`, `library.js`, `identify.js`, `metadata.js`, `fetch.js`) | Headless: pdf.js document → entries, topics, loose marks, image boxes; PDF metadata; reading order + doc summary; export text/HTML; search matching; library db ops + on-disk store with lock; identifier parsing; paper resolving + details lookup over a passed-in transport | pdf.js document API (passed in), pdfjs-dist legacy (Node), node fs/path/os/crypto, Node `fetch` (`nodeGet`) | renderer-ui, annotator, main-process, cli, tests | [core.md](modules/core.md) |
+| core | `core/` (`extract.js`, `topics.js`, `meta.js`, `order.js`, `markdown.js`, `export.js`, `library.js`, `identify.js`, `metadata.js`, `fetch.js`) | Headless: pdf.js document → entries, topics, loose marks, image boxes; PDF metadata + the doc-title rule; reading order (entries, images, notes) + doc summary; Markdown for notes; export text/HTML; search matching; library db ops + on-disk store with lock; identifier parsing; paper resolving + details lookup over a passed-in transport | pdf.js document API (passed in), pdfjs-dist legacy (Node), node fs/path/os/crypto, Node `fetch` (`nodeGet`) | renderer-ui, annotator, main-process, cli, tests | [core.md](modules/core.md) |
 | cli | `cli/faelights.js` | `faelights` command: read, search, add (files or identifiers), organise and rescan the app's library; theme and tour settings | core, renderer-ui `tour.js`, node fs/os/path/util | users, tests | [cli.md](modules/cli.md) |
 | mcp | `mcp/server.js`, `mcp/tools.js` | `faelights-mcp`: stdio MCP server over core/ (read, search, export; six write tools (`WRITE_TOOLS`) that refuse while the app is open) | core, main-process `exportPaths.js`, cli `scan`/`scanned`, `@modelcontextprotocol/sdk`, `zod` | tests | [mcp.md](modules/mcp.md) |
 | annotator | `renderer/annotator.js` | In-app PDF viewer; writes Highlight/Underline/StrikeOut/Text/Ink annotations and Square image boxes with pdf-lib into the library copy; undo/redo | pdf-lib, pdfjs-dist, preload-bridge, core (`Extract.normQuads`), renderer-ui helpers | renderer-ui | [annotator.md](modules/annotator.md) |
@@ -71,7 +71,7 @@ existing `sourcePath` match? → `rescan()` (see below) ; else
 `fl.importPdf(p)` → IPC `pdf:import` → `main.js` reads file, SHA-1 hash, writes `userData/library/files/<id>.pdf` → returns `{id, hash, storedPath, mtime…}` →
 `fl.readPdf({...d, sourcePath:null})` → IPC `pdf:read` (reads stored copy) →
 `app.js analyzeBytes()` → `pdfjsLib.getDocument` → `Meta.readMeta(pdf)` (`getMetadata` XMP + Info, page-1 text for DOI/arXiv) → `Extract.analyzePdf(pdf)` → `{entries, loose, topics, topicSource, pages, count, images, textless}` →
-`Order.summary()` adds `count`, `colours` → pushed to `S.db.docs` → `save()` (250 ms debounce) → `fl.saveDb` → IPC `db:save` → `main.js saveDb()` → core `store.saveDb` (lock file, atomic tmp+rename write of `faelights.json`).
+`Order.summary()` adds `count`, `colours` → `d.title = Meta.docTitle(d)` (typed → source's title → PDF's → record's → file name) → pushed to `S.db.docs` → `save()` (250 ms debounce) → `fl.saveDb` → IPC `db:save` → `main.js saveDb()` → core `store.saveDb` (lock file, atomic tmp+rename write of `faelights.json`).
 
 ### Add by identifier (DOI, arXiv, PMID, PMCID, ISBN, ADS Bibcode, link)
 Sidebar/list-header link button / empty-state button / File → "Add by Identifier…" (`menu` `add-id`) / Ctrl+V outside inputs / dropped `text/uri-list` → `app.js openAddId(prefill)` → typing in the textarea → `addIdHint()` → `fl.parseIds` → IPC `id:parseMany` → `identify.parseIdentifiers` + `describe` → hint (one label, or "N recognised · M not recognised"; "Offline" pill when `navigator.onLine` is false; over 200 items (`ADD_MAX`) or 100000 chars (`ADD_MAX_CHARS`) → `too-many`, Add disabled) →
@@ -101,6 +101,7 @@ Reader "Export" → `exportMenu(d, eb)` (Markdown / Obsidian / HTML / Plain text
 no images and not html → `docText(d, fmt, frontmatter)` (`ExportFmt.docText`: `groupsOf`, `entryLines`, `settings.mode`) → `fl.exportFile` → IPC `export:file` save dialog → write (output identical to before F-016) ;
 html → `exportImages` (data URLs via `Images.crop`) → `ExportFmt.docHtml` → `fl.exportBundle` ; md/obsidian/plain with images → `exportImages` (`Images.png` per box, "Preparing images… k/n" toast, failed crop → placeholder line) → `ExportFmt.docText(…, {images})` (`exportItems` → `Order.withImages`; `imageLines` per format, paths under a random `dirToken`) → `fl.exportBundle` → IPC `export:bundle` → save dialog → `exportPaths.imagesDirFor` (`<file base> images`) → `fillToken` / `planAssets` (rejects unsafe paths) → `writeAtomic` assets, then the text file.
 Library menu / menu `export-library` → `exportLibrary(id)` → per doc the same text/html builders (images under `<doc file base> images/` when on) → `fl.exportFolder(name, files, assets)` → IPC `export:folder` (every name checked by `exportPaths`) → writes `<dir>/<library name>/…` → `fl.openFolder`.
+Notes: every builder interleaves `d.notes` by `at` (`exportItems` → `Order.withImages(entries, images, notes, all)`); md/obsidian write the note's Markdown with headings moved under the topic, plain strips the syntax (`Markdown.plain`), html renders it (`Markdown.html`). CLI and MCP exports get notes the same way.
 Copy → `docText(d, fmt, false, filtered(d), filteredImages(d) when "With images" is on)` → `[Image, p. N]` placeholders → `fl.copy`.
 
 ### Column resize / collapse
@@ -129,6 +130,12 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 
 ### Search highlights with a scope
 Sidebar "Search highlights" / menu `search` (Ctrl/Cmd+F → `findCmd()`, scope `doc` when a PDF is in the reader) / library ⋯ "Search this library" → `go({kind:"search", scope?})` → on entering: `S.searchDoc = readerDocId()`, `S.searchLib = entryScope(S.view, scope, S.searchPicked) ?? S.searchLib` → `renderSearch` (scope select) → `renderResults` → `searchScope()` (`validScope`) → `searchDocs(db, scope, docId)` → `Library.entryMatches` per entry → hits grouped per doc, headed "N matches in <scope>".
+
+### Add a note between extracts (T-025)
+Reader "Add note" slot (`noteAdd(d, at)`: top `at = -1`, after extract E `at = E.at + 0.5`) → `noteEditor` textarea → Ctrl/⌘+Enter or blur → `Library.addNote` / `updateNote` (empty → `removeNote`) → `save()`. `renderReader` → `withImages(…)` → `Order.withImages(entries, images, Library.notesOf(d), all)` places it after E (topic = E's) → `noteEl` renders `Markdown.html(text, {shift: NOTE_SHIFT})`.
+
+### Shelves (T-029)
+Library ⋯ "New shelf" → `newShelf(libId)` → `Library.addShelf` → `go({kind: "library", id, shelf})`. Sidebar `shelfItem(s)` rows under their library; "Move to" (doc menu, `bulkMenu`) → `moveItems` / `moveTarget` → `moveDoc(d, libId, shelfId)` → `Library.moveToShelf` / `moveDoc`; drop of `application/x-faelights-doc` on a shelf row → same. `visibleDocs` filters by `S.view.shelf`. CLI `shelf …` / `shelve` / `move --shelf` and MCP `create_shelf` … `shelve_pdfs` call the same `Library` helpers inside `store.update`.
 
 ### Command line: add a paper by identifier
 `faelights add 10.1371/… -l Thesis -t insects` → `cli/faelights.js main` → `parse` → `Library.at(--data-dir | userDataDir())` → `cmdAdd`: each arg is a `.pdf` on disk or `identify.parseIdentifier` (else exit 2) → `findLibrary` → `sameOrigin(db, id)`? "Already in your library" ; else `fetch.resolver(nodeGet()).resolvePdf(id)` (same resolver as the app; cookies per `Domain=`) → temp file → `store.importPdf` (`sourcePath: null`, `fileNameFor`) → same `hash` already there? `removeStored` ; else `scan(bytes)` (`Extract.openPdf` → `Meta.readMeta` + `Extract.analyzePdf`) → doc `{…addImported fields, origin, tags}` → `fetchDetails` → `fetch.lookupMeta` → `applyDetails` (`d.lookup`, title if none) → `store.update(db => db.docs.push(d))` (lock, read-modify-write) → stdout line + "restart the app" note on stderr.
@@ -164,9 +171,10 @@ Reads (`get_extracts`, `export_pdf`, the resource) → `readable(id)` → `store
 | Doc flag | `annotated` (+ `annotatedAt`) | `annotator.js persist()`; cleared by `app.js useOriginal()` | `main.js` `pdf:read` (stored copy only) and `db:load` (never stale); `app.js` list pill + doc menu |
 | Global (window) | `PDFLib` | `pdf-lib.min.js` script tag | `annotator.js` |
 | Global (window) | `Annot` | `annotator.js` | `app.js renderReader`, `annotate`, `openDoc`, `removeDoc`, `useOriginal`, keydown |
-| Global (window) | `Extract` (`analyzePdf`, `ANALYZER_VERSION` (5), `normQuads`, `imgStreamAt`, `imgSnapToFacts`, `highlights`) | `core/extract.js` (needs `Topics` from `core/topics.js`) | `app.js analyzeBytes`, `outdated()`; `annotator.js pickAt` (`normQuads`) |
-| Global (window) | `Meta` (`readMeta`, `cleanTitle`) | `core/meta.js` | `app.js` (`analyzeBytes`, `loadMeta`, `lookUp`, info card) |
-| Global (window) | `Library` (pure db ops, `entryMatches`) | `core/library.js` | `app.js` libraries, tags + tag colours, stars, read, move, search; `annotator.js` `setLastPage` |
+| Global (window) | `Extract` (`analyzePdf`, `ANALYZER_VERSION` (6), `normQuads`, `imgStreamAt`, `imgSnapToFacts`, `highlights`) | `core/extract.js` (needs `Topics` from `core/topics.js`) | `app.js analyzeBytes`, `outdated()`; `annotator.js pickAt` (`normQuads`) |
+| Global (window) | `Meta` (`readMeta`, `cleanTitle`, `pickTitle`, `docTitle`) | `core/meta.js` | `app.js` (`analyzeBytes`, `loadMeta`, `addImported`, `rescan`, `lookUp`, info card); CLI and MCP add/rescan |
+| Global (window) | `Markdown` (`html`, `shift`, `plain`, `isHeading`) | `core/markdown.js` | `core/export.js` (notes), `app.js noteEl` |
+| Global (window) | `Library` (pure db ops, `entryMatches`) | `core/library.js` | `app.js` libraries, shelves, notes, tags + tag colours, stars, read, move, search; `annotator.js` `setLastPage` |
 | Global (window) | `pdfjsLib` | `pdf.min.js` script tag | `app.js` (`GlobalWorkerOptions`, `getDocument`) |
 | Global (window) | `Images` | `images.js` | `app.js figureEl`, `exportImages`, `removeDoc`, `rescan` |
 | Global (window) | `Order` | `core/order.js` | `app.js renderReader` / `filteredImages` / `withImages` / `summary`, `core/export.js` |
@@ -184,7 +192,10 @@ Reads (`get_extracts`, `export_pdf`, the resource) → `readable(id)` → `store
 | Result version | `result.v` | `core/extract.js analyzePdf` | `app.js outdated()` → rescan on open / Rescan all; CLI `rescan` / `export` warning |
 | Global (window) | `fl` | `preload.js` | `app.js` everywhere |
 | Magic id | library id `"inbox"` (`system: true`) | `main.js EMPTY_DB/loadDb` | `app.js` (default target, delete fallback, boot) |
-| Drag MIME | `application/x-faelights-doc` | `app.js renderDocs` dragstart | `app.js navItem` drop on library |
+| Drag MIME | `application/x-faelights-doc` | `app.js renderDocs` dragstart | `app.js navItem` drop on library or shelf |
+| Db key | `shelves` (`[{id, libraryId, name, createdAt}]`, `normalize` default `[]`) + doc `shelfId` (null = library root) | `Library.addShelf` / `moveToShelf` (app, CLI, MCP) | `app.js renderSide` / `visibleDocs` / "Move to"; CLI `shelves` / `list --shelf`; MCP `list_shelves` / `list_pdfs` |
+| Doc field | `notes` (`[{id, at, text, createdAt, updatedAt}]`, `at` on the entries' text-offset scale) | `app.js noteEditor` via `Library.addNote` / `updateNote` / `removeNote` | `Order.withImages`, `ExportFmt.docText` / `docHtml` (app, CLI, MCP exports) |
+| Doc field | `sourceTitle` (the resolver's title; docs added by identifier) | `app.js addImported`, CLI `addStored`, MCP `add_by_identifier` | `Meta.docTitle` on add, rescan, lookup |
 | Relative paths | `../node_modules/pdfjs-dist/build/*.min.js`, `../node_modules/pdf-lib/dist/pdf-lib.min.js`, `../node_modules/@fontsource/*` | `package.json build.files` | `index.html`, `app.js` worker src, `styles.css @import` |
 | Brand asset paths | `assets/brand/{mark,mote,splash}-{light,dark}.svg`, `favicon-*.ico`, `app-icon.png`, `app-icon.ico` | files in `renderer/assets/brand/` | `app.js brandImg()`, `index.html`, `splash.html`, `main.js ICON` |
 | Media query | `prefers-color-scheme` | `nativeTheme.themeSource` (main) | `styles.css`, `splash.html`, `<picture>` sources |
@@ -227,6 +238,7 @@ Reads (`get_extracts`, `export_pdf`, the resource) → `readable(id)` → `store
 | `core/fetch.js` | core |
 | `core/identify.js` | core |
 | `core/library.js` | core |
+| `core/markdown.js` | core |
 | `core/meta.js` | core |
 | `core/metadata.js` | core |
 | `core/order.js` | core |
@@ -263,6 +275,9 @@ Reads (`get_extracts`, `export_pdf`, the resource) → `readable(id)` → `store
 | `test/metadata.test.js` | tests |
 | `test/reader-images.test.js` | tests |
 | `test/search-scope.test.js` | tests |
+| `test/notes.test.js` | tests |
+| `test/shelves.test.js` | tests |
+| `test/core/meta.test.js` | tests |
 | `test/tour.test.js` | tests |
 
 ## Excluded

@@ -1,5 +1,5 @@
 # Module: preload-bridge
-> Path: src/preload.js · Last synced commit: c9791cc · Related features: F-003, F-004, F-007, F-011, F-014, F-016, F-028
+> Path: src/preload.js · Last synced commit: 1167137 · Related features: F-003, F-004, F-007, F-011, F-014, F-016, F-028
 
 ## Purpose
 This is the only channel between the sandboxed renderer and the main process. It exposes `window.fl` with one thin wrapper per IPC channel and holds no logic of its own, apart from `pathFor`.

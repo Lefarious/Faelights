@@ -102,6 +102,44 @@ test("libraries: new, rename, delete (PDFs go to the Inbox); the Inbox stays", (
   assert.equal(run("--data-dir", dir, "library", "delete", "inbox").status, 1);
 });
 
+test("shelves: new, list, shelve / move --shelf / unshelve, rename, delete (PDFs stay in the library)", () => {
+  const dbFile = () => JSON.parse(fs.readFileSync(path.join(dir, "library", "faelights.json"), "utf8"));
+  lib("library", "new", "Thesis");
+  assert.match(lib("shelves"), /No shelves yet/);
+  const s = JSON.parse(lib("shelf", "new", "Thesis", "Methods", "--json"));
+  assert.deepEqual([s.name, s.library], ["Methods", "Thesis"]);
+  assert.match(run("--data-dir", dir, "shelf", "new", "thesis", "methods").stderr, /Thesis already has a shelf called "methods"/);
+  lib("shelf", "new", "Inbox", "Methods");   // the same name in another library is fine…
+  const amb = run("--data-dir", dir, "shelve", "biolum", "methods");
+  assert.equal(amb.status, 1);
+  assert.match(amb.stderr, /is a shelf in 2 libraries/);   // …but then needs --library or the id
+  assert.match(lib("shelve", "biolum", "methods", "-l", "Thesis"), /Shelved Notes on Bioluminescence → Thesis › Methods/);
+  assert.match(lib("move", "images", "Thesis", "--shelf", "Methods"), /Moved images → Thesis › Methods/);
+  assert.match(lib("move", "images", "Thesis", "--shelf", s.id), /already in Thesis › Methods/);
+  const d = dbFile().docs.find(x => x.title === "images");
+  assert.deepEqual([d.libraryId, d.shelfId], [s.libraryId, s.id]);
+
+  assert.deepEqual(JSON.parse(lib("list", "--shelf", s.id, "--json")).map(r => [r.title, r.library, r.shelf]),
+    [["Notes on Bioluminescence", "Thesis", "Methods"], ["images", "Thesis", "Methods"]]);
+  assert.match(lib("list", "Thesis"), /images  \[Thesis › Methods\]/);
+  assert.equal(JSON.parse(lib("info", "images", "--json")).shelf, "Methods");
+  assert.deepEqual(JSON.parse(lib("shelves", "Thesis", "--json")).map(r => [r.name, r.pdfs]), [["Methods", 2]]);
+  assert.match(lib("shelves"), /Thesis › Methods \(2 PDFs\)/);
+  assert.match(run("--data-dir", dir, "list", "--shelf", "Nope").stderr, /No shelf called "Nope"/);
+
+  assert.match(lib("unshelve", "images"), /Took images off Methods \(still in Thesis\)/);
+  assert.match(lib("unshelve", "images"), /isn't on a shelf/);
+  assert.match(lib("move", "biolum", "Thesis"), /Moved Notes on Bioluminescence → Thesis$/m);   // to the library's root
+  lib("shelve", "biolum", s.id);
+  assert.match(lib("shelf", "rename", s.id, "Background"), /Renamed shelf Methods → Background/);
+  assert.match(lib("shelf", "delete", "Background"), /Deleted shelf Thesis › Background; 1 PDF taken off it \(still in Thesis\)/);
+  assert.deepEqual(dbFile().docs.map(x => [x.libraryId, x.shelfId]), [[s.libraryId, null], [s.libraryId, null]]);
+  assert.equal(run("--data-dir", dir, "shelf", "frob").status, 2);
+  // put things back as the later tests expect them
+  lib("shelf", "delete", "Methods");
+  lib("library", "delete", "Thesis");
+});
+
 test("tags and stars, and filtering the list by them", () => {
   assert.match(lib("tag", "biolum", "#light", "essay", "light"), /#light #essay$/m);
   assert.match(lib("untag", "biolum", "essay"), /: #light$/m);
@@ -226,4 +264,22 @@ test("core/meta.js reads metadata in Node and cleans titles", async () => {
   assert.equal(Meta.cleanTitle("Microsoft Word - draft.docx"), "draft");
   assert.equal(Meta.cleanTitle("untitled"), "");
   assert.equal("see doi:10.1000/xyz123.".match(Meta.DOI_RE)[1], "10.1000/xyz123");
+});
+test("add <link>: the landing page's title beats the PDF's own (T-035)", async () => {
+  const http = require("node:http"), { promisify } = require("node:util"), execFile = promisify(require("node:child_process").execFile);
+  const own = fs.mkdtempSync(path.join(os.tmpdir(), "faelights-cli-src-"));
+  const site = http.createServer((req, res) => {
+    if (req.url === "/paper.pdf") { res.writeHead(200, { "Content-Type": "application/pdf" }); return res.end(fs.readFileSync(SAMPLE)); }
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(`<html><head><meta name="citation_title" content="The Real Title"><meta name="citation_pdf_url" content="/paper.pdf"></head></html>`);
+  });
+  await new Promise(r => site.listen(0, "127.0.0.1", r));
+  try {
+    // async: the server above answers from this process
+    const { stdout } = await execFile(process.execPath, [CLI, "--data-dir", own, "add", `http://127.0.0.1:${site.address().port}/landing`, "--no-lookup", "--json"]);
+    const [r] = JSON.parse(stdout);
+    assert.deepEqual([r.action, r.title], ["added", "The Real Title"]);
+    const d = JSON.parse(fs.readFileSync(path.join(own, "library", "faelights.json"), "utf8")).docs[0];
+    assert.deepEqual([d.sourceTitle, d.meta.title], ["The Real Title", "Notes on Bioluminescence"]);
+  } finally { site.close(); fs.rmSync(own, { recursive: true, force: true }); }
 });

@@ -465,3 +465,35 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 /* T-028 clips: a highlight over no text, shown as a crop of the area it covers */
 .fig.clip .fig-img { border: 2px solid rgb(var(--mc) / .8); border-left-width: 4px; box-shadow: 0 0 0 3px rgb(var(--mc) / .18); }
 .fig-kind { font-size: 12px; color: var(--muted); padding-top: 2px; }
+/* T-025 notes: the user's Markdown between extracts; "Add note" shows on hover of the slot it closes */
+.note-add { display: flex; align-items: center; gap: 6px; margin: -6px 0 -6px 62px; padding: 3px 8px; border: 0; background: none; color: var(--muted); font-size: 12.5px; font-weight: 600; border-radius: 6px; cursor: pointer; opacity: 0; transition: opacity .12s; }
+.note-add svg { width: 13px; height: 13px; }
+.ex:hover + .note-add, .unote:hover + .note-add, .group-head + .note-add, .note-add:hover, .note-add:focus-visible { opacity: 1; }
+.note-add:hover { color: var(--ink); background: var(--sel); }
+.ex:has(+ .note-add:last-child) { border-bottom: 0; }
+.unote { position: relative; margin: 10px 0 10px 62px; padding: 8px 40px 8px 14px; border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); max-width: 66ch; font-size: 15px; line-height: 1.55; overflow-wrap: anywhere; user-select: text; }
+.unote-md > :first-child { margin-top: 0; } .unote-md > :last-child { margin-bottom: 0; }
+.unote-md p, .unote-md ul, .unote-md ol, .unote-md blockquote, .unote-md pre { margin: .5em 0; }
+.unote-md ul, .unote-md ol { padding-left: 1.3em; }
+.unote-md h1, .unote-md h2, .unote-md h3, .unote-md h4, .unote-md h5, .unote-md h6 { font-family: var(--font-display); font-weight: 400; line-height: 1.25; margin: .4em 0 .3em; }
+.unote-md h4 { font-size: 19px; } .unote-md h5 { font-size: 16.5px; } .unote-md h6 { font-size: 15px; }
+.unote.is-head { border-left-color: var(--accent); }
+.unote-md blockquote { padding-left: 12px; border-left: 2px solid var(--line); color: var(--muted); }
+.unote-md code { font-size: .9em; background: var(--sel); border-radius: 4px; padding: 0 .25em; }
+.unote-md pre code { display: block; padding: 8px 10px; overflow-x: auto; }
+.unote-md a { color: var(--accent); }
+.unote-acts { position: absolute; top: 4px; right: 0; display: flex; flex-direction: column; gap: 2px; opacity: 0; }
+.unote:hover .unote-acts, .unote-acts:focus-within { opacity: 1; }
+.unote-acts .btn { padding: 4px; border: 0; background: none; color: var(--muted); }
+.unote-acts .btn:hover { color: var(--ink); background: var(--sel); }
+.unote-acts svg { width: 14px; height: 14px; }
+.unote.editing { padding-right: 0; }
+.unote textarea { width: 100%; box-sizing: border-box; font: 14px/1.5 ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; color: var(--ink); background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px; resize: vertical; }
+.unote-hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+
+/* T-029 shelves: indented under their library in the sidebar; a row's shelf in the library's list */
+.nav li.shelf > button:first-child { padding-left: 30px; font-size: 13px; }
+.nav li.shelf > button:first-child .ico { width: 14px; height: 14px; }
+.doc .m .on-shelf { display: inline-flex; align-items: center; gap: 3px; }
+.doc .m .on-shelf .ico { width: 12px; height: 12px; color: var(--muted); }
+.nav li.shelf > input { margin-left: 20px; width: calc(100% - 20px); }

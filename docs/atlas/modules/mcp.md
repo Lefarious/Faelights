@@ -1,8 +1,8 @@
 # Module: mcp
-> Path: mcp/ · Last synced commit: c9791cc · Related features: F-027
+> Path: mcp/ · Last synced commit: 1167137 · Related features: F-027, T-029, T-035 (Sprint 8)
 
 ## Purpose
-An MCP server over stdio (`faelights-mcp`) that exposes the desktop app's library to MCP clients (Claude Code, Claude Desktop): list, read extracts grouped by topic, search, export, and six write tools (`WRITE_TOOLS`). It imports core/ in-process. It does not render images, download papers or talk to a running app. It only reads the app's session marker to decide whether writing is safe.
+An MCP server over stdio (`faelights-mcp`) that exposes the desktop app's library to MCP clients (Claude Code, Claude Desktop): list, read extracts grouped by topic, search, export, and ten write tools (`WRITE_TOOLS`). It imports core/ in-process. It does not render images, download papers or talk to a running app. It only reads the app's session marker to decide whether writing is safe.
 
 ## Public interface
 `node mcp/server.js [--data-dir <dir>]` (`package.json` `bin.faelights-mcp`, `npm run mcp`). Data folder: `--data-dir`, else `FAELIGHTS_DATA_DIR`, else `Library.userDataDir()`.
@@ -10,7 +10,7 @@ An MCP server over stdio (`faelights-mcp`) that exposes the desktop app's librar
 | Tool | Input (zod) | Output (JSON text + `structuredContent`) | Writes |
 |---|---|---|---|
 | `list_libraries` | — | `{libraries: [{id, name, system, pdfs}]}` | — |
-| `list_pdfs` | `library?`, `tag?`, `starred?` | `{pdfs: [summary]}` | — |
+| `list_pdfs` | `library?`, `shelf?`, `tag?`, `starred?` | `{pdfs: [summary]}` (summaries carry `shelf`, `shelf_id`) | — |
 | `get_extracts` | `pdf_id`, `mode` full\|highlights, `colours?` (hex), `topic?` | `{topics: [{topic: path[], topic_page, extracts: [{n, page, text, highlights: [{text, colour, type, comment}]}]}], unreadable_marks, textless_pages, warnings}` | — |
 | `search` | `query`, `scope` sentence\|highlight\|note\|all, `library?`, `limit` | `{total, truncated, matches: [{pdf_id, page, topic, sentence, highlights}]}` | — |
 | `export_pdf` | `pdf_id`, `format` markdown\|obsidian\|plain, `mode?`, `frontmatter` | `{text}` (= `ExportFmt.docText`) | — |
@@ -22,11 +22,15 @@ An MCP server over stdio (`faelights-mcp`) that exposes the desktop app's librar
 | `mark_read` | `pdf_id`, `read` | `{pdf_id, title, read, changed}` | library |
 | `set_tag_colour` | `tag`, `colour` (`#rgb`\|`#rrggbb`\|null) | `{tag, colour, changed}` | library |
 | `list_tags` | — | `{tags: [{tag, pdfs, colour}]}` | — |
+| `list_shelves` | `library?` | shelves with their library and PDF count | — |
+| `create_shelf` / `rename_shelf` | library + name / shelf + name | the shelf | library |
+| `delete_shelf` | shelf | its PDFs go to the library root (`destructiveHint`; description says to ask the user first) | library |
+| `shelve_pdfs` | `pdf_ids[]`, `shelf` (null = off the shelf) | moved PDFs; an unknown id cancels the whole call | library |
 
-Resource template `faelights://pdf/{id}` (`text/markdown`; list = every doc). Errors come back as `isError` with `{error: {code, message}}`. The codes are `unknown_pdf`, `unknown_library`, `unknown_tag`, `file_missing`, `no_text_layer`, `bad_pdf`, `invalid_input`, `library_in_use` and `internal`. `add_by_identifier` adds `offline`, `paywalled`, `not_pdf`, `not_found`, `no_free_copy`, `too_large` and `network`, which are core/fetch.js `FetchFail` reasons with `-` replaced by `_`. zod rejections arrive as protocol error -32602.
+Resource template `faelights://pdf/{id}` (`text/markdown`; list = every doc). Errors come back as `isError` with `{error: {code, message}}`. The codes are `unknown_pdf`, `unknown_library`, `unknown_shelf`, `unknown_tag`, `file_missing`, `no_text_layer`, `bad_pdf`, `invalid_input`, `library_in_use` and `internal`. `add_by_identifier` adds `offline`, `paywalled`, `not_pdf`, `not_found`, `no_free_copy`, `too_large` and `network`, which are core/fetch.js `FetchFail` reasons with `-` replaced by `_`. zod rejections arrive as protocol error -32602.
 
 ## Dependencies
-- **Uses:** core `library.js` (`at`, `userDataDir`, `findDoc`/`findLibrary`/`docsIn`, `cleanTag`/`addTag`/`setStar`/`setRead`/`setTagColour`/`tagColour`/`tagCounts`, `searchTerms`/`entryMatches`, store `loadDb`/`update(fn, {wait: 0})`/`checkSources`/`readPdf`/`importPdf`/`removeStored`/`appSession`), `extract.js` (`ANALYZER_VERSION`), `order.js` (`summary`), `export.js` (`docText`, `groupsOf`, `fileBase`, `extOf`), `identify.js` (`parseIdentifier`, `fileNameFor`), `fetch.js` (`nodeGet` with `onProgress`, `resolver`, `FetchFail`); main-process `src/exportPaths.js` (`resolveInside`); cli `scan`/`scanned`/`ADD_FAIL`/`sameOrigin`/`fetchDetails`/`applyDetails`; `package.json` (`version`).
+- **Uses:** core `library.js` (`at`, `userDataDir`, `findDoc`/`findLibrary`/`docsIn`, `cleanTag`/`addTag`/`setStar`/`setRead`/`setTagColour`/`tagColour`/`tagCounts`, shelves `findShelf`/`shelvesIn`/`addShelf`/`renameShelf`/`removeShelf`/`moveToShelf`, `searchTerms`/`entryMatches`, store `loadDb`/`update(fn, {wait: 0})`/`checkSources`/`readPdf`/`importPdf`/`removeStored`/`appSession`), `extract.js` (`ANALYZER_VERSION`), `order.js` (`summary`), `export.js` (`docText`, `groupsOf`, `fileBase`, `extOf`; exports include notes), `meta.js` (`pickTitle` / `docTitle` in the add tools), `identify.js` (`parseIdentifier`, `fileNameFor`), `fetch.js` (`nodeGet` with `onProgress`, `resolver`, `FetchFail`); main-process `src/exportPaths.js` (`resolveInside`); cli `scan`/`scanned`/`ADD_FAIL`/`sameOrigin`/`fetchDetails`/`applyDetails`; `package.json` (`version`).
 - **Used by:** tests (`test/mcp.test.js`, over stdio).
 - **External libs:** `@modelcontextprotocol/sdk` (`McpServer`, `ResourceTemplate`, `StdioServerTransport`), `zod` 4.
 

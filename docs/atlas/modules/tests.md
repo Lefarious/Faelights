@@ -1,5 +1,5 @@
 # Module: tests
-> Path: test/ · Last synced commit: c9791cc · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024, F-025, F-027, F-028
+> Path: test/ · Last synced commit: 1167137 · Related features: T-025, T-029, T-035 (Sprint 8), F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024, F-025, F-027, F-028
 
 ## Purpose
 Automated checks run with Node's built-in `node:test` and `node:assert`, with no extra dependencies. They cover everything that loads in plain Node: core/ (extraction incl. image boxes, topics, reading order, export formatting, the library store with its lock, identifier parsing, CrossRef/arXiv mapping, paper resolving and the Node transport against a local server), the guided tour's step data (`renderer/tour.js`), export path safety (`src/exportPaths.js`) and the `faelights` CLI as a child process on a temp library. They do not launch Electron or exercise the UI, and nothing touches the network.
@@ -54,7 +54,7 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Imports (internal):** `src/exportPaths.js`, `core/export.js`
 
 ### `test/core/extract.test.js`
-- **Role:** `core/extract.js` in plain Node: no DOM/canvas, path vs bytes give the same result, progress, reading order, `highlights()` rows, Underline/Squiggly/StrikeOut among highlights, loose marks, `normQuads` forms; sentence splitting (after quotes/brackets, `no.`, `et al.`, `etc.`, `vitamin C.`; a mark starting on the previous `. `; one extract for a mark across two sentences, `e.g.`, `Fig. 3`, `No. 5`, `3.5`, `J. Smith`, `J. A. Smith`)
+- **Role:** `core/extract.js` in plain Node: no DOM/canvas, path vs bytes give the same result, progress, reading order, `highlights()` rows, Underline/Squiggly/StrikeOut among highlights, loose marks, `normQuads` forms; sentence splitting (after quotes/brackets, `no.`, `et al.`, `etc.`, `vitamin C.`; a mark starting on the previous `. `; one extract for a mark across two sentences, `e.g.`, `Fig. 3`, `No. 5`, `3.5`, `J. Smith`, `J. A. Smith`; `Group A. Patients` splits after a label word)
 - **Imports (internal):** `test/helpers/pdf.js`, `test/helpers/annotate.js`, `test/helpers/textpdf.js`, `core/extract.js`
 
 ### `test/core/topics.test.js`
@@ -66,7 +66,7 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Imports (internal):** `core/extract.js`, `core/export.js`
 
 ### `test/core/library.test.js`
-- **Role:** `core/library.js`: `userDataDir` per platform and `FAELIGHTS_DATA_DIR`, empty library with Inbox, atomic saves, lock waiting / stale lock clearing / `wait: 0` failing at once, the app session marker (own pid, live other pid, dead pid), `update()` read-modify-write within and across processes, refusing to overwrite an unreadable file, tags / stars / libraries, read flag, `lastPage`, tag colours, `normalize` filling them on older files
+- **Role:** `core/library.js`: `userDataDir` per platform and `FAELIGHTS_DATA_DIR`, empty library with Inbox, atomic saves, lock waiting / stale lock clearing / `wait: 0` failing at once, the app session marker (own pid, live other pid, dead pid), `update()` read-modify-write within and across processes, refusing to overwrite an unreadable file, tags / stars / libraries, read flag, `lastPage`, tag colours, `normalize` filling them on older files; shelves (add/rename/move on and off/remove, `moveDoc` and `removeLibrary` clearing the shelf, stray shelf ids dropped) and notes (add/update/remove, `notesOf` order)
 - **Imports (internal):** `core/library.js`; spawns `node` children for the cross-process cases
 
 ### `test/core/fetch.test.js`
@@ -74,14 +74,26 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Imports (internal):** `core/fetch.js`
 
 ### `test/cli.test.js`
-- **Role:** `cli/faelights.js` run as a child process: `extract` equals `ExportFmt.docText`, json rows equal `Extract.highlights`, html/obsidian/only/`--out`, usage errors exit 2; on a temp `--data-dir`: add/list/libraries/export, re-add rescans, library new/rename/delete, move, tag/untag/tags, star/unstar and filters, info, text (`--pages`, file path), rescan, remove (`--force` for annotated), search (words, notes, topics, md marks), theme (`theme.json`), tour skip/restart (`settings.tour`); `core/meta.js` `readMeta` / `cleanTitle` / `DOI_RE`
+- **Role:** `cli/faelights.js` run as a child process: `extract` equals `ExportFmt.docText`, json rows equal `Extract.highlights`, html/obsidian/only/`--out`, usage errors exit 2; on a temp `--data-dir`: add/list/libraries/export, re-add rescans, library new/rename/delete, move, tag/untag/tags, star/unstar and filters, info, text (`--pages`, file path), rescan, remove (`--force` for annotated), search (words, notes, topics, md marks), theme (`theme.json`), tour skip/restart (`settings.tour`), shelves (`shelf new/rename/delete`, `shelve`/`unshelve`, `move --shelf`, `list --shelf`), add by link takes the landing page's title (local server), notes after extract 3 in every export format and kept through `rescan --all`; `core/meta.js` `readMeta` / `cleanTitle` / `DOI_RE`
 - **Imports (internal):** `test/helpers/pdf.js`, `core/extract.js`, `core/export.js`, `core/meta.js`, `renderer/tour.js`
 - **Change impact:** CLI wording asserted here (messages, `--json` shapes) is a contract for scripts.
 
 ### `test/mcp.test.js`
-- **Role:** `mcp/server.js` spawned and driven over stdio by the SDK's `Client` + `StdioClientTransport`, on temp `FAELIGHTS_DATA_DIR`s (filled with the CLI). Covers every read tool on `renderer/sample.pdf` (topics, pages, comments, colour/topic filters, search scopes, export text = `ExportFmt.docText`, `export_library` folder, the `faelights://pdf/{id}` resource), the write tools, and the errors `unknown_pdf`, `file_missing`, `no_text_layer` (blank pdf-lib PDF) and `library_in_use` (a live process's session marker, a held lock; a dead pid's marker is ignored).
+- **Role:** `mcp/server.js` spawned and driven over stdio by the SDK's `Client` + `StdioClientTransport`, on temp `FAELIGHTS_DATA_DIR`s (filled with the CLI). Covers every read tool on `renderer/sample.pdf` (topics, pages, comments, colour/topic filters, search scopes, export text = `ExportFmt.docText`, `export_library` folder, the `faelights://pdf/{id}` resource), the write tools incl. the shelf tools (refused while the app is open), `add_by_identifier` keeping the source's title through a rescan (local landing page), and the errors `unknown_pdf`, `file_missing`, `no_text_layer` (blank pdf-lib PDF) and `library_in_use` (a live process's session marker, a held lock; a dead pid's marker is ignored).
 - **Imports (internal):** `test/helpers/pdf.js`, `core/extract.js`, `core/export.js`; `@modelcontextprotocol/sdk` client, `pdf-lib`
 - **Change impact:** tool names, error codes and output shapes asserted here are the MCP contract.
+
+### `test/core/meta.test.js`
+- **Role:** `Meta.pickTitle` / `docTitle`: the rule order (typed → source → embedded → record → current → file name), junk source titles ignored, a rescan keeps the source title, no change without one
+- **Imports (internal):** `core/meta.js`
+
+### `test/notes.test.js`
+- **Role:** T-025 notes: `Order.withImages` slots a note after its extract and before a following image, keeps several in order, top and end notes, topic inheritance (also when the extract is filtered out), `groupItems` note counts; `ExportFmt` puts a note after extract 3 of `sample.pdf` in md/obsidian/plain/html with the shifted heading level; `Markdown` elements, escaping (`javascript:` links), `shift`, `plain`, `isHeading`
+- **Imports (internal):** `test/helpers/pdf.js`, `core/extract.js`, `core/order.js`, `core/export.js`, `core/markdown.js`
+
+### `test/shelves.test.js`
+- **Role:** T-029 renderer helpers copied out of `renderer/app.js`'s source (like `search-scope.test.js`): the "Move to" items (`moveItems` / `moveTarget`) and the shelf filter in `visibleDocs`
+- **Imports (internal):** `core/library.js`; reads `renderer/app.js` as text
 
 ### `test/helpers/annotate.js`
 - **Role:** adds markup annotations (`Underline`, `StrikeOut`, `Squiggly`, `Highlight` by `find` text or `rect`) and bookmarks to a PDF in memory with pdf-lib → bytes

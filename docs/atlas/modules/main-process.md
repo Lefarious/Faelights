@@ -1,5 +1,5 @@
 # Module: main-process
-> Path: src/main.js, src/exportPaths.js · Last synced commit: c9791cc · Related features: F-001, F-003, F-004, F-005, F-007, F-008, F-011, F-014, F-016, F-018, F-019, F-020, F-023, F-025, F-027, F-028
+> Path: src/main.js, src/exportPaths.js · Last synced commit: 1167137 · Related features: F-001, F-003, F-004, F-005, F-007, F-008, F-011, F-014, F-016, F-018, F-019, F-020, F-023, F-025, F-027, F-028
 
 ## Purpose
 This is the Electron main process. It owns the on-disk library (`faelights.json` plus copied PDFs, through core `Library.at(app.getPath("userData"))`), the splash and main windows, the theme, the native app menu, native dialogs, shell actions, the clipboard, and the only network access in the app: downloading a PDF when the user submits an identifier (DOI, arXiv ID, PMID, PMCID, ISBN, ADS Bibcode) or a link (`pdf:fetch`; a book's result also carries `edition`), and fetching a paper's details from CrossRef or arXiv when the user asks (`meta:lookup`). It does not parse PDFs or hold UI state. The renderer sends the whole DB object and this module persists it as-is. Resolving identifiers to PDFs and the CrossRef/arXiv lookup live in core `fetch.js`; this module supplies the Electron transport (`fetchUrl`) and progress events.
