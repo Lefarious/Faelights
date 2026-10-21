@@ -40,6 +40,20 @@ npm install
 npm start
 ```
 
+## Command line
+
+The same library is available from a terminal, without opening the app (run from a checkout after `npm install`):
+
+```bash
+npm run cli -- extract paper.pdf              # highlights of any PDF (md, obsidian, html, plain or json)
+npm run cli -- add paper.pdf 10.1371/journal.pone.0185809 -l Thesis
+npm run cli -- search deep sea                # highlights containing every word
+npm run cli -- list --tag insects
+npm run cli -- --help                         # every command: text, info, library, move, tag, star, rescan, theme, tour…
+```
+
+`npm link` adds a `faelights` command instead. Close Faelights before commands that change the library: the open app saves its own copy and would overwrite them.
+
 ## Build installers
 
 ```bash
@@ -48,7 +62,7 @@ npm run dist:mac     # macOS .dmg (must be built on a Mac)
 npm run dist:linux   # Linux AppImage
 ```
 
-Build the Windows installer on Windows. Building it on Linux needs Wine. The workflow in `.github/workflows/build.yml` builds all three platforms on GitHub. Push a tag like `v1.2.1`: the run attaches the installers to a draft GitHub Release, which you review and publish by hand. The files are also kept as the run's artifacts.
+Build the Windows installer on Windows. Building it on Linux needs Wine. The workflow in `.github/workflows/build.yml` builds all three platforms on GitHub. Push a tag like `v1.3.0`: the run attaches the installers to a draft GitHub Release, which you review and publish by hand. The files are also kept as the run's artifacts.
 
 ## Limits
 
