@@ -27,6 +27,14 @@ test("doi.org and dx.doi.org links", () => {
   assert.equal(parse("https://doi.org/"), null);
 });
 
+test("tracking parameters are dropped from DOIs and links (T-036)", () => {
+  assert.deepEqual(kv("10.1038/nature14539?utm_source=twitter&utm_medium=social"), ["doi", "10.1038/nature14539"]);
+  assert.deepEqual(kv("https://doi.org/10.1038/nature14539?utm_source=x&fbclid=abc"), ["doi", "10.1038/nature14539"]);
+  assert.deepEqual(kv("https://doi.org/10.1038/x?utm_campaign=y&keep=1"), ["doi", "10.1038/x?keep=1"]);
+  assert.deepEqual(kv("https://example.org/paper.pdf?utm_source=mail&id=7"), ["url", "https://example.org/paper.pdf?id=7"]);
+  assert.deepEqual(kv("https://example.org/paper.pdf?gclid=1"), ["url", "https://example.org/paper.pdf"]);
+});
+
 test("arXiv new-style ids", () => {
   assert.deepEqual(kv("2401.01234"), ["arxiv", "2401.01234"]);
   assert.deepEqual(kv("2401.01234v2"), ["arxiv", "2401.01234v2"]);
@@ -242,7 +250,7 @@ test("long and messy pastes (T-017)", () => {
   assert.deepEqual(kv("10.10\u00AD38/nature12373"), ["doi", "10.1038/nature12373"]);   // soft hyphen from a PDF
   // a link with kilobytes of tracking parameters is still a link
   const long = "https://www.example.com/article/123?utm_source=feed&ref=" + "x".repeat(6000);
-  assert.deepEqual(kv(long), ["url", long]);
+  assert.deepEqual(kv(long), ["url", long.replace("utm_source=feed&", "")]);   // tracking keys dropped (T-036)
   assert.deepEqual(items(long + "\n10.1038/nature12373").map(x => x[1]), ["url", "doi"]);
   // prose or a bibliography entry: the DOI is picked out, the words are kept as unrecognised
   const prose = items("As shown by Smith et al. (doi:10.1038/nature12373), it works.");

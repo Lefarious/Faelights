@@ -108,6 +108,8 @@ else {
     else pendingOpen.push(p);
   });
   app.whenReady().then(() => {
+    // tells the MCP server the library is open here, so it won't write changes this app would overwrite
+    try { store().openSession(); } catch (err) { console.error("session marker failed", err); }
     pendingOpen.push(...pdfArgs(process.argv.slice(1)));
     nativeTheme.themeSource = loadTheme();
     buildAppMenu();
@@ -116,6 +118,7 @@ else {
     app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   });
   app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+  app.on("will-quit", () => store().closeSession());
 }
 
 function buildAppMenu() {
@@ -247,7 +250,7 @@ ipcMain.handle("pdf:fetch", async (_e, text) => {
     const info = await store().importPdf(tmp);
     // no original on disk to track, like the sample PDF
     Object.assign(info, { sourcePath: null, fileName: fileNameFor(id, r.url) });
-    return { ok: true, info, origin: { kind: id.kind, value: id.value, url: r.url }, title: r.title || null };
+    return { ok: true, info, origin: { kind: id.kind, value: id.value, url: r.url }, title: r.title || null, edition: r.edition || null };
   } catch (err) {
     if (!(err instanceof FetchFail)) console.error("fetch failed", err);
     return { ok: false, reason: err instanceof FetchFail ? err.reason : "network", landingUrl: id.url };
@@ -356,18 +359,6 @@ ipcMain.handle("clip:image", (_e, bytes) => {
   if (img.isEmpty()) return false;
   clipboard.writeImage(img); return true;
 });
-
-// Native context menu: renderer sends items, gets back the chosen id
-ipcMain.handle("menu:popup", (_e, items) => new Promise(resolve => {
-  let chosen = null;
-  const build = list => list.map(it => it.type === "separator" ? { type: "separator" } : ({
-    label: it.label, enabled: it.enabled !== false, type: it.checked !== undefined ? "checkbox" : "normal", checked: !!it.checked,
-    submenu: it.submenu ? build(it.submenu) : undefined,
-    click: it.submenu ? undefined : () => { chosen = it.id; }
-  }));
-  const menu = Menu.buildFromTemplate(build(items));
-  menu.popup({ window: win, callback: () => setTimeout(() => resolve(chosen), 0) });
-}));
 
 ipcMain.handle("ask:confirm", async (_e, { message, detail, ok }) => {
   const r = await dialog.showMessageBox(win, { type: "question", buttons: [ok || "OK", "Cancel"], defaultId: 0, cancelId: 1, message, detail });

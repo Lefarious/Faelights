@@ -1,10 +1,10 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-21 · **Sprint 6 closed** (merged to local main 9ff7a30, 168/168, tag `sprint-6-end`; release v1.3.1; v1.3.0 draft published) · next: Sprint 7 · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
+_Last updated: 2026-10-21 · **Sprint 7 merged on feature/s7-integration fa56121 (207/207), awaiting user gate 1; release as v1.3.2** · Sprint 6 closed (merged to local main 9ff7a30, 168/168, tag `sprint-6-end`; release v1.3.1; v1.3.0 draft published) · next: Sprint 7 · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
-- Todo ids: `T-NNN`, next free: T-039 (T-016 is the MCP server on `feature/T-016-mcp-server`) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Todo ids: `T-NNN`, next free: T-041 (T-016 is the MCP server on `feature/T-016-mcp-server`) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
@@ -47,13 +47,13 @@ Proposals waiting for approval (each can join Sprint 3; "exempt" = doesn't count
 
 - [ ] **T-002** [bug · S · exempt] A mistyped link says "You're offline": tell "no connection" apart from "couldn't reach that site".
 - [ ] **T-003** [enhancement · S] nature.com bot-blocks downloads, so some open-access papers fail: add an alternative-source lookup (fits T-001).
-- [ ] **T-004** [enhancement · S] Second test PDF (underline, strike-through, bookmark and wording topics, marks with no text). (The "run `npm test` in the GitHub build" half was done 2026-10-10 on `ci/build-on-push`.)
-- [ ] **T-005** [polish · XS · exempt] Rename "Annotate" in the PDF menu to "View"; remove the unused native-menu IPC (`menu:popup`).
+- [x] **T-004** (Sprint 7) [enhancement · S] Second test PDF (underline, strike-through, bookmark and wording topics, marks with no text). (The "run `npm test` in the GitHub build" half was done 2026-10-10 on `ci/build-on-push`.)
+- [x] **T-005** (Sprint 7) [polish · XS · exempt] Rename "Annotate" in the PDF menu to "View"; remove the unused native-menu IPC (`menu:popup`).
 - [ ] **T-006** [enhancement · S] Dev-only setting for a separate library folder, so a test copy can run while the real app is open.
 - [ ] **T-008** [bug · S · exempt] PMC serves a bot-check page instead of PDFs, so PMCID (and PMIDs that resolve to PMC) may fail: try Europe PMC / Unpaywall.
-- [ ] **T-009** [polish · XS · exempt] ISBN lookup may pick a scan of another edition: show the edition title in the result row.
+- [x] **T-009** (Sprint 7) [polish · XS · exempt] ISBN lookup may pick a scan of another edition: show the edition title in the result row.
 - [ ] **T-010** [enhancement · S] Move and resize image boxes in the viewer (today: delete and redraw).
-- [ ] **T-011** [polish · XS · exempt] `ckey` is duplicated in order.js and app.js, and `groupsOf` overlaps `Order.groupItems`: fold both into order.js.
+- [x] **T-011** (Sprint 7) [polish · XS · exempt] `ckey` is duplicated in order.js and app.js, and `groupsOf` overlaps `Order.groupItems`: fold both into order.js.
 
 - [x] **T-015 cli** (feature · L · merged 796478d (with `refactor/headless-core` 54d1a07), F-024 ·  branch `feature/T-015-cli`, cut from `refactor/headless-core` because it needs `core/`; requested by user 2026-10-21): a `faelights` command line over `core/` that covers the app's main actions. Reading: `extract <file>`, `export`, `text` (full text, `--pages`), `info`, `list` (`--tag`, `--starred`), `libraries`, `tags`. Adding: `add` from files or by DOI / arXiv / PMID / PMCID / ISBN / ADS / link (+ `--tag`, details from CrossRef/arXiv), `rescan` (`--all`), `lookup`. Organising: `library new|rename|delete`, `move`, `tag`/`untag`, `star`/`unstar`, `remove` (`--force` for docs annotated in the app). App: `search <words>` (the app's rule, now `Library.entryMatches`), `theme [system|light|dark]` (`theme.json`), `tour status|skip|restart` (`settings.tour` via `tour.js` `skipAll`; restart = Help › Show Tour). Moves to core: `readMeta`/`cleanTitle` → `core/meta.js`, `summary` → `Order.summary`, `src/identify.js` + `src/metadata.js` → `core/`, and the paper resolver + metadata lookup out of `main.js` into `core/fetch.js` (transport passed in: Electron `net` in the app, `nodeGet` with redirect cookies in the CLI). Captured images aren't exported (they need rendering). Verified on the branch: 142/142; the app starts in the theme the CLI set, runs the tour after `tour restart`, and its search uses the shared matcher; the app opens a CLI-built library (tags, stars, libraries, details, origins) and its own add-by-identifier and lookup still work through `core/fetch.js` (arXiv download, CrossRef lookup, Nature → paywalled). Live CLI downloads: arXiv 1706.03762, PLOS DOI; Nature DOI → paywalled.
 
@@ -86,9 +86,9 @@ Polish (reported by user):
 | T-023 search-current-library (enhancement) | Search scoped to the selected library. Accept: matches limited to that library's PDFs | renderer/app.js (search panel), core/library.js | T-022 (same panel) | S | 1 | merged 9ff7a30 (Sprint 6, F-026) |
 | T-024 tag-colours (enhancement) | Assign a colour to each tag; shown on tag chips in the library and on PDFs. Accept: colour persists across restart; CLI/MCP unaffected | renderer/app.js (tags), core/library.js (`db.tagColours`), renderer/styles.css | library-doc-fields scaffold | S | 2 | merged 9ff7a30 (Sprint 6, F-026) |
 | T-026 mark-as-read (enhancement) | Toggle read/unread per PDF; read PDFs look distinct in the list and can be filtered. Accept: toggle from item menu, persists | renderer/app.js (doc list, item menu), core/library.js (`d.read`) | library-doc-fields scaffold | S | 2 | merged 9ff7a30 (Sprint 6, F-026) |
-| T-021 multi-select (enhancement) | Select one or several PDFs (click, Ctrl/Shift-click) and apply move/tag/star/remove to all. Accept: Shift-select 3, move to a library, all 3 move | renderer/app.js (doc list, item actions), renderer/styles.css | — | M | 1 | planned · Sprint 7 |
-| T-027 section-numbering (feature) | Keep the document's heading structure and numbering (e.g. "12.1.12 Section A") in exports. Accept: a numbered-heading fixture exports with the same numbers and nesting | core/topics.js, core/export.js, test/ | — | M | 1 | planned · Sprint 7 |
-| T-028 loose-marks-as-clips (enhancement) | Highlights over images/scans with no text (today `result.loose`, page numbers only) become image clips in the extract and exports. Accept: a text-less highlight shows as a cropped image | core/extract.js, renderer/app.js (reader), renderer/images.js | — | M | 2 | planned · Sprint 7 |
+| T-021 multi-select (enhancement) | Select one or several PDFs (click, Ctrl/Shift-click) and apply move/tag/star/remove to all. Accept: Shift-select 3, move to a library, all 3 move | renderer/app.js (doc list, item actions), renderer/styles.css | — | M | 1 | merged on s7-integration |
+| T-027 section-numbering (feature) | Keep the document's heading structure and numbering (e.g. "12.1.12 Section A") in exports. Accept: a numbered-heading fixture exports with the same numbers and nesting | core/topics.js, core/export.js, test/ | — | M | 1 | merged on s7-integration |
+| T-028 loose-marks-as-clips (enhancement) | Highlights over images/scans with no text (today `result.loose`, page numbers only) become image clips in the extract and exports. Accept: a text-less highlight shows as a cropped image | core/extract.js, renderer/app.js (reader), renderer/images.js | — | M | 2 | merged on s7-integration |
 | T-025 markdown-notes (enhancement) | Own Markdown notes and section headings between extracts, kept in place and included in exports. Accept: add a note after extract 3, export → note sits after it | renderer/app.js (reader), core/export.js, core/order.js, core/library.js (`d.notes`) | — | L | 1 | planned · Sprint 8 |
 | T-029 shelves (feature) | Shelves (sub-libraries) inside a library; move PDFs between shelves; CLI/MCP aware. Accept: create shelf, move 2 PDFs, they show under it after restart | core/library.js, renderer/app.js (sidebar, doc list), cli/, mcp/server.js | T-021 | L | 2 | planned · Sprint 8 |
 | T-030 ocr (feature) | OCR for scanned pages and image crops so their text is extracted. Needs engine decision (offline). | core/extract.js, renderer/app.js (reader), package.json | T-028 | L | 1 | planned · Sprint 9 |
@@ -104,7 +104,7 @@ Polish (reported by user):
 | 10 | planned | T-032 svg-diagrams (+ T-033/T-034 if approved) | — |
 | 9 | planned | T-030 ocr, T-031 ai-merge | — |
 | 8 | planned | T-025 markdown-notes, T-029 shelves | — |
-| 7 | planned | T-021 multi-select, T-027 section-numbering, T-028 loose-marks-as-clips | — |
+| 7 | **merged on integration** 2026-10-21 (fa56121), gate 1 pending | T-016 mcp-server (L), T-021, T-027, T-004, T-028, T-037 (7 slots, user OK to go over 5) + exempt T-005, T-009, T-011, T-036, T-038 | 207/207 |
 | 6 | **closed** 2026-10-21 (tag `sprint-6-end`, main 9ff7a30) | T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read | 168/168 |
 | 5 | **closed** 2026-10-21 (tag `sprint-5-end`, main 20a8e58) | bugs: T-017, T-018, T-019, T-002, T-008 (all exempt) | 156/156 |
 | 4 | **closed** 2026-10-10 (tag `sprint-4-end`, main 43721ca) | T-014 onboarding-tour | 81/81 |
@@ -113,6 +113,27 @@ Polish (reported by user):
 | 1 | **closed** 2026-10-09 (tag `sprint-1-end`, c5c0dbe) | item-actions, add-by-identifier, test-harness | 23/23 |
 
 Newest first. "Between sprints" entries are small fixes merged outside a sprint.
+
+### Sprint 7 — merged on integration, awaiting gate 1 (2026-10-21)
+- Scope (7 slots, user approved): T-016 mcp-server (L, built earlier on its branch), T-021 multi-select, T-027 section-numbering, T-004 second-test-pdf, T-028 loose-marks-as-clips, T-037 cli-mcp-sprint6-fields; exempt: T-005, T-009, T-011, T-036, T-038. Release: v1.3.2 (user: stay on 1.3.x).
+- Backup: `backup/sprint-7-pre-20261021` · Tag: `sprint-7-start` (202abe5) · Baseline: 168/168
+- Merge flow: `feature/s7-integration` (worktree `../fl-s7`); agents in `../fl-T-021`, `../fl-T-027`, `../fl-T-028` (T-004 → T-028 in sequence), `../fl-T-037`; exempt fixes built directly in `../fl-polish`.
+- Merge log (into feature/s7-integration):
+  | order | id | merge sha | conflicts | tests after |
+  |---|---|---|---|---|
+  | 0 | T-016 mcp-server | e4a8f25 | docs only (kept main's; compass ids F-025/D-018/D-019 on the branch clash with Sprint 5 — renumber at close) | 183/183 |
+  | 1 | T-036 strip-tracking-params (exempt) | 522569d | none (T-017 long-link test now expects utm_source dropped) | 184/184 |
+  | 2 | T-005 view-label (exempt) | 51ea40f | none | 184/184 |
+  | 3 | T-038 tag-colour-swatches (exempt) | 19f06ca | openMenu doc comment (both kept) | 184/184 |
+  | 4 | T-009 isbn-edition-title (exempt) | 26e9e5e | none | 185/185 |
+  | 5 | T-037 cli-mcp-sprint6-fields | 7cc6433 | none | 188/188 (1 flaky failure on first run, 6 clean reruns) |
+  | 6 | T-021 multi-select | 7e7e071 | none | 195/195 |
+  | 7 | T-027 section-numbering | 27c4d2b | none (ANALYZER_VERSION 4 → 5) | 199/199 |
+  | 8 | T-011 fold-ckey-groups (exempt) | 6e8fefb | none (built after T-027: export.js groupsOf = Order.groupItems) | 199/199 |
+  | 9 | T-004 second-test-pdf | (merge) | none | 201/203 — marks.pdf expects unnumbered bookmark titles; fixed in 10 |
+  | 10 | T-028 loose-marks-as-clips | fa56121 | order.js comment, styles.css EOF (both kept); groupItems now takes flat export items too (T-011 × T-028); marks tests updated for T-027 numbering; ANALYZER_VERSION stays 5 | 207/207 |
+- Checked: integration app on a scratch profile with marks.pdf + sample.pdf → both v5, marks.pdf 3 clips, numbered topics on both.
+- Test rounds: 168 (baseline) → 183 → 184 → 184 → 184 → 185 → 188 → 195 → 199 → 199 → 201/203 → 207; new failures left: 0
 
 ### Sprint 6 — closed (2026-10-21)
 - Scope (5 slots): T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read (all enhancement · S).
@@ -250,11 +271,15 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 All open proposals are listed with todo ids under **To do** above: T-003 … T-006, T-009 … T-011. New proposals get the next free id.
 
 - [ ] **T-035** [enhancement · S] When an added paper comes with a better title from its source (e.g. the PMC bucket's "GenBank"), prefer it over the PDF's embedded title (CLI showed "OP-NARE120883 36..42"). Check title priority in cli/faelights.js and src/main.js. (from T-008)
-- [ ] **T-037** [enhancement · S] CLI/MCP support for the Sprint 6 fields: `read`/`unread`, `--unread` filter on `list`, `tag colour <tag> <#hex>`. (from T-024/T-026)
-- [ ] **T-038** [polish · XS · exempt] Show a colour swatch beside each name in the tag colour menu (needs an `openMenu` item swatch). (from T-024)
-- [ ] **T-036** [polish · XS · exempt] Strip `utm_*` and similar tracking parameters from doi.org links before resolving, so `10.1038/x?utm=…` doesn't fail. (from T-017)
+- [x] **T-037** [enhancement · S] (Sprint 7) CLI/MCP support for the Sprint 6 fields: `read`/`unread`, `--unread` filter on `list`, `tag colour <tag> <#hex>`. (from T-024/T-026)
+- [x] **T-038** [polish · XS · exempt] (Sprint 7) Show a colour swatch beside each name in the tag colour menu (needs an `openMenu` item swatch). (from T-024)
+- [x] **T-036** [polish · XS · exempt] (Sprint 7) Strip `utm_*` and similar tracking parameters from doi.org links before resolving, so `10.1038/x?utm=…` doesn't fail. (from T-017)
+
+- [ ] **T-039** [enhancement · S] MCP `unreadable_marks` should skip marks that are now clips (or add rect/topic); CLI help still says captured images aren't exported, mention clips. (from T-028)
+- [ ] **T-040** [polish · XS · exempt] Bulk "Export selected" and a "N PDFs" drag image for multi-select; a tag icon for Add tag. (from T-021)
 
 ## Decisions
+- 2026-10-21 — Sprint 7 takes T-016 (MCP server) so T-037 covers MCP too: 7 slots, over the 3–5 setting, by user choice. Version bump stays on 1.3.x → v1.3.2 (user).
 - 2026-10-21 — Sprint plan 5–10 from the Trello board: Sprint 5 = all bugs, sizable items in later sprints, 3–5 slots per sprint (user). Authors-on-separate-lines bug ignored (user). Accounts and sharing parked pending a backend decision.
 - 2026-10-09 — Item actions: themed in-app menu + ⋯ trigger (not hover bar / command palette).
 - 2026-10-09 — Network access allowed on explicit user request (add by DOI/link) and for metadata enrichment; supersedes the compass "no network calls" non-goal (log as new D-entry at close).

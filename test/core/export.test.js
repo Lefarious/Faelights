@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const { repoPath } = require("../helpers/pdf");
 const X = require("../../core/extract.js");
 const F = require("../../core/export.js");
+const { numberedPdf } = require("../helpers/headedpdf");
 
 let d;
 before(async () => {
@@ -97,4 +98,21 @@ test("loose marks are summarised at the end", () => {
 
 test("file extensions per format", () => {
   assert.deepEqual(F.FORMATS.map(([f]) => F.extOf(f)), [".md", ".md", ".html", ".txt"]);
+});
+
+test("numbered headings export with the document's numbers and nesting, parents without highlights included", async () => {
+  const result = await X.extractPdf(await numberedPdf("plain"));
+  const nd = { title: "Numbered", fileName: "n.pdf", pages: result.pages, count: result.count, tags: [], result };
+  const heads = [[1, "1 Introduction"], [2, "1.1 Scope"], [3, "1.1.2 Detail"], [1, "2 Methods"], [1, "3 Discussion"], [2, "3.1 Limits"],
+    [1, "12 Results"], [2, "12.1 Data"], [3, "12.1.12 Section A"]];
+  for (const fmt of ["md", "obsidian"]) {
+    const t = F.docText(nd, { fmt, mode: "only" });
+    assert.deepEqual(t.match(/^#{2,} .*$/gm), heads.map(([n, h]) => "#".repeat(n + 1) + " " + h), fmt);
+    assert.ok(t.includes("### 1.1 Scope\n\n- alpha cases (p. 1)\n\n#### 1.1.2 Detail\n\n- beta runs (p. 1)"), fmt);
+  }
+  const pl = F.docText(nd, { fmt: "plain", mode: "only" });
+  assert.deepEqual(pl.split("\n").filter(l => /^\d/.test(l)), heads.map(([, h]) => h.toUpperCase()));
+  assert.ok(pl.includes("12 RESULTS\n\n12.1 DATA\n\n12.1.12 SECTION A\n\n- delta values (p. 2)"));
+  const h = F.docHtml(nd, { mode: "only", date: "2026-10-20" });
+  assert.deepEqual(h.match(/<h[2-6]>[^<]*<\/h[2-6]>/g), heads.map(([n, t]) => `<h${n + 1}>${t}</h${n + 1}>`));
 });

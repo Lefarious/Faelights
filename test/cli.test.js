@@ -106,7 +106,7 @@ test("tags and stars, and filtering the list by them", () => {
   assert.match(lib("tag", "biolum", "#light", "essay", "light"), /#light #essay$/m);
   assert.match(lib("untag", "biolum", "essay"), /: #light$/m);
   lib("tag", "images", "light", "moths");
-  assert.deepEqual(JSON.parse(lib("tags", "--json")), [{ tag: "light", pdfs: 2 }, { tag: "moths", pdfs: 1 }]);
+  assert.deepEqual(JSON.parse(lib("tags", "--json")), [{ tag: "light", pdfs: 2, colour: null }, { tag: "moths", pdfs: 1, colour: null }]);
   lib("star", "images");
   assert.match(lib("star", "images"), /no change/);
   assert.deepEqual(JSON.parse(lib("list", "--starred", "--json")).map(r => r.title), ["images"]);
@@ -115,11 +115,49 @@ test("tags and stars, and filtering the list by them", () => {
   assert.equal(JSON.parse(lib("list", "--starred", "--json")).length, 0);
 });
 
+test("read / unread and filtering the list by read state", () => {
+  assert.deepEqual(JSON.parse(lib("list", "--unread", "--json")).map(r => [r.title, r.read, r.lastPage]), [["Notes on Bioluminescence", false, 0], ["images", false, 0]]);
+  assert.match(lib("read", "biolum"), /^Marked Notes on Bioluminescence as read$/m);
+  assert.match(lib("read", "biolum"), /\(no change\)/);
+  assert.deepEqual(JSON.parse(lib("list", "--unread", "--json")).map(r => r.title), ["images"]);
+  assert.deepEqual(JSON.parse(lib("list", "--read", "--json")).map(r => r.title), ["Notes on Bioluminescence"]);
+  assert.match(lib("list"), /Notes on Bioluminescence .*\(read\)/);
+  const both = JSON.parse(lib("read", "biolum", "images", "--json"));
+  assert.deepEqual(both.map(r => [r.title, r.read, r.changed]), [["Notes on Bioluminescence", true, false], ["images", true, true]]);
+  // an unknown doc aborts the whole command
+  assert.equal(run("--data-dir", dir, "unread", "images", "zzz").status, 1);
+  assert.equal(JSON.parse(lib("list", "--unread", "--json")).length, 0);
+  lib("unread", "biolum", "images");
+  assert.equal(JSON.parse(lib("list", "--read", "--json")).length, 0);
+  assert.equal(run("--data-dir", dir, "read").status, 2);
+});
+
+test("tag colour sets, shows and clears a tag's colour as the app's tag menu does", () => {
+  assert.equal(lib("tag", "colour", "light").trim(), "light has no colour");
+  assert.match(lib("tag", "colour", "#light", "#3a7"), /^light: #33aa77$/m);
+  assert.match(lib("tag", "color", "light", "33AA77"), /no change/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, "library", "faelights.json"), "utf8")).tagColours.light, "#33aa77");
+  assert.match(lib("tags"), /^light \(2 PDFs\)  #33aa77$/m);
+  assert.deepEqual(JSON.parse(lib("tags", "--json"))[0], { tag: "light", pdfs: 2, colour: "#33aa77" });
+  assert.deepEqual(JSON.parse(lib("tag", "colour", "light", "--json")), { tag: "light", colour: "#33aa77" });
+  const bad = run("--data-dir", dir, "tag", "colour", "light", "#12345");
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /isn't a colour/);
+  const unknown = run("--data-dir", dir, "tag", "colour", "nope", "#3a7");
+  assert.equal(unknown.status, 1);
+  assert.match(unknown.stderr, /No PDF has the tag "nope"\. Tags: light, moths\./);
+  assert.match(lib("tag", "colour", "light", "--clear"), /^light: no colour$/m);
+  lib("tag", "colour", "moths", "#d64550");
+  assert.match(lib("tag", "colour", "moths", "none"), /no colour/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, "library", "faelights.json"), "utf8")).tagColours, {});
+});
+
 test("info, text and rescan", () => {
   const info = JSON.parse(lib("info", "biolum", "--json"));
   assert.equal(info.title, "Notes on Bioluminescence");
   assert.equal(info.highlights, 8);
   assert.deepEqual(info.tags, ["light"]);
+  assert.deepEqual([info.read, info.lastPage], [false, 0]);
   assert.match(lib("info", "biolum"), /^Title +Notes on Bioluminescence$/m);
   const text = JSON.parse(lib("text", "biolum", "--pages", "2", "-f", "json"));
   assert.deepEqual(text.pages.map(p => p.page), [2]);
