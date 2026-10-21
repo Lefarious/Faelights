@@ -240,7 +240,7 @@ function tint(node, tag) {
 // at / opts: see openMenu()
 async function tagMenu(tag, at, opts) {
   const cur = Library.tagColour(S.db, tag);
-  const items = [{ type: "heading", label: "Colour" }, ...TAG_COLOURS.map(([n, c]) => ({ id: c, label: n, checked: cur === c })),
+  const items = [{ type: "heading", label: "Colour" }, ...TAG_COLOURS.map(([n, c]) => ({ id: c, label: n, checked: cur === c, swatch: c })),
     { type: "separator" }, { id: "none", label: "No colour", checked: !cur }];
   const r = await openMenu(at || document.activeElement, items, { label: "Tag " + tag, ...opts });
   if (!r) return;
@@ -249,7 +249,7 @@ async function tagMenu(tag, at, opts) {
 
 /* ---------------- action menu ---------------- */
 // Themed in-app popover menu (the native fl.popup is no longer used). Items:
-//   { id, label, icon, hint, danger, disabled, checked, submenu: [items] } | { type: "separator" } | { type: "heading", label }
+//   { id, label, icon, hint, danger, disabled, checked, swatch: css colour, submenu: [items] } | { type: "separator" } | { type: "heading", label }
 // at: an element (menu opens below it) or { x, y } (opens at the pointer).
 // opts: { trigger: element focus returns to, keyboard: focus the first item, label: aria-label }.
 // Resolves with the chosen item's id, or null when dismissed.
@@ -342,6 +342,7 @@ function openMenu(at, items, opts = {}) {
         if ("checked" in it) r.setAttribute("aria-checked", !!it.checked);
         if (it.disabled) r.setAttribute("aria-disabled", "true");
         if (lead) { const ic = el("span", "ai-ico"); if (it.checked) ic.append(svg(ICON.check)); else if (it.icon && !("checked" in it)) ic.append(svg(ICON[it.icon])); r.append(ic); }
+        if (it.swatch) { const sw = el("span", "ai-sw"); sw.style.background = it.swatch; r.append(sw); }
         r.append(el("span", "ai-label", it.label));
         if (it.hint) r.append(el("span", "ai-hint", it.hint));
         if (it.submenu) { r.setAttribute("aria-haspopup", "menu"); r.setAttribute("aria-expanded", "false"); const c = svg(ICON.chevron); c.classList.add("ai-sub"); r.append(c); }
