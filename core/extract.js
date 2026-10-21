@@ -15,7 +15,7 @@ const Extract = (() => {
   // words that start sentences but rarely follow an initial; a space must follow, so the initial in "J. A. Smith" isn't one
   const OPENER = /^(?:The|This|These|That|Those|There|Then|Thus|It|Its|In|On|At|As|An?|We|Our|They|Their|He|She|His|Her|However|Here|Hence|Therefore|Moreover|Furthermore|Also|But|And|For|From|When|While|Since|After|Before|If|With|By|Such|Each|All|Both|Some|Most|Many|No|Not|One|What|Which|Why|How|Although|Because|Finally|First|Overall|Similarly|Instead|Indeed|Yet|So)(?=[\s,])/;
   // Bump when the shape or quality of results changes so saved docs get rescanned.
-  const ANALYZER_VERSION = 4;
+  const ANALYZER_VERSION = 5;
 
   function normQuads(a) {
     const q = a.quadPoints, out = [];
