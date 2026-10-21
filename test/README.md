@@ -51,4 +51,6 @@ It is built with pdf-lib by `test/fixtures/make-images-pdf.js` (the layout is de
 node test/fixtures/make-images-pdf.js
 ```
 
+`test/fixtures/marks.pdf` (built by `make-marks-pdf.js`, regenerated the same way) is a 3-page document with Underline, StrikeOut and Squiggly marks, a nested bookmark tree over numbered body-size headings ("2.1 Sampling"), and highlights with no text under them: over drawn figures, on a page with no text layer, and one with no usable position. `test/core/marks.test.js` checks mark types, topics from the bookmarks and (with the outline stripped in memory) from the headings' wording, and the loose marks.
+
 The output is byte-stable (fixed dates), so an unchanged script gives an unchanged PDF. Fixture scripts must not end in `.test.js`, or `npm test` would run them.
