@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-21 · **Sprint 5 closed** (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; push awaits user gate 2) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
+_Last updated: 2026-10-21 · **Sprint 5 closed** (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
@@ -125,7 +125,7 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 - T-002 started after T-017 and T-008 merged (worktree `../fl-T-002`, harness worktree isolation failed on a path-case check), so it may also edit core/fetch.js.
 - T-002: new reason `unreachable` ("Couldn't find that site…", Open in browser). `fetchFailureReason(err, url)`: no-connection codes → offline; DNS/refused → offline for the app's own service hosts (doi.org, crossref, arxiv, ncbi, PMC bucket, europepmc, openlibrary, archive.org, adsabs), else unreachable; no url → offline (old behaviour). DOI path now also tries CrossRef links when the publisher host is unreachable. Wi-Fi-without-internet limit fixed on user request (1ee74af): before reporting `unreachable`, `resolvePdf` checks that doi.org answers; if it is offline too → `offline`. Costs one extra request only on that failure.
 - 2026-10-21: all 5 merged on feature/s5-integration @ dafb4c9, 156/156 green. Gate-1 launch blocked by the installed app holding the single-instance lock; user reviewed the report, asked for the two leftovers to be fixed (follow-ups 6, 7), then said merge.
-- 2026-10-21: user OK → merged into local main 20a8e58; 156/156; tag `sprint-5-end`. Atlas synced (fbf5430), compass F-025, D-018, D-019. Push awaits gate 2.
+- 2026-10-21: user OK → merged into local main 20a8e58; 156/156; tag `sprint-5-end`. Atlas synced (fbf5430), compass F-025, D-018, D-019. User gate 2 OK → pushed 7ead2d6..3cbd93e; CI run 39585050117 green (tests + all three builds). No version tag.
 - Test rounds: 142 (baseline) → 142 → 145 → 147 → 152 → 156 → 156 → 156 (integration) → 156 (main 20a8e58); new failures introduced: 0
 - Cause of T-002 found while reading: `ERR_NAME_NOT_RESOLVED` / `ENOTFOUND` are in `OFFLINE_CODES`, so a mistyped domain reads as "offline".
 - Merge log (into feature/s5-integration):
