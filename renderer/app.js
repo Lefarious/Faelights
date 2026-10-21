@@ -124,8 +124,7 @@ async function lookUp(d, quiet) {
   if (!doc(d.id)) return;                                     // removed meanwhile
   if (r.ok) {
     d.lookup = { source: r.source, id: r.id, at: Date.now(), meta: r.meta };
-    // a title from the record beats a file name, but never one the user typed
-    if (!d.titleEdited && !cleanTitle(d.meta && d.meta.title) && cleanTitle(r.meta.title)) d.title = cleanTitle(r.meta.title);
+    d.title = Meta.docTitle(d);                               // the record's title beats a file name, nothing else (T-035)
     save(); renderAll();
     if (!quiet) toast("Details updated from " + LOOKUP_SOURCE[r.source]);
     return;
@@ -141,14 +140,17 @@ const summary = Order.summary;
 
 // Analyse a PDF already copied into the library (fl.importPdf / fl.fetchPdf) and add it as a doc.
 // opts.origin: where a downloaded paper came from ({kind, value, url}); such docs have no original on disk.
-// opts.title: the landing page's title, used when the PDF has none of its own.
+// opts.title: the source's title (the resolver's), kept as d.sourceTitle; it beats the PDF's own (Meta.pickTitle, T-035).
 async function addImported(info, target, opts = {}) {
   const d = { id: info.id, libraryId: target, title: "", fileName: info.fileName, sourcePath: opts.sample ? null : info.sourcePath,
     storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [], starred: false, read: false, lastPage: 0, shelfId: null, notes: [], scannedMtime: info.mtime };
   if (opts.origin) d.origin = opts.origin;
+  const source = Meta.pickTitle({ source: opts.title });
+  if (source) d.sourceTitle = source;
   const { bytes } = await fl.readPdf({ ...d, sourcePath: null });
-  const { title, meta, result } = await analyzeBytes(bytes, (pg, n) => { if (S.busy) { S.busy.page = `page ${pg} of ${n}`; renderProgress(); } });
-  Object.assign(d, { title: title || opts.title || info.fileName.replace(/\.pdf$/i, ""), meta, result, pages: result.pages, scannedAt: Date.now(), ...summary(result) });
+  const { meta, result } = await analyzeBytes(bytes, (pg, n) => { if (S.busy) { S.busy.page = `page ${pg} of ${n}`; renderProgress(); } });
+  Object.assign(d, { meta, result, pages: result.pages, scannedAt: Date.now(), ...summary(result) });
+  d.title = Meta.docTitle(d);
   S.db.docs.push(d);
   if (opts.origin) lookUp(d, true);                           // added by DOI / arXiv link: fill in details in the background
   return d;
@@ -182,6 +184,7 @@ async function rescan(d, quiet) {
     const { bytes, mtime } = await fl.readPdf(d);
     const { meta, result } = await analyzeBytes(bytes);
     Object.assign(d, { meta, result, pages: result.pages, scannedAt: Date.now(), scannedMtime: mtime, stale: false, ...summary(result) });
+    d.title = Meta.docTitle(d);                               // same rule as adding: a source or typed title survives
     Images.forget(d.id);
     save();
     if (!quiet) toast("Highlights refreshed from the PDF");
