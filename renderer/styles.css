@@ -436,3 +436,10 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 
 /* continue reading (T-020) */
 .r-actions .btn.continue { font-variant-numeric: tabular-nums; }
+
+/* tag colours (T-024) */
+.tagdot.tc { background: var(--tc); }
+.tags-inline span.tc { color: var(--ink); padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--tc) 18%, transparent); }
+.tags-inline span.tc::before { color: var(--tc); opacity: 1; font-weight: 600; }
+.tagedit .tg.tc { background: color-mix(in srgb, var(--tc) 20%, var(--sel)); }
+.tagedit .tg.tc::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--tc); flex: none; }
