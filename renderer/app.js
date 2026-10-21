@@ -1212,8 +1212,10 @@ const ADD_FAIL = {
   "not-found": "Nothing was found for that. Check it for typos.",
   "no-free-copy": "No free PDF was found for this. Open it in your browser, or add a PDF you already have.",
   network: "Couldn't reach the server, or it took too long. Try again in a moment.",
-  "too-large": "That PDF is over 150 MB, so it wasn't downloaded."
+  "too-large": "That PDF is over 150 MB, so it wasn't downloaded.",
+  "too-many": "That's too much to add at once. Paste up to 200 items at a time."
 };
+const ADD_MAX = 200, ADD_MAX_CHARS = 100000;   // what id:parseMany and parseIdentifiers handle in one go
 const ADD_OPEN = ["paywalled", "not-pdf", "no-free-copy"];   // failures where the landing page is worth opening
 let addDlg = null;  // {back, box, input, hint, off, msg, list, ok, cancel, items, ids, busy, batch, stop, cur, seq, opener}
 function addIdBtn(compact) {
@@ -1275,9 +1277,14 @@ function closeAddId() {
 function addIdCancelLabel(t) { const D = addDlg; if (D && D.cancel.lastChild) D.cancel.lastChild.textContent = t; }
 async function addIdHint() {
   const D = addDlg; if (!D) return;
-  const v = D.input.value, s = ++D.seq;
-  const items = v.trim() ? await fl.parseIds(v) : [];
+  const v = D.input.value, s = ++D.seq, huge = v.length > ADD_MAX_CHARS;
+  const items = v.trim() && !huge ? await fl.parseIds(v) : [];
   if (addDlg !== D || s !== D.seq) return;
+  // refuse rather than quietly add only the first part of an oversized paste
+  if (huge || items.length > ADD_MAX) {
+    Object.assign(D, { items: [], ids: 0 }); D.hint.textContent = "Too many to add at once"; D.hint.classList.add("bad");
+    D.ok.disabled = true; addIdFail("too-many"); return;
+  }
   const ids = items.filter(x => x.id).length, bad = items.length - ids;
   Object.assign(D, { items, ids }); D.msg.hidden = true;
   D.hint.textContent = !items.length ? "" : items.length === 1 ? (ids ? items[0].id.label : "Not recognised") : `${ids} recognised${bad ? ` · ${bad} not recognised` : ""}`;
