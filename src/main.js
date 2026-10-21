@@ -208,7 +208,7 @@ function fetchUrl(url, accept, maxBytes, opts = {}) {
       if (++hops > 10 || !/^https?:\/\//i.test(next)) return done(new FetchFail(hops > 10 ? "network" : "not-pdf"));
       finalUrl = next; req.followRedirect();
     });
-    req.on("error", e => done(new FetchFail(fetchFailureReason(e))));
+    req.on("error", e => done(new FetchFail(fetchFailureReason(e, finalUrl))));
     req.on("response", res => {
       const status = res.statusCode, type = header(res, "content-type").toLowerCase(), len = +header(res, "content-length") || 0;
       const html = /html|xml/.test(type), cap = html ? MAX_HTML : maxBytes;
@@ -224,7 +224,7 @@ function fetchUrl(url, accept, maxBytes, opts = {}) {
         if (!html && !opts.quiet && got > 65536) sendProgress({ stage: "download", got, total: len });
       });
       res.on("end", () => done(null, { url: finalUrl, type, html, buf: Buffer.concat(chunks) }));
-      res.on("error", e => done(new FetchFail(fetchFailureReason(e))));
+      res.on("error", e => done(new FetchFail(fetchFailureReason(e, finalUrl))));
     });
     req.end();
   });
