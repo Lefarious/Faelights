@@ -14,8 +14,10 @@ const Extract = (() => {
   const ABBR_END = /\b(?:et al|etc)\.$/i, ABBR_NUM = /\bNo\.$/i;
   // words that start sentences but rarely follow an initial; a space must follow, so the initial in "J. A. Smith" isn't one
   const OPENER = /^(?:The|This|These|That|Those|There|Then|Thus|It|Its|In|On|At|As|An?|We|Our|They|Their|He|She|His|Her|However|Here|Hence|Therefore|Moreover|Furthermore|Also|But|And|For|From|When|While|Since|After|Before|If|With|By|Such|Each|All|Both|Some|Most|Many|No|Not|One|What|Which|Why|How|Although|Because|Finally|First|Overall|Similarly|Instead|Indeed|Yet|So)(?=[\s,])/;
+  // label words whose following capital is a name, not an initial ("Group A.", "vitamin C.")
+  const LABEL = /\b(?:vitamin|table|figure|diagram|chart|graph|appendix|section|part|chapter|group|type|class|grade|stage|phase|plan|option|model|panel|category|level|step|item|case|condition|hepatitis|exhibit|annex|schedule|form|zone|block|wing|ward|room|unit)\s+$/i;
   // Bump when the shape or quality of results changes so saved docs get rescanned.
-  const ANALYZER_VERSION = 4;
+  const ANALYZER_VERSION = 5;
 
   function normQuads(a) {
     const q = a.quadPoints, out = [];
@@ -154,8 +156,11 @@ const Extract = (() => {
       if (ABBR_NUM.test(before)) return !next || !/\d/.test(next[0]);
       if (ABBR_END.test(before)) return !next || /\p{Lu}/u.test(next[0]);
       if (ABBR.test(before)) return false;
-      // "J. Smith" is an initial, but a lone capital before a common sentence opener ends one ("vitamin C. The dog")
-      return !/\b[A-Z]\.$/.test(before) || OPENER.test(text.slice(k + 1, k + 40).trimStart());
+      // "J. Smith" is an initial, but a lone capital before a common sentence opener ends one ("vitamin C. The dog"),
+      // as does one after a label word when a capital follows ("Group A. Patients")
+      if (!/\b[A-Z]\.$/.test(before)) return true;
+      if (LABEL.test(text.slice(Math.max(0, i - 24), i - 1)) && next && /\p{Lu}/u.test(next[0])) return true;
+      return OPENER.test(text.slice(k + 1, k + 40).trimStart());
     }
     function sentenceBounds(a, b) {
       let s = a;

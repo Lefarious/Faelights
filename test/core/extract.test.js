@@ -110,6 +110,15 @@ test("a full stop then a space splits extracts, even after quotes, brackets, 'no
     assert.deepEqual(await sentencesOf([first + " " + DOG], [find, "dog ran"]), [first, DOG], first);
 });
 
+test("a lone capital after a label word (Group A., Table B.) ends a sentence when a capital follows", async () => {
+  const NEXT = "Patients ran in the park.";
+  for (const [first, find] of [["They were in Group A.", "They were"], ["See Table B.", "See Table"],
+    ["Results are in Appendix C.", "Results"], ["We took vitamin C.", "We took"]])
+    assert.deepEqual(await sentencesOf([first + " " + NEXT], [find, "ran in"]), [first, NEXT], first);
+  const s = "They were in Group A. members of the park.";
+  assert.deepEqual(await sentencesOf([s], ["They were", "the park"]), [s], s);
+});
+
 test("a highlight starting on the previous sentence's full stop belongs to its own sentence", async () => {
   assert.deepEqual(await sentencesOf(["The cat sat on the mat. " + DOG], ["cat sat", ". The dog"]), ["The cat sat on the mat.", DOG]);
 });
