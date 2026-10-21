@@ -360,18 +360,6 @@ ipcMain.handle("clip:image", (_e, bytes) => {
   clipboard.writeImage(img); return true;
 });
 
-// Native context menu: renderer sends items, gets back the chosen id
-ipcMain.handle("menu:popup", (_e, items) => new Promise(resolve => {
-  let chosen = null;
-  const build = list => list.map(it => it.type === "separator" ? { type: "separator" } : ({
-    label: it.label, enabled: it.enabled !== false, type: it.checked !== undefined ? "checkbox" : "normal", checked: !!it.checked,
-    submenu: it.submenu ? build(it.submenu) : undefined,
-    click: it.submenu ? undefined : () => { chosen = it.id; }
-  }));
-  const menu = Menu.buildFromTemplate(build(items));
-  menu.popup({ window: win, callback: () => setTimeout(() => resolve(chosen), 0) });
-}));
-
 ipcMain.handle("ask:confirm", async (_e, { message, detail, ok }) => {
   const r = await dialog.showMessageBox(win, { type: "question", buttons: [ok || "OK", "Cancel"], defaultId: 0, cancelId: 1, message, detail });
   return r.response === 0;
