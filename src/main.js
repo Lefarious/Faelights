@@ -250,7 +250,7 @@ ipcMain.handle("pdf:fetch", async (_e, text) => {
     const info = await store().importPdf(tmp);
     // no original on disk to track, like the sample PDF
     Object.assign(info, { sourcePath: null, fileName: fileNameFor(id, r.url) });
-    return { ok: true, info, origin: { kind: id.kind, value: id.value, url: r.url }, title: r.title || null };
+    return { ok: true, info, origin: { kind: id.kind, value: id.value, url: r.url }, title: r.title || null, edition: r.edition || null };
   } catch (err) {
     if (!(err instanceof FetchFail)) console.error("fetch failed", err);
     return { ok: false, reason: err instanceof FetchFail ? err.reason : "network", landingUrl: id.url };
