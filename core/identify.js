@@ -33,7 +33,16 @@ function tidy(text) {
 }
 
 const arxiv = id => ({ kind: "arxiv", value: id, url: "https://arxiv.org/abs/" + id });
-const doi = d => { d = d.trim(); return DOI.test(d) ? { kind: "doi", value: d, url: "https://doi.org/" + d } : null; };
+// Tracking parameters that share links pick up (utm_source=…, fbclid=…); a DOI never ends in one of these
+const TRACKING = /^(?:utm_\w+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|_hsenc|_hsmi|_ga|_gl|igshid)$/i;
+// "…?utm_source=x&id=2" → "…?id=2"; "…?utm_source=x" → "…"
+function stripTracking(s) {
+  const q = s.indexOf("?");
+  if (q < 0) return s;
+  const keep = s.slice(q + 1).split("&").filter(p => p && !TRACKING.test(p.split("=")[0]));
+  return s.slice(0, q) + (keep.length ? "?" + keep.join("&") : "");
+}
+const doi = d => { d = stripTracking(d.trim()); return DOI.test(d) ? { kind: "doi", value: d, url: "https://doi.org/" + d } : null; };
 const dec = s => { try { return decodeURIComponent(s); } catch (_) { return s; } };
 const pmid = v => ({ kind: "pmid", value: String(+v), url: `https://pubmed.ncbi.nlm.nih.gov/${+v}/` });
 const ads = v => ({ kind: "ads", value: v, url: `https://ui.adsabs.harvard.edu/abs/${encodeURIComponent(v)}/abstract` });
@@ -100,6 +109,7 @@ function parseIdentifier(text) {
     if (BIBCODE.test(b)) return ads(b);
     if (BIBCODE.test(b + ".") && raw.includes(m[1] + ".")) return ads(b + ".");   // padding dot eaten by tidy()
   }
+  for (const k of [...u.searchParams.keys()]) if (TRACKING.test(k)) u.searchParams.delete(k);
   return { kind: "url", value: u.href, url: u.href };
 }
 
