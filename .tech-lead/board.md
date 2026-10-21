@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-21 · **Sprint 5 open** (all 5 bugs + 2 follow-ups on `feature/s5-integration` c0cc984, 156/156; awaiting user gate 1) · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
+_Last updated: 2026-10-21 · **Sprint 5 closed** (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; push awaits user gate 2) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
@@ -76,11 +76,11 @@ Polish (reported by user):
 | image-view | "With images" reader toggle, centred crops interleaved by `at`; images in colour filter | renderer/app.js (reader), styles.css (reader block) | image-extract, images.js scaffold | M | 1 | merged 40bb2c7 |
 | T-014 onboarding-tour | First-run guided tour, 3 chapters (app/reader/viewer), seen flags in settings.tour, Help › Show Tour | new renderer/tour.js, renderer/app.js (data-tour hooks, maybeTour/startTour, menu `tour`), renderer/annotator.js (2 hooks), renderer/index.html, renderer/styles.css (own block), src/main.js (Help menu), test/tour.test.js | — | M | 1 | merged 43721ca (F-022) |
 | image-export | Export formats: Markdown+images folder, Obsidian, HTML (self-contained), plain; doc + library | renderer/app.js (export), src/main.js (export:bundle), src/preload.js | image-extract, images.js scaffold | M | 1 | merged 40bb2c7 |
-| T-017 long-paste-add-link (bug · exempt) | Pasting a long clipboard item into "Add by link" fails. Reproduce, find the length/format that breaks it, fix. Accept: a long paste (multi-line, several ids, very long URL) is parsed or rejected with a clear message, never errors; test in identify.test.js | renderer/app.js (add dialog), core/identify.js, test/identify.test.js | — | S | 1 | merged to s5-integration 8a3f3a1 |
-| T-018 colour-filter-without-images (bug · exempt) | Colour filter is hidden unless "With images" is on (it shows only when >1 colour, and images add colours). Accept: the filter shows whenever the extract has highlights, images on or off | renderer/app.js (renderReader colour block) | — | XS | 1 | merged to s5-integration 627e376 |
-| T-019 extract-sentence-split (bug · exempt) | Extracts sometimes don't separate, even across " . ". Accept: a fixture with the failing case splits into separate extracts; existing snapshots unchanged or updated knowingly (ANALYZER_VERSION bump if results change) | core/extract.js, test/core/ | — | S | 1 | merged to s5-integration c3bbab0 |
-| T-002 offline-vs-unreachable (bug · exempt) | (proposal, pulled into Sprint 5) Tell "no connection" apart from "couldn't reach that site" | core/fetch.js, renderer/app.js (add dialog messages) | — | S | 1 | merged to s5-integration dafb4c9 |
-| T-008 pmc-fallback (bug · exempt) | (proposal, pulled into Sprint 5) PMC bot-check page: fall back to Europe PMC / Unpaywall for PMCID/PMID | core/fetch.js, test/ | — | S | 2 | merged to s5-integration b53a36f |
+| T-017 long-paste-add-link (bug · exempt) | Pasting a long clipboard item into "Add by link" fails. Reproduce, find the length/format that breaks it, fix. Accept: a long paste (multi-line, several ids, very long URL) is parsed or rejected with a clear message, never errors; test in identify.test.js | renderer/app.js (add dialog), core/identify.js, test/identify.test.js | — | S | 1 | merged 20a8e58 (Sprint 5, F-025) |
+| T-018 colour-filter-without-images (bug · exempt) | Colour filter is hidden unless "With images" is on (it shows only when >1 colour, and images add colours). Accept: the filter shows whenever the extract has highlights, images on or off | renderer/app.js (renderReader colour block) | — | XS | 1 | merged 20a8e58 (Sprint 5, F-025) |
+| T-019 extract-sentence-split (bug · exempt) | Extracts sometimes don't separate, even across " . ". Accept: a fixture with the failing case splits into separate extracts; existing snapshots unchanged or updated knowingly (ANALYZER_VERSION bump if results change) | core/extract.js, test/core/ | — | S | 1 | merged 20a8e58 (Sprint 5, F-025) |
+| T-002 offline-vs-unreachable (bug · exempt) | (proposal, pulled into Sprint 5) Tell "no connection" apart from "couldn't reach that site" | core/fetch.js, renderer/app.js (add dialog messages) | — | S | 1 | merged 20a8e58 (Sprint 5, F-025) |
+| T-008 pmc-fallback (bug · exempt) | (proposal, pulled into Sprint 5) PMC bot-check page: fall back to Europe PMC / Unpaywall for PMCID/PMID | core/fetch.js, test/ | — | S | 2 | merged 20a8e58 (Sprint 5, F-025) |
 | T-020 continue-reading (enhancement) | Viewer remembers the last page per PDF; "Continue reading" opens it there. Accept: close at p. 12, reopen → p. 12; new PDFs open at p. 1 | renderer/annotator.js, renderer/app.js (viewer open), core/library.js (`d.lastPage`) | library-doc-fields scaffold | S | 1 | planned · Sprint 6 |
 | T-022 search-current-pdf (enhancement) | Search scoped to the open PDF's extracts (sentence/highlight/note). Accept: a word in two PDFs matches only the open one | renderer/app.js (search panel) | — | S | 1 | planned · Sprint 6 |
 | T-023 search-current-library (enhancement) | Search scoped to the selected library. Accept: matches limited to that library's PDFs | renderer/app.js (search panel), core/library.js | T-022 (same panel) | S | 1 | planned · Sprint 6 |
@@ -106,7 +106,7 @@ Polish (reported by user):
 | 8 | planned | T-025 markdown-notes, T-029 shelves | — |
 | 7 | planned | T-021 multi-select, T-027 section-numbering, T-028 loose-marks-as-clips | — |
 | 6 | planned | T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read | — |
-| 5 | **open** 2026-10-21 (tag `sprint-5-start`, 7ead2d6) | bugs: T-017, T-018, T-019, T-002, T-008 | — |
+| 5 | **closed** 2026-10-21 (tag `sprint-5-end`, main 20a8e58) | bugs: T-017, T-018, T-019, T-002, T-008 (all exempt) | 156/156 |
 | 4 | **closed** 2026-10-10 (tag `sprint-4-end`, main 43721ca) | T-014 onboarding-tour | 81/81 |
 | 3 | **closed** 2026-10-09 (tag `sprint-3-end`, main 736ffd2) | T-012 copy-image, T-001 meta-enrich (+ T-013 exempt, just before) | 69/69 |
 | 2 | **closed** 2026-10-09 (tag `sprint-2-end`, main 40bb2c7) | add-ids, image-box, image-extract, image-view, image-export | 63/63 |
@@ -114,7 +114,7 @@ Polish (reported by user):
 
 Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 
-### Sprint 5 — open (2026-10-21)
+### Sprint 5 — closed (2026-10-21)
 - Scope: all bugs (each exempt, 0 slots): T-018, T-019, T-017, T-008, T-002.
 - Backup: `backup/sprint-5-pre-20261021` · Tag: `sprint-5-start` (7ead2d6) · Baseline: `npm test` 142/142 green
 - Merge flow: branches merge into `feature/s5-integration` (worktree `../fl-s5`); user tries the build (gate 1) → main; push = gate 2
@@ -124,7 +124,9 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 - T-008: Europe PMC is Cloudflare-walled too, so the fix fetches from NCBI's PMC Open Access bucket (`pmc-oa-opendata.s3.amazonaws.com`) first, then Europe PMC, then PMC. All failing → `no-free-copy` (was `paywalled`). Unpaywall skipped (no API contact email in the repo). Only open-access PMC papers are fully fixed. Live: CLI `add PMC3531190` OK, its PMID → same file. New host to note in atlas/compass.
 - T-002 started after T-017 and T-008 merged (worktree `../fl-T-002`, harness worktree isolation failed on a path-case check), so it may also edit core/fetch.js.
 - T-002: new reason `unreachable` ("Couldn't find that site…", Open in browser). `fetchFailureReason(err, url)`: no-connection codes → offline; DNS/refused → offline for the app's own service hosts (doi.org, crossref, arxiv, ncbi, PMC bucket, europepmc, openlibrary, archive.org, adsabs), else unreachable; no url → offline (old behaviour). DOI path now also tries CrossRef links when the publisher host is unreachable. Wi-Fi-without-internet limit fixed on user request (1ee74af): before reporting `unreachable`, `resolvePdf` checks that doi.org answers; if it is offline too → `offline`. Costs one extra request only on that failure.
-- 2026-10-21: all 5 merged on feature/s5-integration @ dafb4c9, 156/156 green; app launched from integration for user gate 1.
+- 2026-10-21: all 5 merged on feature/s5-integration @ dafb4c9, 156/156 green. Gate-1 launch blocked by the installed app holding the single-instance lock; user reviewed the report, asked for the two leftovers to be fixed (follow-ups 6, 7), then said merge.
+- 2026-10-21: user OK → merged into local main 20a8e58; 156/156; tag `sprint-5-end`. Atlas synced (fbf5430), compass F-025, D-018, D-019. Push awaits gate 2.
+- Test rounds: 142 (baseline) → 142 → 145 → 147 → 152 → 156 → 156 → 156 (integration) → 156 (main 20a8e58); new failures introduced: 0
 - Cause of T-002 found while reading: `ERR_NAME_NOT_RESOLVED` / `ENOTFOUND` are in `OFFLINE_CODES`, so a mistyped domain reads as "offline".
 - Merge log (into feature/s5-integration):
   | order | id | merge sha | conflicts | tests after |
