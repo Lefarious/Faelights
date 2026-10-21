@@ -1,10 +1,10 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-21 · **Sprint 7 closed** (merged to local main c9791cc, 207/207, tag `sprint-7-end`; release v1.3.2; user OK to merge + push + publish) · next: Sprint 8 (T-025, T-029, T-035 — 5/5 slots) · Sprint 6 closed (merged to local main 9ff7a30, 168/168, tag `sprint-6-end`; release v1.3.1; v1.3.0 draft published) · next: Sprint 7 · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
+_Last updated: 2026-10-21 · **Sprint 8 built** (T-025, T-029, T-035 + exempt T-019 merged into `feature/s8-integration` 4d274b8, 235/235, PRs #2–#6; waiting for gate 1, then one PR into main) · **Sprint 7 closed** (merged to local main c9791cc, 207/207, tag `sprint-7-end`; release v1.3.2; user OK to merge + push + publish) · next: Sprint 8 (T-025, T-029, T-035 — 5/5 slots) · Sprint 6 closed (merged to local main 9ff7a30, 168/168, tag `sprint-6-end`; release v1.3.1; v1.3.0 draft published) · next: Sprint 7 · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
-- Todo ids: `T-NNN`, next free: T-042 (T-016, the MCP server, merged in Sprint 7) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Todo ids: `T-NNN`, next free: T-045 (T-042…T-044 are Sprint 8 follow-ups) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
@@ -90,9 +90,9 @@ Polish (reported by user):
 | T-021 multi-select (enhancement) | Select one or several PDFs (click, Ctrl/Shift-click) and apply move/tag/star/remove to all. Accept: Shift-select 3, move to a library, all 3 move | renderer/app.js (doc list, item actions), renderer/styles.css | — | M | 1 | merged c9791cc (Sprint 7, F-028) |
 | T-027 section-numbering (feature) | Keep the document's heading structure and numbering (e.g. "12.1.12 Section A") in exports. Accept: a numbered-heading fixture exports with the same numbers and nesting | core/topics.js, core/export.js, test/ | — | M | 1 | merged c9791cc (Sprint 7, F-028) |
 | T-028 loose-marks-as-clips (enhancement) | Highlights over images/scans with no text (today `result.loose`, page numbers only) become image clips in the extract and exports. Accept: a text-less highlight shows as a cropped image | core/extract.js, renderer/app.js (reader), renderer/images.js | — | M | 2 | merged c9791cc (Sprint 7, F-028) |
-| T-025 markdown-notes (enhancement) | Own Markdown notes and section headings between extracts, kept in place and included in exports. Accept: add a note after extract 3, export → note sits after it | renderer/app.js (reader), core/export.js, core/order.js, core/library.js (`d.notes`) | — | L | 1 | planned · Sprint 8 |
-| T-029 shelves (feature) | Shelves (sub-libraries) inside a library; move PDFs between shelves; CLI/MCP aware. Accept: create shelf, move 2 PDFs, they show under it after restart | core/library.js, renderer/app.js (sidebar, doc list), cli/, mcp/server.js | T-021 | L | 2 | planned · Sprint 8 |
-| T-035 source-title (enhancement) | When the source gives a better title (e.g. the PMC bucket's "GenBank"), prefer it over the PDF's embedded title. Accept: add that PMC paper → title "GenBank", not "OP-NARE120883 36..42" | cli/faelights.js, src/main.js (title priority), core/meta.js | — | S | 2 | planned · Sprint 8 |
+| T-025 markdown-notes (enhancement) | Own Markdown notes and section headings between extracts, kept in place and included in exports. Accept: add a note after extract 3, export → note sits after it | core/order.js, core/export.js, new core/markdown.js, renderer/app.js (reader), renderer/index.html, styles.css (`d.notes` from the scaffold) | — | L | 1 | merged 4d274b8 into s8-integration (PR #6) |
+| T-029 shelves (feature) | Shelves (sub-libraries) inside a library; move PDFs between shelves; CLI/MCP aware. Accept: create shelf, move 2 PDFs, they show under it after restart | renderer/app.js (sidebar, doc list, menus, move), styles.css, cli/faelights.js, mcp/server.js, mcp/tools.js (`db.shelves`/`d.shelfId` from the scaffold) | T-021 | L | 2 | merged 53d1c4e into s8-integration (PR #5) |
+| T-035 source-title (enhancement) | When the source gives a better title (e.g. the PMC bucket's "GenBank"), prefer it over the PDF's embedded title. Accept: add that PMC paper → title "GenBank", not "OP-NARE120883 36..42" | core/meta.js (`pickTitle`, `docTitle`), renderer/app.js (add/rescan/lookUp), cli/faelights.js, mcp/tools.js | — | S | 2 | merged 40eb5e1 into s8-integration (PR #4) |
 | T-030 ocr (feature) | OCR for scanned pages and image crops so their text is extracted. Needs engine decision (offline). | core/extract.js, renderer/app.js (reader), package.json | T-028 | L | 1 | planned · Sprint 9 |
 | T-031 ai-merge (feature) | AI merge/polish of fragmented highlights into cleaner notes, from highlighted text only. Needs provider + network decision (D-009) | renderer/app.js (reader), core/export.js, src/main.js, package.json | T-025 | L | 1 | planned · Sprint 9 |
 | T-032 svg-diagrams (feature) | Export embedded diagrams as lossless SVG for Notion/Obsidian. Needs capture-method decision | renderer/images.js, core/export.js, renderer/annotator.js | T-028 | L | 2 | planned · Sprint 10 |
@@ -105,7 +105,7 @@ Polish (reported by user):
 |---|---|---|---|
 | 10 | planned | T-032 svg-diagrams (+ T-033/T-034 if approved) | — |
 | 9 | planned | T-030 ocr, T-031 ai-merge | — |
-| 8 | planned | T-025 markdown-notes, T-029 shelves, T-035 source-title | — |
+| 8 | **built** 2026-10-21 (in `feature/s8-integration` 4d274b8; waiting for gate 1) | T-025 markdown-notes (L), T-029 shelves (L), T-035 source-title (S) — 5 slots + exempt T-019 | 235/235 |
 | 7 | **closed** 2026-10-21 (tag `sprint-7-end`, main c9791cc) | T-016 mcp-server (L), T-021, T-027, T-004, T-028, T-037 (7 slots, user OK to go over 5) + exempt T-005, T-009, T-011, T-036, T-038 | 207/207 |
 | 6 | **closed** 2026-10-21 (tag `sprint-6-end`, main 9ff7a30) | T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read | 168/168 |
 | 5 | **closed** 2026-10-21 (tag `sprint-5-end`, main 20a8e58) | bugs: T-017, T-018, T-019, T-002, T-008 (all exempt) | 156/156 |
@@ -115,6 +115,24 @@ Polish (reported by user):
 | 1 | **closed** 2026-10-09 (tag `sprint-1-end`, c5c0dbe) | item-actions, add-by-identifier, test-harness | 23/23 |
 
 Newest first. "Between sprints" entries are small fixes merged outside a sprint.
+
+### Sprint 8 — built (2026-10-21), waiting for gate 1
+- Scope (5 slots, user approved): T-025 markdown-notes (L), T-029 shelves (L), T-035 source-title (S, added by user); exempt: T-019 label-before-initial (built between sprints). User decisions: shelves are one level (library → shelves → PDFs); headings in notes are Markdown `#` lines, no separate heading item.
+- First sprint on GitHub flow: tag `sprint-8-start` (main ca4e0f3, no backup branch); every todo is a PR into `feature/s8-integration` (worktree `../fl-s8`), merged with a merge commit and its branch deleted; the sprint lands as one PR into main. Baseline 207/207 on main.
+- Scaffold (tech lead): `refactor/library-sprint8-fields` — `normalize` fills `db.shelves`, `d.shelfId` (null = library root), `d.notes`; pure helpers for shelves (`addShelf`, `renameShelf`, `removeShelf`, `moveToShelf`, `shelvesIn`, `docsOnShelf`, `findShelf`) and notes (`addNote`, `updateNote`, `removeNote`, `notesOf`); `moveDoc`/`removeLibrary` clear the shelf; new docs in app/CLI/MCP start with `shelfId: null, notes: []`. With it no agent touched core/library.js.
+- Dispatch: 3 agents in parallel (worktrees `../fl-T-025`, `../fl-T-029`, `../fl-T-035`, cut from the scaffold), `app.js` split by region (reader+export / sidebar+list+menus / add+rescan).
+- Merge log (into feature/s8-integration):
+  | order | id | PR · merge sha | conflicts | tests after |
+  |---|---|---|---|---|
+  | 0 | refactor/library-sprint8-fields (scaffold) | #3 · 88215e8 | none | 211/211 |
+  | 1 | T-019 label-before-initial (exempt) | #2 · 0a5563f | none (ANALYZER_VERSION 6) | 212/212 |
+  | 2 | T-035 source-title | #4 · 40eb5e1 | none | 220/220 |
+  | 3 | T-029 shelves | #5 · 53d1c4e | none (auto-merged cli/mcp/app.js with T-035) | 225/225 |
+  | 4 | T-025 markdown-notes | #6 · 4d274b8 | styles.css EOF: kept T-029 + T-025 blocks | 235/235 |
+- Checked by agents in the app (throwaway profile, CDP): T-029 shelf + 2 PDFs survive restart; T-025 notes added via the UI export after extract 3 and survive restart and rescan. Note: `ELECTRON_RUN_AS_NODE=1` is set in this environment; unset it to launch the app.
+- T-035 rule (`Meta.pickTitle`): typed title → source's title (`d.sourceTitle`) → PDF's embedded → CrossRef/arXiv record → current → file name; adding, rescanning and lookup all apply it (rescans now recompute titles).
+- T-029: MCP `delete_shelf` is the first tool with `destructiveHint` (description says to ask the user first) — user to confirm.
+- Test rounds: 207 (baseline) → 211 → 212 → 220 → 225 → 235; new failures: 0
 
 ### Sprint 7 — closed (2026-10-21)
 - Scope (7 slots, user approved): T-016 mcp-server (L, built earlier on its branch), T-021 multi-select, T-027 section-numbering, T-004 second-test-pdf, T-028 loose-marks-as-clips, T-037 cli-mcp-sprint6-fields; exempt: T-005, T-009, T-011, T-036, T-038. Release: v1.3.2 (user: stay on 1.3.x).
@@ -273,7 +291,7 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 ## Proposed (recommendations awaiting user approval)
 All open proposals are listed with todo ids under **To do** above: T-003 … T-006, T-009 … T-011. New proposals get the next free id.
 
-- [ ] **T-035** [enhancement · S] (Sprint 8) When an added paper comes with a better title from its source (e.g. the PMC bucket's "GenBank"), prefer it over the PDF's embedded title (CLI showed "OP-NARE120883 36..42"). Check title priority in cli/faelights.js and src/main.js. (from T-008)
+- [x] **T-035** [enhancement · S] (Sprint 8) When an added paper comes with a better title from its source (e.g. the PMC bucket's "GenBank"), prefer it over the PDF's embedded title (CLI showed "OP-NARE120883 36..42"). Check title priority in cli/faelights.js and src/main.js. (from T-008)
 - [x] **T-037** [enhancement · S] (Sprint 7) CLI/MCP support for the Sprint 6 fields: `read`/`unread`, `--unread` filter on `list`, `tag colour <tag> <#hex>`. (from T-024/T-026)
 - [x] **T-038** [polish · XS · exempt] (Sprint 7) Show a colour swatch beside each name in the tag colour menu (needs an `openMenu` item swatch). (from T-024)
 - [x] **T-036** [polish · XS · exempt] (Sprint 7) Strip `utm_*` and similar tracking parameters from doi.org links before resolving, so `10.1038/x?utm=…` doesn't fail. (from T-017)
@@ -282,7 +300,12 @@ All open proposals are listed with todo ids under **To do** above: T-003 … T-0
 - [ ] **T-040** [polish · XS · exempt] Bulk "Export selected" and a "N PDFs" drag image for multi-select; a tag icon for Add tag. (from T-021)
 - [ ] **T-041** [feature · L, likely several sprints] iOS and Android app (asked by user 2026-10-21). Faelights is desktop-only today (Electron). Reuse `core/` (plain JS) and pdf.js in a Capacitor shell; replace the Electron/Node parts (file access and library folder, clipboard, export dialogs, main-process IPC) with mobile equivalents; one-pane phone layout. Needs decisions first: Capacitor vs. a native rewrite, how the library syncs with the desktop (D-009 offline-first, no server today), app-store signing (Apple developer account). Suggest a spike: read-only reader on Android first.
 
+- [ ] **T-042** [bug · XS · exempt] "Add PDFs" or a window drop while a shelf view is open puts the files at the library's root, not on the shelf (`addPaths` ~line 160 doesn't know the shelf). Dropping on a shelf in the sidebar works. (from T-029)
+- [ ] **T-043** [enhancement · S] CLI `export --format json` and MCP extract output don't include notes. (from T-025)
+- [ ] **T-044** [polish · XS · exempt] Markdown export: a note ending in a `- ` list right before an extract's bullet can read as one list; put a separator between them. (from T-025)
+
 ## Decisions
+- 2026-10-21 — Sprint 8: shelves are one level deep; note headings are Markdown `#` lines (user). User asked to merge all open PRs into the integration branch (scaffold, T-019, T-035), before the macOS CI job finished (it passed afterwards).
 - 2026-10-21 — T-035 source-title joins Sprint 8 as its 5th slot (user).
 - 2026-10-21 — Sprint 7 takes T-016 (MCP server) so T-037 covers MCP too: 7 slots, over the 3–5 setting, by user choice. Version bump stays on 1.3.x → v1.3.2 (user).
 - 2026-10-21 — Sprint plan 5–10 from the Trello board: Sprint 5 = all bugs, sizable items in later sprints, 3–5 slots per sprint (user). Authors-on-separate-lines bug ignored (user). Accounts and sharing parked pending a backend decision.
