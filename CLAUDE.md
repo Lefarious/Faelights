@@ -11,6 +11,11 @@ After finishing a feature: run codebase-atlas `sync`, then project-compass `log`
 
 - Never commit features directly to `main`. Start every new piece of work on its own branch cut from an up-to-date `main`.
 - Never merge into `main` without the user's explicit permission. Verify on the branch, report, then ask.
+- GitHub flow: push every branch and open a pull request into `main` (`gh pr create`; CI runs on PRs). `main` is protected: changes land only through a PR with green CI.
+  - Gate 1: the user tries the branch locally and approves; then the PR is merged (merge commit, not squash) and the branch is deleted on GitHub and locally.
+  - Gate 2: a release is a version bump PR plus a `v*` tag, pushed only with the user's OK.
+  - Sprints: todo PRs target the sprint's `feature/sN-integration` branch; the sprint lands as one PR from it into `main`. Tags `sprint-N-start` / `sprint-N-end` mark the points (no more `backup/*` branches).
+- `gh` is installed at `C:\Program Files\GitHub CLI\gh`; if it isn't logged in, pass the git credential token as `GH_TOKEN` for that command.
 - Every todo on `.tech-lead/board.md` has a todo id `T-NNN` (next free number, never reused) and a type: `feature`, `enhancement`, `bug` or `polish`.
 - Todo branches: `<type>/<todo-id>-<short-kebab-description>`, types `feature/`, `enhancement/`, `bug/`, `polish/`.
   e.g. `feature/T-001-meta-enrich`, `bug/T-002-offline-vs-unreachable`, `polish/T-005-view-label`.
