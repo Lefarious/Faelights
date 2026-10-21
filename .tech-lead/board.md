@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-21 · **Sprint 6 closed** (merged to local main 9ff7a30, 168/168, tag `sprint-6-end`; release v1.4.0) · next: Sprint 7 · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
+_Last updated: 2026-10-21 · **Sprint 6 closed** (merged to local main 9ff7a30, 168/168, tag `sprint-6-end`; release v1.3.1; v1.3.0 draft published) · next: Sprint 7 · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
@@ -132,7 +132,7 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
   | 5 | T-023 search-current-library | 374a109 | none | 168/168 |
   | 6 | fix: menu/start-screen labels drop "all" (flagged by the T-022 agent) | (commit) | — | 168/168 |
 - Checked in the running app (fresh `--user-data-dir`, driven over DevTools): viewer closed on p. 2 → `lastPage` 2, "Continue · p. 2" shown, reopening lands on p. 2; Read toggle → `.is-read` row + Read pill, Unread filter → "No unread PDFs" + Show all; tag colour on sidebar dot, list chip and reader chip; search scope list has "This PDF — Notes on Bioluminescence", entering from Inbox defaults to Inbox. After a restart: read, lastPage, tag and colour all kept. No console errors.
-- 2026-10-21: user asked to check, bump the version, publish, merge and push → merged into local main 9ff7a30; 168/168; tag `sprint-6-end`. Atlas synced, compass F-026, D-020. Version 1.4.0.
+- 2026-10-21: user asked to check, bump the version, publish, merge and push → merged into local main 9ff7a30; 168/168; tag `sprint-6-end`. Atlas synced, compass F-026, D-020. Version first bumped to 1.4.0 and tagged; user preferred 1.3.x, so the v1.4.0 tag and draft were deleted (unpublished) and it ships as v1.3.1. The v1.3.0 draft was published too (user).
 - Test rounds: 156 (baseline) → 159 → 162 → 162 → 162 → 166 → 168 → 168 (main 9ff7a30); new failures introduced: 0
 
 ### Sprint 5 — closed (2026-10-21)
