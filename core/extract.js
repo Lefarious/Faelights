@@ -18,7 +18,7 @@ const Extract = (() => {
   // label words whose following capital is a name, not an initial ("Group A.", "vitamin C.")
   const LABEL = /\b(?:vitamin|table|figure|diagram|chart|graph|appendix|section|part|chapter|group|type|class|grade|stage|phase|plan|option|model|panel|category|level|step|item|case|condition|hepatitis|exhibit|annex|schedule|form|zone|block|wing|ward|room|unit)\s+$/i;
   // Bump when the shape or quality of results changes so saved docs get rescanned.
-  const ANALYZER_VERSION = 5;
+  const ANALYZER_VERSION = 6;
 
   function normQuads(a) {
     const q = a.quadPoints, out = [];
