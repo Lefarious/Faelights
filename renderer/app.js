@@ -1018,7 +1018,7 @@ function renderReader() {
   const colours = new Map();
   for (const e of d.result.entries) for (const s of e.spans) { const k = ckey(s.color); const c = colours.get(k) || { color: s.color, n: 0 }; c.n++; colours.set(k, c); }
   if (showImg) for (const img of allImgs) { const k = ckey(img.color); const c = colours.get(k) || { color: img.color, n: 0 }; c.n++; colours.set(k, c); }
-  if (colours.size > 1) {
+  if (colours.size) {   // even one colour: hiding it made the filter look tied to "With images"
     const sec = el("section"); sec.append(el("p", "label", "Filter by colour"));
     const chips = el("div", "chips");
     for (const [k, c] of colours) {
