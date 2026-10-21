@@ -20,5 +20,9 @@ After finishing a feature: run codebase-atlas `sync`, then project-compass `log`
 - Todo branches: `<type>/<todo-id>-<short-kebab-description>`, types `feature/`, `enhancement/`, `bug/`, `polish/`.
   e.g. `feature/T-001-meta-enrich`, `bug/T-002-offline-vs-unreachable`, `polish/T-005-view-label`.
 - Work that isn't a todo: `docs/`, `refactor/`, `chore/`, `test/`, `ci/`, `hotfix/` + `<short-kebab-description>`, e.g. `docs/codebase-atlas`.
+- Nothing lands on `main` between sprints. All of a sprint's docs and unmerged changes go to `main` together in the sprint's one PR, unless the user decides to drop them. Nothing trickles in after the sprint closes.
+  - Docs written between sprints (board, compass, atlas, CLAUDE.md) are committed to the holding branch `docs/pending`. It never gets its own PR into `main`. Merge it into the next sprint's `feature/sN-integration`, or into the next feature branch if that comes first, then delete it.
+  - Code changes made between sprints (fixes, follow-ups) wait for the next sprint and target its integration branch. Don't open a PR into `main` for them.
+  - Builds and version bumps (release PR + `v*` tag) happen only at the end of a sprint, unless the user says otherwise.
 - Sprint cap: minor bugs and polish (size XS or S) don't count toward it; everything else does.
 - Commit messages: Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `test:`, `ci:`).
