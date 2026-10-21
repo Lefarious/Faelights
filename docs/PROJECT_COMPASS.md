@@ -1,8 +1,8 @@
 # Faelights — Project Compass
-> Last updated: 2026-10-10 · Last logged commit: 43721ca · Version: 1.2.1 (tag `v1.2.1`, draft GitHub Release)
+> Last updated: 2026-10-21 · Last logged commit: 796478d · Version: 1.2.1 (tag `v1.2.1`, draft GitHub Release)
 
 ## 1. Snapshot
-Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into `main` (pushed 2026-10-09): a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). A follow-up fix put Add PDFs buttons in the PDF list header and left-aligned the reader toolbar (F-013, pushed). Sprint 2 (2026-10-09) added: an "Add by identifier" box that also takes ISBNs, PMIDs and ADS Bibcodes, several at once (F-014); image capture, where the user boxes a figure in the viewer and it shows up centred among the extracts in PDF order under a "With images" toggle (F-015); and more export formats (HTML) with images (F-016). A polish pass (F-017) labelled the reader's info button "Metadata" and resized the app icon so it matches other apps on the Windows taskbar. The installed Windows app now shows the Faelights icon in the Start menu and on shortcuts instead of Electron's (F-018). Sprint 3 (2026-10-09) added copying a captured image to the clipboard (F-019) and looking up a paper's details (title, authors, journal, abstract…) from CrossRef or arXiv, automatically after adding by DOI/arXiv and on demand from the Info card (F-020). Everything through F-020 was pushed to GitHub on 2026-10-10 and released as **v1.2.1** (the v1.2.0 tag's CI run failed, see F-021): tagging a version now builds the installers in CI and attaches them to a draft GitHub Release, which the user publishes by hand (F-021). Sprint 4 (2026-10-10) added a first-run guided tour: tooltips that point at each main button in order and say what it does, in three parts (library, reader, viewer), each shown the first time that part is on screen, replayable from Help › Show Tour (F-022). It was pushed to GitHub on 2026-10-10 (CI green); not yet in a tagged release. Next: pick the following sprint from the proposals on the tech-lead board.
+Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pulls highlights, underlines and strike-throughs out of annotated PDFs. It shows them in reading order, grouped by topic, and keeps PDFs in libraries that can be tagged, starred, searched and exported to Markdown, Obsidian or plain text. It is aimed at people who read and annotate PDFs (students, researchers) and want their highlights in a notes tool such as Obsidian or Notion (audience inferred from README; unverified). Status: v1.0.0 shipped in the initial commit (2026-10-08). Since then, unreleased work on `main` has added smarter topic fallbacks with an "Abstract" group (F-002), brand icons, logo and a splash screen (F-003), a light/dark/system theme toggle (F-004), and resizable, collapsible columns with slimmer scrollbars (F-005), and a Zotero-style PDF info panel above the extracts (F-006). All of it is merged to `main` and pushed to GitHub (2026-10-09), but no new version has been tagged. It now also has an in-app PDF viewer and annotator (F-007, merged 2026-10-09), which reverses the earlier "no annotating inside the app" non-goal. A brand refresh (F-008: dot-ring mark, new app icon and favicons, animated splash) was merged to `main` on 2026-10-09. Also added: a "View" button beside Info that opens the annotator, and a "My publications" sidebar section (F-009). Everything up to F-009 is pushed to GitHub. Sprint 1 of a tech-lead run (2026-10-09) then merged three more features into `main` (pushed 2026-10-09): a themed in-app action menu with ⋯ buttons for libraries and PDFs (F-010); adding PDFs by DOI, arXiv ID, PubMed Central ID or link, the app's first and only network use, which happens only when the user asks for it, so the app still works fully offline (F-011, D-009); and an `npm test` harness with extraction snapshot tests (F-012). A follow-up fix put Add PDFs buttons in the PDF list header and left-aligned the reader toolbar (F-013, pushed). Sprint 2 (2026-10-09) added: an "Add by identifier" box that also takes ISBNs, PMIDs and ADS Bibcodes, several at once (F-014); image capture, where the user boxes a figure in the viewer and it shows up centred among the extracts in PDF order under a "With images" toggle (F-015); and more export formats (HTML) with images (F-016). A polish pass (F-017) labelled the reader's info button "Metadata" and resized the app icon so it matches other apps on the Windows taskbar. The installed Windows app now shows the Faelights icon in the Start menu and on shortcuts instead of Electron's (F-018). Sprint 3 (2026-10-09) added copying a captured image to the clipboard (F-019) and looking up a paper's details (title, authors, journal, abstract…) from CrossRef or arXiv, automatically after adding by DOI/arXiv and on demand from the Info card (F-020). Everything through F-020 was pushed to GitHub on 2026-10-10 and released as **v1.2.1** (the v1.2.0 tag's CI run failed, see F-021): tagging a version now builds the installers in CI and attaches them to a draft GitHub Release, which the user publishes by hand (F-021). Sprint 4 (2026-10-10) added a first-run guided tour: tooltips that point at each main button in order and say what it does, in three parts (library, reader, viewer), each shown the first time that part is on screen, replayable from Help › Show Tour (F-022). It was pushed to GitHub on 2026-10-10 (CI green); not yet in a tagged release. On 2026-10-21 the extraction, topics, metadata, export, library storage and paper-download code moved into a headless `core/` that the app and plain Node share (F-023), and a `faelights` command line was built on it (F-024): read highlights, full text and details, search, add PDFs from disk or by DOI/arXiv/PMID/ISBN/link, organise libraries, tags and stars, rescan, and set the theme and tour, all on the app's own library. Both are merged into `main` (796478d); not yet in a tagged release. Next: pick the following sprint from the proposals on the tech-lead board.
 
 ## 2. Vision & scope
 - **Goals:**
@@ -13,7 +13,7 @@ Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pull
   - Clean export into personal knowledge tools, especially an Obsidian vault.
   - Highlights survive the original PDF moving or being deleted.
 - **Non-goals:**
-  - Cloud sync, accounts or any background network service. ~~Nothing in the code makes network calls.~~ Revised 2026-10-09: the app may go online only when the user explicitly asks (add a paper by DOI/arXiv/link, F-011; paper details lookup, F-020). It must keep working fully offline, and nothing runs in the background (→ D-009).
+  - Cloud sync, accounts or any background network service. ~~Nothing in the code makes network calls.~~ Revised 2026-10-09: the app may go online only when the user explicitly asks (add a paper by DOI/arXiv/link, F-011; paper details lookup, F-020). It must keep working fully offline, and nothing runs in the background (→ D-009). The same holds for the CLI (F-024): only `add <identifier>` and `lookup` go online.
   - ~~Annotating or editing PDFs inside the app.~~ Revised 2026-10-09: annotating is now in scope (F-007), including image-capture boxes (F-015). Editing page content (text, images, page order) is still out of scope, and the user's original PDF is still never written.
   - OCR. Marks over scanned pages are listed as "loose" and the user is told to OCR the file outside the app.
 - **Success criteria (unverified):** highlights from common readers (Acrobat, Preview, Zotero and similar) extract correctly; exports drop into Obsidian without cleanup.
@@ -24,7 +24,7 @@ Faelights is a local-first desktop app (Electron, Windows/macOS/Linux) that pull
 flowchart LR
   user((User)) --> UI
   subgraph Renderer [Renderer · sandboxed]
-    UI[renderer-ui<br/>state + views + export] --> CORE[extraction-core]
+    UI[renderer-ui<br/>state + views + export] --> CORE[core<br/>extract · topics · meta · order · export · library ops]
     UI --> PDFJS[pdf.js 3.11.174<br/>+ web worker]
     UI --> ANN[annotator<br/>viewer + pdf-lib 1.17.1]
     ANN --> PDFJS
@@ -38,7 +38,11 @@ flowchart LR
     MAIN --> THEME[(userData/theme.json)]
   end
   OSOPEN[OS 'Open with' / argv] --> MAIN
-  MAIN -. on user request only .-> NET[(arxiv.org · doi.org + publishers · api.crossref.org)]
+  MAIN --> NCORE[core in Node<br/>library store · identify · fetch]
+  CLI[faelights CLI<br/>Node] --> NCORE
+  NCORE --> FS
+  NCORE --> THEME
+  NCORE -. on user request only .-> NET[(arxiv.org · doi.org + publishers · api.crossref.org · NCBI · ADS · Open Library)]
   MAIN --> SRC[(Original PDFs on disk)]
   MAIN --> EXPORT[(Export folder e.g. Obsidian vault<br/>or annotated PDF copy)]
 ```
@@ -46,13 +50,14 @@ flowchart LR
 ### Components
 | Component | Responsibility | Tech | Atlas link |
 |---|---|---|---|
-| Main process | Storage, file copies, dialogs, menus, OS integration | Electron main, Node fs | [main-process](atlas/modules/main-process.md) |
+| Main process | Windows, dialogs, menus, OS integration, exports; storage and downloads through core (Electron `net` transport) | Electron main, Node fs | [main-process](atlas/modules/main-process.md) |
 | Preload bridge | Narrow `window.fl` API from renderer to main | `contextBridge` | [preload-bridge](atlas/modules/preload-bridge.md) |
-| Extraction core | PDF text stream, annotation hit-testing, sentence and topic grouping | Plain JS over pdf.js | [extraction-core](atlas/modules/extraction-core.md) |
+| Core | Headless shared code: extraction, topics, PDF metadata, reading order, export text, search matching, library store with lock file, identifier parsing, paper download + details over a passed-in transport | Plain JS over pdf.js; browser globals + CommonJS | [core](atlas/modules/core.md) |
+| Command line | `faelights` command over core: read, search, add, organise, rescan the app's library; theme and tour | Node (≥ 21), `util.parseArgs` | [cli](atlas/modules/cli.md) |
 | Renderer UI | Three-pane UI, search, export formatting | Vanilla JS + CSS, no framework | [renderer-ui](atlas/modules/renderer-ui.md) |
 | Annotator | In-app PDF viewer; writes highlight/underline/strike/note/ink annotations into the library copy | pdf.js render + text layer, pdf-lib | [annotator](atlas/modules/annotator.md) |
 | Packaging | Installers and CI builds | electron-builder, GitHub Actions | [packaging](atlas/modules/packaging.md) |
-| Tests | Extraction snapshot and identifier-parsing tests | node:test (built-in) | [tests](atlas/modules/tests.md) |
+| Tests | Core, CLI (as a child process), identifiers, export, tour; fetch against a local server | node:test (built-in) | [tests](atlas/modules/tests.md) |
 
 ### Tech stack
 | Layer | Choice | Version | Why chosen |
@@ -78,6 +83,7 @@ flowchart LR
 - **Startup:** a splash window shows the logo while the main window loads, and is swapped out once the library has rendered (→ D-006).
 - **Search:** in-memory AND-match over sentence, highlight, note and topic text across all cached results.
 - **Export:** one note per PDF, with optional YAML frontmatter, written to a file or to a folder per library.
+- **Command line:** `faelights <command>` reads and changes the same library folder as the app, each change as one locked read-modify-write; the app has to be closed (or restarted before changing anything) or its next save overwrites the change (→ D-017).
 - **Annotate:** open a doc in the viewer, mark text or draw; each change is written into the library copy immediately; leaving the viewer re-extracts so new highlights and notes show up as extracts. "Download PDF" saves the annotated file anywhere.
 
 ## 4. External services & integrations
@@ -86,13 +92,13 @@ flowchart LR
 | GitHub Actions | Build installers on `v*` tags | `.github/workflows/build.yml` | none | Free tier minutes | No installers. Build locally with `npm run dist:*`. |
 | OS shell / file associations | "Open with" for `.pdf`, open/reveal files | `package.json build.fileAssociations` | none | — | Users add PDFs from inside the app instead |
 
-| arXiv, doi.org (+ publisher sites), CrossRef REST API | Download a paper's PDF when the user adds it by arXiv ID, DOI or link (F-011) | `src/main.js` `pdf:fetch` | none | No key; public endpoints. Limits: 150 MB per PDF, 15 s to first response, 30 s stall | Clear in-app message: offline, paywalled (with "Open in browser"), not a PDF, not found. Adding from disk is unaffected. |
-| NCBI ID converter + E-utilities, PubMed Central | PMID → PMC copy or DOI (F-014) | `src/main.js` `resolvePdf` | none | No key; public endpoints. PMC currently serves a bot-check page to non-browser clients | Falls back to the DOI path; else "No free PDF was found" |
-| ADS link gateway (ui.adsabs.harvard.edu) | ADS Bibcode → e-print / publisher / ADS scan PDF (F-014) | `src/main.js` `resolvePdf` | none | No API token needed for the gateway | "Paywalled" with Open in browser |
-| CrossRef REST API (`works/<doi>`), arXiv API (`export.arxiv.org/api/query`) | Paper details for the Info card (F-020) | `src/main.js` `meta:lookup`, parsed by `src/metadata.js` | none | No key; public endpoints. 20 s cap per lookup | Info card keeps the PDF's own fields; toast says offline / no record / couldn't reach. Already-fetched details stay (stored in the library) |
-| Open Library search + Internet Archive downloads | ISBN → free public-domain scan (F-014) | `src/main.js` `resolvePdf` | none | Only `ebook_access: public` scans; books can be large; scan may be another edition | "No free PDF was found" with Open in browser / Add from file |
+| arXiv, doi.org (+ publisher sites), CrossRef REST API | Download a paper's PDF when the user adds it by arXiv ID, DOI or link (F-011) | `core/fetch.js` (app: `pdf:fetch`; CLI: `add`) | none | No key; public endpoints. Limits: 150 MB per PDF, 15 s to first response, 30 s stall | Clear in-app message: offline, paywalled (with "Open in browser"), not a PDF, not found. Adding from disk is unaffected. |
+| NCBI ID converter + E-utilities, PubMed Central | PMID → PMC copy or DOI (F-014) | `core/fetch.js` `resolvePdf` | none | No key; public endpoints. PMC currently serves a bot-check page to non-browser clients | Falls back to the DOI path; else "No free PDF was found" |
+| ADS link gateway (ui.adsabs.harvard.edu) | ADS Bibcode → e-print / publisher / ADS scan PDF (F-014) | `core/fetch.js` `resolvePdf` | none | No API token needed for the gateway | "Paywalled" with Open in browser |
+| CrossRef REST API (`works/<doi>`), arXiv API (`export.arxiv.org/api/query`) | Paper details for the Info card (F-020) and CLI `add` / `lookup` | `core/fetch.js lookupMeta` (app: `meta:lookup`), parsed by `core/metadata.js` | none | No key; public endpoints. 20 s cap per lookup | Info card keeps the PDF's own fields; toast says offline / no record / couldn't reach. Already-fetched details stay (stored in the library) |
+| Open Library search + Internet Archive downloads | ISBN → free public-domain scan (F-014) | `core/fetch.js` `resolvePdf` | none | Only `ebook_access: public` scans; books can be large; scan may be another edition | "No free PDF was found" with Open in browser / Add from file |
 
-There are no analytics or telemetry, and no background network calls: requests happen only inside the add-by-identifier dialog after the user submits it, and for a details lookup right after such an add or when the user clicks Look up details (→ D-009). Fetches use a separate in-memory session so publisher cookies don't persist. The app reads no environment variables.
+There are no analytics or telemetry, and no background network calls: requests happen only inside the add-by-identifier dialog after the user submits it, and for a details lookup right after such an add or when the user clicks Look up details (→ D-009). Fetches use a separate in-memory session so publisher cookies don't persist; the CLI keeps cookies in memory for one command only. The app reads no environment variables; the CLI (through `core/library.js`) reads `FAELIGHTS_DATA_DIR` to pick another library folder, else `APPDATA` / `XDG_CONFIG_HOME` to find the app's.
 
 ## 5. Environments & deployment
 | Env | Target | Branch | How it deploys | Notes |
@@ -108,6 +114,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Rollback:** reinstall the previous installer. User data in `userData/library` is untouched by install and uninstall (unverified for the NSIS uninstaller).
 - **Secrets:** none.
 - **App icon:** the brand mark on a dark rounded tile (F-003; redrawn with the dot-ring mark in F-008; margin cut to ~2% in F-017). Windows uses the multi-size `build/icon.ico`, mac and Linux use `build/icon.png`, through `directories.buildResources: build`.
+- **Command line:** not shipped in the installers (`cli/` isn't in `build.files`); it runs from a checkout (`npm install`, then `npm run cli -- …` or `npm link` for a `faelights` command).
 - **Local Windows build note:** on this machine (Node 26), `electron`'s postinstall did not extract its binary, so it was unzipped by hand. Build with `npx electron-builder --win --config.electronDist=node_modules/electron/dist` to avoid re-downloading Electron.
 
 ## 6. UI & UX
@@ -144,6 +151,25 @@ There are no analytics or telemetry, and no background network calls: requests h
 - **Annotator keys:** V/H/U/S/N/D/I pick tools, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo, Delete removes the selected mark, +/−/0 zoom and fit, Esc steps back (popover → selection → tool → leave viewer). While the viewer is open the list shortcuts (↑↓ J K, Delete) are disabled. Page canvases stay white in dark mode.
 
 ## 7. Feature log (newest first)
+### F-024 · `faelights` command line · 2026-10-21 · shipped (796478d, merged locally, unreleased)
+- **Why:** the user asked (via `/cli-anything`, which isn't installed) for a CLI, then for commands covering every main action: add PDFs (also by identifier) to libraries, move docs, read contents and extracts, create libraries, tags, stars, search extracts, theme and the guided tour (todo T-015).
+- **How:** one Node script over core/, no Electron. Reading: `extract` (any PDF), `export`, `text` (full text by page), `info`, `list`, `libraries`, `tags`, `search` (same match rule as the app). Adding: `add` takes files or DOIs / arXiv ids / PMIDs / PMCIDs / ISBNs / ADS bibcodes / links, with tags and a details lookup; `rescan`, `lookup`. Organising: `library new|rename|delete`, `move`, `tag`/`untag`, `star`/`unstar`, `remove`. App settings: `theme`, `tour status|skip|restart`. Formats md / obsidian / html / plain / json; `--json` for scripts; exit codes 0/1/2.
+- **How (parity):** everything that decides a doc's fields (metadata, summary, search, resolving papers) was moved into core first (F-023), so a PDF added by the CLI and by the app gets identical `meta`, `result`, `count` and `colours` (checked in the running app). Every change is one locked read-modify-write of the library file.
+- **Touched:** [cli](atlas/modules/cli.md) (new), [core](atlas/modules/core.md), [renderer-ui](atlas/modules/renderer-ui.md) (search via core), [packaging](atlas/modules/packaging.md) (`bin`, `cli` script), [tests](atlas/modules/tests.md)
+- **Added:** `cli/faelights.js`, `package.json` `bin.faelights` + `npm run cli`, `test/cli.test.js` (tests 118 → 142 together with F-023's fetch tests). Env var `FAELIGHTS_DATA_DIR` (optional). No new dependencies.
+- **Trade-offs:** the CLI doesn't talk to a running app; it shares the files and the lock, and tells the user to restart the app (→ D-017). Images aren't exported (cropping needs the renderer). `remove` refuses docs annotated in the app without `--force`, because those marks exist only in the library copy. Not packaged in the installers.
+- **Known limits / follow-ups:** no `export --library` (folder per library) or image export; the app doesn't notice CLI changes while open; tour/theme changes apply on the next app start.
+- **Commit range:** 5f0de3d..5c9f128 (`feature/T-015-cli`), merged at 796478d
+
+### F-023 · Headless core shared by the app and Node · 2026-10-20 · shipped (54d1a07, merged locally, unreleased)
+- **Why:** so the same extraction, export and library code can run outside Electron (scripts, the CLI, tests) without a second copy drifting from the app.
+- **How:** `renderer/core.js`, `order.js`, `exportfmt.js` became `core/extract.js`, `topics.js`, `order.js`, `export.js`, plus `core/library.js` (db operations and the on-disk store with atomic saves under a lock file) — each loads as a renderer global or through `require`. With F-024 more moved in: PDF metadata (`core/meta.js`), the doc summary and search match, `identify.js` / `metadata.js` from `src/`, and the paper resolver and details lookup out of `main.js` into `core/fetch.js`, with the HTTP transport passed in (Electron `net` in the app, Node `fetch` in the CLI) (→ D-016).
+- **Touched:** [core](atlas/modules/core.md) (new, replaces extraction-core), [main-process](atlas/modules/main-process.md), [renderer-ui](atlas/modules/renderer-ui.md), [annotator](atlas/modules/annotator.md), [tests](atlas/modules/tests.md), [packaging](atlas/modules/packaging.md) (`core/**` in `build.files`)
+- **Added:** `test/core/*.test.js` (extract, topics, export, library, fetch against a local HTTP server), `test/helpers/annotate.js` (adds underline/strike/squiggly marks and bookmarks in memory, covering the old "second fixture" gap). No new dependencies; extraction and export output byte-identical to before.
+- **Trade-offs:** the Node transport needed its own cookie handling: nature.com's sign-in bounce looped without `Domain=` cookies, now fixed and reported as paywalled. The lock file serialises writes between processes, but the app still saves its whole in-memory copy.
+- **Known limits / follow-ups:** Electron's `fetchUrl` itself has no test; `ckey` is still duplicated in `app.js`.
+- **Commit range:** 6932b6e (`refactor/headless-core`), merged at 54d1a07; later moves in 5f0de3d..5c9f128
+
 ### F-022 · First-run guided tour · 2026-10-10 · shipped (43721ca, pushed 2026-10-10, unreleased)
 - **Why:** the user asked for a tutorial-style user journey after install that explains, in order, what each main button does (todo T-014).
 - **How:** a small self-contained tour module holds the steps (title, text, optional shortcut, and the on-screen element each points at) and draws the overlay: the app is dimmed except a cut-out round the target, which gets a glowing outline, and a card sits beside it. Steps are grouped into three chapters that start on their own the first time their part of the app is on screen: library (on first launch), reader (first time a PDF is open) and viewer (first time View is used). Targets are found through `data-tour` hooks and existing class names, and a test checks every hook still exists in the code.
@@ -208,7 +234,7 @@ There are no analytics or telemetry, and no background network calls: requests h
 ### F-015 · Image capture: boxes in the viewer, images among the extracts · 2026-10-09 · shipped (40bb2c7, pushed 2026-10-10, in v1.2.0)
 - **Why:** figures and tables matter as much as highlighted sentences; the user wanted to mark them and see them in context.
 - **How:** a "Capture image" tool (I) draws a border-only PDF Square annotation in the highlight palette (recolour, note, delete, undo like other marks). Extraction reads every Square into `result.images` with a reading-order position; an image that falls inside a fact is placed before it. A "With images" reader toggle interleaves centred crops (rendered from the stored PDF with annotations hidden, cached per doc version) in both Full sentence and Highlights only, grouped under their topic; image colours join the colour filter. `ANALYZER_VERSION` → 3, so saved docs rescan on open.
-- **Touched:** [annotator](atlas/modules/annotator.md), [extraction-core](atlas/modules/extraction-core.md), [renderer-ui](atlas/modules/renderer-ui.md), [tests](atlas/modules/tests.md)
+- **Touched:** [annotator](atlas/modules/annotator.md), [extraction-core, now core](atlas/modules/core.md), [renderer-ui](atlas/modules/renderer-ui.md), [tests](atlas/modules/tests.md)
 - **Added:** `renderer/images.js` (crop helper), `renderer/order.js` (shared placement rule); setting `images`; fixture `test/fixtures/images.pdf` + generator; `test/images.test.js`, `test/reader-images.test.js`. No dependencies.
 - **Trade-offs:** boxes are standard Square annotations (→ D-011), so they show in every PDF reader and Squares from other apps (e.g. Zotero image annotations) count as images too. Colour "sorting" means the existing colour filter, per the user, not a group-by-colour view.
 - **Known limits / follow-ups:** boxes can't be moved or resized (delete and redraw); with the toggle off, image colours don't appear in the chips.
@@ -361,7 +387,7 @@ There are no analytics or telemetry, and no background network calls: requests h
   - When font-size detection finds fewer than 2 headings, headings are found by wording: numbered sections, common section names, ALL-CAPS lines and run-in "Abstract—". Captions and running headers are skipped.
   - If there is still nothing, one topic is made per page.
   - Results carry an analyzer version, and older docs rescan automatically when opened.
-- **Touched:** [extraction-core](atlas/modules/extraction-core.md), [renderer-ui](atlas/modules/renderer-ui.md)
+- **Touched:** [extraction-core, now core](atlas/modules/core.md), [renderer-ui](atlas/modules/renderer-ui.md)
 - **Added:** `topicSource` values `patterns` and `pages`; `result.v` / `ANALYZER_VERSION`.
 - **Trade-offs:** wording rules can misread short numbered list items as headings. Pattern detection replaces a single font-size heading (usually just the title).
 - **Verified:** generated test PDFs covering numbered, plain and ALL-CAPS layouts; the sample PDF is unchanged.
@@ -415,13 +441,21 @@ Context: F-018. Options: turn `signAndEditExecutable` back on (fails on Windows 
 ### D-015 · Guided tour as an overlay with per-step seen flags · 2026-10-10
 Context: F-022. Options: a tooltip library (none fits the no-bundler, CSP `script-src 'self'` setup without vendoring); coach marks baked into each view; a small own overlay driven by step data. Decision: own `tour.js` overlay; dimming via a `clip-path` hole, because a 9999px box-shadow wasn't painted; seen state per step in `settings.tour` rather than per chapter, so steps whose buttons weren't on screen yet still show later. Consequences: no dependency; targets are string-coupled to class names and `data-tour` hooks (guarded by a test); Skip tour sets every chapter to `true`.
 
+### D-016 · One headless core, network transport passed in · 2026-10-21
+Context: F-023/F-024 — the CLI needed extraction, metadata, the library store and paper downloads. Options: copy the code into the CLI; drive the app over IPC; move it into a shared `core/`. Decision: shared core, loadable as renderer globals and CommonJS; network code takes `get(url, …)` as a parameter so the app keeps Electron's `net` (system proxy, session cookies) and Node gets `nodeGet`. Consequences: one implementation and identical doc records; core must stay free of DOM, `fl` and Electron; new core files that the renderer needs must be added to `index.html` in dependency order.
+
+### D-017 · CLI writes the library file directly, under a lock · 2026-10-21
+Context: F-024. Options: a running-app API (IPC server / socket); refuse to run while the app is open; write the files directly under core's lock file. Decision: direct, locked read-modify-write per command, plus a "restart the app" note. Consequences: works with the app closed and needs no server; the open app keeps its own copy and its next save overwrites CLI changes — users must close or restart it. A live-reload of the DB in the app would remove the caveat.
+
 ## 9. Roadmap & deployment plan
 No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
 ### Now
 - v1.2.1 tagged (2026-10-10): CI builds the installers into a draft GitHub Release for the user to publish. (v1.2.0's run failed on a native-module rebuild; no release was made from it.)
 - Sprint 4 (2026-10-10): T-014 guided tour merged and pushed (F-022), CI green; not in a tagged release yet. Proposals T-002…T-011 remain on the tech-lead board.
+- 2026-10-21: headless core (F-023) and the `faelights` CLI (T-015, F-024) merged into `main` (796478d); to be pushed; not in a tagged release yet.
 ### Next
-- Second test fixture PDF (underline/strike/squiggly, outline and wording topics, loose marks). (`npm test` in CI: done 2026-10-10.)
+- ~~Second test fixture PDF~~ Revised 2026-10-21: covered by in-memory annotated PDFs in `test/core/` (F-023). (`npm test` in CI: done 2026-10-10.)
+- Let the open app pick up library changes made by the CLI (reload `faelights.json` when it changes on disk), removing D-017's caveat.
 ### Later
 - Code signing and notarisation. (Publishing releases from CI: done, F-021.)
 - DB schema versioning and migrations, and per-doc result storage if the library grows large.
@@ -430,6 +464,8 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 - Image capture follow-ups (F-015): move/resize boxes; exact-edition ISBN downloads; a fallback for PMC's bot check.
 - Annotator follow-ups (F-007): text boxes and shapes; optional "write annotations back to the original" with a confirm; incremental saves for large PDFs; extract notes that aren't attached to text.
 ### Done
+- `faelights` command line · 2026-10-21 · F-024
+- Headless core shared by app and Node · 2026-10-20 · F-023
 - First-run guided tour · 2026-10-10 · F-022
 - Draft GitHub Releases from CI; v1.2.1 · 2026-10-10 · F-021
 - Paper details from CrossRef / arXiv · 2026-10-09 · F-020
@@ -455,28 +491,30 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 
 ## 10. Conventions & guardrails
 - Keep the renderer sandboxed. New OS access means a new `ipcMain.handle` + `fl.*` wrapper, and never `nodeIntegration`.
-- `core.js` stays pure: no DOM and no `fl`.
+- `core/` stays headless: no DOM, no `fl`, no Electron; network code takes its transport as a parameter (D-016). Logic the app and the CLI both need lives in core, not in `app.js` or `main.js`.
+- The CLI changes the library only through core's locked `update()`, never by saving a whole DB.
 - Never modify the user's original PDF. Only the stored copy in `userData/library/files` may be written or deleted.
 - Removing a library never loses docs; they move to Inbox.
 - Any `node_modules` file the renderer references must also be listed in `package.json build.files`.
 - Keep the CSP in `index.html` strict: no inline scripts and no remote origins.
-- Changing the DB or `result` shape requires a load-time repair or migration in `main.js loadDb`, or a bump of `ANALYZER_VERSION` in `core.js` so docs rescan.
+- Changing the DB or `result` shape requires a load-time repair or migration in `core/library.js normalize` / `loadDb`, or a bump of `ANALYZER_VERSION` in `core/extract.js` so docs rescan.
 - PDF bytes are written only to the stored copy or a path the user picks in a save dialog. Annotated docs read only their stored copy.
 - Theming goes only through `nativeTheme.themeSource`. CSS reacts to `prefers-color-scheme`; never add per-page theme classes.
 - Brand artwork lives in `renderer/assets/brand/` with `-light`/`-dark` variants.
-- Network access only in `main.js`, only on explicit user action, never at startup or in the background; every online feature needs an offline path (D-009).
+- Network access only through `core/fetch.js` (from `main.js` or the CLI), only on explicit user action, never at startup or in the background; every online feature needs an offline path (D-009).
 - Item actions go through the in-app `openMenu`; don't reintroduce native `fl.popup` menus.
-- Pure logic that tests need lives in its own script with a `module.exports` guard (`core.js`, `order.js`, `exportfmt.js`, `identify.js`, `exportPaths.js`).
-- The image placement rule (an image goes before entry `e` when `img.at <= e.at`) lives only in `order.js`; the reader and exports both use it.
+- Pure logic that tests need lives in `core/` (or, for UI-only pieces like `tour.js`, its own script with a `module.exports` guard); main-only helpers in their own CommonJS file (`exportPaths.js`).
+- The image placement rule (an image goes before entry `e` when `img.at <= e.at`) lives only in `core/order.js`; the reader and exports both use it.
 - Paths from the renderer are validated in main (`exportPaths`) before any write.
 - Run `npm test` before merging; update the snapshot in `test/core.test.js` only for intended extraction changes.
 
 ## 11. Tech debt & open questions
 | Item | Impact | Introduced by | Suggested fix |
 |---|---|---|---|
-| ~~No automated tests~~ Revised 2026-10-09: F-012 added `npm test`. Coverage is thin (one fixture; no UI or fetch tests) | Some extraction paths unguarded | F-001 | Second fixture PDF; run tests in CI |
+| ~~No automated tests~~ Revised 2026-10-09: F-012 added `npm test`. Coverage is thin (one fixture; no UI or fetch tests). Revised 2026-10-21: core and CLI tests (142), fetch against a local server; still no UI tests and no test of Electron's `fetchUrl` | Some UI paths unguarded | F-001 | UI smoke test over DevTools |
 | DNS failure (`ERR_NAME_NOT_RESOLVED`) is reported as "offline" | A mistyped link says "You're offline" | F-011 | Use `navigator.onLine` to tell offline from an unreachable host |
-| Some publishers (nature.com) bot-wall Chromium's network stack | Open-access DOIs can fail | F-011 | Unpaywall / alternate-location lookup (fits meta-enrich) |
+| Some publishers (nature.com) bot-wall Chromium's network stack | Open-access DOIs can fail | F-011 | Unpaywall / alternate-location lookup (fits meta-enrich). Revised 2026-10-21: the CLI's Node transport now follows nature.com's sign-in bounce and reports paywalled DOIs correctly (F-023) |
+| The open app overwrites library changes made by the CLI | CLI changes lost if the app saves before a restart | F-024 / D-017 | Watch `faelights.json` in main and reload the renderer's DB, or merge on save |
 | `menu:popup` IPC unused; PDF menu says "Annotate", reader says "View" | Dead code; inconsistent wording | F-010 / F-009 | Remove the channel; rename the menu item |
 | ~~Test launches hit the single-instance lock and `--user-data-dir` doesn't move `userData`~~ Revised 2026-10-10: launching with `--user-data-dir=<folder>` (and `ELECTRON_RUN_AS_NODE` unset, which VS Code terminals set) gives a separate profile and its own lock; used to test F-022 next to the real app | Settled for manual tests | — | Documented in the resume checklist |
 | Whole DB (including all results) saved on every change | Slow saves with large libraries | F-001 / D-002 | Split results per doc or move to SQLite |
@@ -501,4 +539,5 @@ No roadmap is recorded yet. The candidates below are drawn from known limits (un
 3. Tests: `npm test` (Node ≥ 21). See `test/README.md`.
 4. Build: `npm run dist:win|mac|linux`, or push a `v*` tag for CI.
 5. User data lives at `<userData>/library` (*File → Show Library Folder*). To see the first-run experience (guided tour, F-022) without touching your library: `npx electron . --user-data-dir=<empty folder>`; Help › Show Tour replays it in an existing profile.
-6. After a feature: run codebase-atlas `sync`, then project-compass `log`.
+6. CLI: `npm run cli -- --help`; try it on a throwaway library with `--data-dir <folder>` (or `FAELIGHTS_DATA_DIR`). Close the app before commands that change the library.
+7. After a feature: run codebase-atlas `sync`, then project-compass `log`.

@@ -1,24 +1,24 @@
 # Module: tests
-> Path: test/ · Last synced commit: 43721ca · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022
+> Path: test/ · Last synced commit: 796478d · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024
 
 ## Purpose
-Automated checks run with Node's built-in `node:test` and `node:assert`, with no extra dependencies. They cover the pure parts of the app that load in plain Node: extraction (`core.js`, incl. image boxes), identifier parsing (`src/identify.js`), reader ordering (`renderer/order.js`), the guided tour's step data and seen-tracking (`renderer/tour.js`), export formatting (`renderer/exportfmt.js`) and export path safety (`src/exportPaths.js`). They do not launch Electron or exercise the UI.
+Automated checks run with Node's built-in `node:test` and `node:assert`, with no extra dependencies. They cover everything that loads in plain Node: core/ (extraction incl. image boxes, topics, reading order, export formatting, the library store with its lock, identifier parsing, CrossRef/arXiv mapping, paper resolving and the Node transport against a local server), the guided tour's step data (`renderer/tour.js`), export path safety (`src/exportPaths.js`) and the `faelights` CLI as a child process on a temp library. They do not launch Electron or exercise the UI, and nothing touches the network.
 
 ## Public interface
 - `npm test` → `node --test "test/**/*.test.js"`. Any `*.test.js` under `test/` is picked up automatically, and files in `test/helpers/` are not run as tests.
 
 ## Dependencies
-- **Uses:** extraction-core (`require("../renderer/core.js")` → `analyzePdf`, `ANALYZER_VERSION`, `imgStreamAt`, `imgSnapToFacts`), main-process (`require("../src/identify")`, `require("../src/exportPaths")`), renderer-ui (`renderer/order.js`, `renderer/exportfmt.js`, `renderer/tour.js`), pdf-lib (fixture script only), pdfjs-dist 3.11.174 legacy build (`pdfjs-dist/legacy/build/pdf.js`)
-- **Used by:** developers / CI (not wired into `.github/workflows/build.yml` yet)
+- **Uses:** core (`extract`, `topics`, `meta`, `order`, `export`, `library`, `identify`, `metadata`, `fetch`), main-process (`src/exportPaths.js`), renderer-ui (`renderer/tour.js`), cli (`cli/faelights.js`, spawned with `process.execPath`), pdf-lib (`helpers/annotate.js`, fixture script), pdfjs-dist 3.11.174 legacy build (through `core/extract.js loadPdfjs`), `node:http` (local server in `core/fetch.test.js`)
+- **Used by:** developers and CI (`npm test` in `.github/workflows/build.yml`)
 
 ## Data & state owned
-Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. Writes nothing (the fixture script writes `images.pdf` when run by hand).
+Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.js` and `cli.test.js` write only inside their own `os.tmpdir()` folders (`faelights-*`), removed afterwards; never the real library. The fixture script writes `images.pdf` when run by hand.
 
 ## Files
 
 ### `test/core.test.js`
 - **Role:** snapshot tests of `analyzePdf` on `renderer/sample.pdf`: 2 pages, 8 marks, 7 entries, 0 loose, 5 font-size-heading topics, exact entries (page, topic, span colour/text/note, sentence), entry shape, reading order, known phrases, `v === ANALYZER_VERSION`, progress callback calls
-- **Imports (internal):** `test/helpers/pdf.js`, `renderer/core.js`
+- **Imports (internal):** `test/helpers/pdf.js`, `core/extract.js`
 - **Change impact:** any intentional change to extraction output must update the snapshot here (and bump `ANALYZER_VERSION`).
 
 ### `test/tour.test.js`
@@ -27,36 +27,66 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. Writes nothing (the 
 
 ### `test/identify.test.js`
 - **Role:** unit tests for `parseIdentifier` (accepted and rejected forms incl. ISBN-10/13 checksums, PMID forms, ADS bibcodes and URLs, trimming), `parseIdentifiers` (batch splitting, de-dupe), `findPdfLink`, `isPdf`, `fileNameFor` and `fetchFailureReason` (offline vs network mapping)
-- **Imports (internal):** `src/identify.js`
+- **Imports (internal):** `core/identify.js`
 
 ### `test/metadata.test.js`
 - **Role:** unit tests for `lookupTarget` (DOI vs arXiv vs arXiv DOI, origin precedence), `fromCrossref` (full record, partial dates, subtitles, inline JATS tags) and `fromArxivAtom` (entry mapping, error entry → null) on inline fixtures; no network
-- **Imports (internal):** `src/metadata.js`
+- **Imports (internal):** `core/metadata.js`
 
 ### `test/images.test.js`
 - **Role:** image boxes on `test/fixtures/images.pdf` (6 Squares, 2 pages): count, ids, `n`, page, normalised rect, colour, trimmed comment, sort order, the before-the-fact rule against entry `at`s, topics; `sample.pdf` → `images: []`; unit tests of `imgStreamAt` fallbacks and `imgSnapToFacts`
-- **Imports (internal):** `test/helpers/pdf.js`, `renderer/core.js`
+- **Imports (internal):** `test/helpers/pdf.js`, `core/extract.js`
 
 ### `test/reader-images.test.js`
 - **Role:** `Order.withImages` / `groupItems` / `filterImages` / `imagesOf` / `ckey`: ties go before the entry, between/before/after, image-only groups, same groups as `groupsOf` without images, colour filtering
-- **Imports (internal):** `renderer/order.js`
+- **Imports (internal):** `core/order.js`
 
 ### `test/export.test.js`
 - **Role:** `exportPaths` validation (traversal, absolute/UNC/drive, reserved names and characters, duplicates, size); `ExportFmt` image placement, md link encoding, Obsidian embeds, plain lines, copy placeholder, HTML escaping and `data:`-only images; md/obsidian/plain output without images identical to the pre-F-016 `docText`
-- **Imports (internal):** `src/exportPaths.js`, `renderer/exportfmt.js`
+- **Imports (internal):** `src/exportPaths.js`, `core/export.js`
+
+### `test/core/extract.test.js`
+- **Role:** `core/extract.js` in plain Node: no DOM/canvas, path vs bytes give the same result, progress, reading order, `highlights()` rows, Underline/Squiggly/StrikeOut among highlights, loose marks, `normQuads` forms
+- **Imports (internal):** `test/helpers/pdf.js`, `test/helpers/annotate.js`, `core/extract.js`
+
+### `test/core/topics.test.js`
+- **Role:** topic precedence (bookmarks → font-size headings → wording → pages), grouping of extracts, `topicAt`, wording fallback dropping captions and running headers
+- **Imports (internal):** `test/helpers/annotate.js`, `core/extract.js`, `core/topics.js`
+
+### `test/core/export.test.js`
+- **Role:** `core/export.js` on real extraction output: md/obsidian/plain/html, full vs only modes, YAML frontmatter, all facts in reading order, escaped HTML, loose-mark summary, `extOf`
+- **Imports (internal):** `core/extract.js`, `core/export.js`
+
+### `test/core/library.test.js`
+- **Role:** `core/library.js`: `userDataDir` per platform and `FAELIGHTS_DATA_DIR`, empty library with Inbox, atomic saves, lock waiting / stale lock clearing, `update()` read-modify-write within and across processes, refusing to overwrite an unreadable file, tags / stars / libraries
+- **Imports (internal):** `core/library.js`; spawns `node` children for the cross-process cases
+
+### `test/core/fetch.test.js`
+- **Role:** `core/fetch.js` offline: `nodeGet` against a local `http` server (redirects, cookie carried through a sign-in bounce, 404/403/500, size cap, redirect loop, non-http URL, refused port → `offline`, aborted signal → `cancelled`); `resolver` with a fake transport (arXiv `citation_pdf_url`, DOI → CrossRef `link[]` fallback, `paywalled`, offline stops at once); `lookupMeta` CrossRef / `invalid` / `not-found`
+- **Imports (internal):** `core/fetch.js`
+
+### `test/cli.test.js`
+- **Role:** `cli/faelights.js` run as a child process: `extract` equals `ExportFmt.docText`, json rows equal `Extract.highlights`, html/obsidian/only/`--out`, usage errors exit 2; on a temp `--data-dir`: add/list/libraries/export, re-add rescans, library new/rename/delete, move, tag/untag/tags, star/unstar and filters, info, text (`--pages`, file path), rescan, remove (`--force` for annotated), search (words, notes, topics, md marks), theme (`theme.json`), tour skip/restart (`settings.tour`); `core/meta.js` `readMeta` / `cleanTitle` / `DOI_RE`
+- **Imports (internal):** `test/helpers/pdf.js`, `core/extract.js`, `core/export.js`, `core/meta.js`, `renderer/tour.js`
+- **Change impact:** CLI wording asserted here (messages, `--json` shapes) is a contract for scripts.
+
+### `test/helpers/annotate.js`
+- **Role:** adds markup annotations (`Underline`, `StrikeOut`, `Squiggly`, `Highlight` by `find` text or `rect`) and bookmarks to a PDF in memory with pdf-lib → bytes
+- **Exports:** `annotate(pathOrBytes, {marks, outline})`
+- **Used by:** `test/core/extract.test.js`, `test/core/topics.test.js`
 
 ### `test/fixtures/make-images-pdf.js` · `test/fixtures/images.pdf`
 - **Role:** pdf-lib script (not a test; run `node test/fixtures/make-images-pdf.js`) that writes the image-box fixture deterministically (fixed dates), and the committed output
 
 ### `test/helpers/pdf.js`
-- **Role:** loads a PDF in Node with the pdfjs-dist legacy build (font faces off; hides the optional `canvas` warning while loading)
+- **Role:** loads a PDF in Node through `core/extract.js openPdf` (the same path scripts use)
 - **Exports:** `loadPdf(pathOrBytes)`, `withPdf(file, fn)` (closes the document afterwards), `repoPath(...)`, `pdfjs`
-- **Used by:** `test/core.test.js`, `test/images.test.js`
+- **Used by:** `test/core.test.js`, `test/images.test.js`, `test/core/extract.test.js`, `test/cli.test.js`
 
 ### `test/README.md`
 - **Role:** how to run tests, add a test and update the snapshot.
 
 ## Gotchas
 - The `npm test` glob needs Node 21 or newer. `node --test test/` (a bare directory) does not run the suites on Node 26.
-- `sample.pdf` only covers Highlight marks and font-size headings. Underline/Squiggly/StrikeOut, outline and wording-based topics, and loose marks are untested.
-- No test touches the network; fetch logic in `main.js` (`fetchUrl`, `resolvePdf`) is only covered through its pure helpers.
+- `sample.pdf` only has Highlight marks and font-size headings; other mark types, bookmarks and loose marks are added in memory by `helpers/annotate.js`.
+- No test touches the network: `core/fetch.test.js` uses a local server and fake transports. Electron's `fetchUrl` in `main.js` is untested.

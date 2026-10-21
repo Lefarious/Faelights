@@ -1,24 +1,22 @@
 # Module: renderer-ui
-> Path: renderer/ (app.js, images.js, order.js, exportfmt.js, tour.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: 43721ca · Related features: F-001…F-011, F-013, F-014, F-015, F-016, F-022
+> Path: renderer/ (app.js, images.js, tour.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: 796478d · Related features: F-001…F-011, F-013, F-014, F-015, F-016, F-022, F-023
 
 ## Purpose
-This is the whole user interface plus the splash page and brand artwork. It holds app state (`S`), renders the three panes (library sidebar, PDF list, extract reader) and the search view, and formats exports. It drives PDF import, rescan and analysis by combining `window.fl` (OS access) with `analyzePdf` (extraction). It does not touch the filesystem directly.
+This is the whole user interface plus the splash page and brand artwork. It holds app state (`S`), renders the three panes (library sidebar, PDF list, extract reader) and the search view, and drives exports. It drives PDF import, rescan and analysis by combining `window.fl` (OS access) with core (`Extract.analyzePdf`, `Meta.readMeta`, `Order`, `ExportFmt`, `Library` pure ops), loaded as globals from `../core/*.js`. It does not touch the filesystem directly.
 
 ## Public interface
 None. This is the top of the stack. It reacts to DOM events, `fl.onMenu` (including `pane:side|list|rail`, `layout-reset`, `add-id` and `tour`), `fl.onOpenFiles` and `fl.onFetchProgress`.
 
 ## Dependencies
-- **Uses:** preload-bridge (`fl.*`), extraction-core (`analyzePdf`, `result.images`), annotator (`Annot.open/close/mount/key/isOpen/docId`), pdfjs-dist (`pdfjsLib` global, worker at `../node_modules/pdfjs-dist/build/pdf.worker.min.js`), @fontsource (Figtree, Newsreader, Young Serif through CSS `@import`)
-- **Used by:** `main.js` loads `splash.html` and `assets/brand/app-icon.ico` (Windows) / `app-icon.png`; annotator calls back into `rescan`, `renderAll`, `renderReader`, `save`, `S` and the DOM helpers (`el`, `svg`, `btn`, `toast`, `copyText`, `plural`, `safeName`)
+- **Uses:** preload-bridge (`fl.*`), core (`Extract.analyzePdf` / `ANALYZER_VERSION`, `result.images`, `Meta.readMeta` / `cleanTitle`, `Order.*` incl. `summary`, `ExportFmt.*`, `Library.addLibrary` / `removeLibrary` / `renameLibrary` / `moveDoc` / tags / stars / `entryMatches`), annotator (`Annot.open/close/mount/key/isOpen/docId`), pdfjs-dist (`pdfjsLib` global, worker at `../node_modules/pdfjs-dist/build/pdf.worker.min.js`), @fontsource (Figtree, Newsreader, Young Serif through CSS `@import`)
+- **Used by:** `main.js` loads `splash.html` and `assets/brand/app-icon.ico` (Windows) / `app-icon.png`; `cli/faelights.js` requires `tour.js` (`NAMES`, `CHAPTERS`, `pending`, `skipAll`); annotator calls back into `rescan`, `renderAll`, `renderReader`, `save`, `S` and the DOM helpers (`el`, `svg`, `btn`, `toast`, `copyText`, `plural`, `safeName`)
 
 ## Internal structure
 ```mermaid
 graph TD
-  html[index.html] --> pdfjs[pdf.min.js] --> pdflib[pdf-lib.min.js] --> core[core.js] --> annot[annotator.js] --> imgs[images.js] --> order[order.js] --> efmt[exportfmt.js] --> tour[tour.js] --> app[app.js]
+  html[index.html] --> pdfjs[pdf.min.js] --> pdflib[pdf-lib.min.js] --> core["core/*.js (topics, extract, meta, order, export, library)"] --> annot[annotator.js] --> imgs[images.js] --> tour[tour.js] --> app[app.js]
   app -->|Images.crop / png| imgs
-  app -->|Order.withImages / groupItems / filterImages| order
-  app -->|ExportFmt.docText / docHtml / imageLines| efmt
-  efmt -->|Order.withImages| order
+  app -->|Extract, Meta, Order, ExportFmt, Library globals| core
   app -->|Tour.start / pending / markShown / skipAll / ready| tour
   tour -.->|querySelector on data-tour hooks + classes| app
   html --> css[styles.css]
@@ -30,13 +28,13 @@ graph TD
 
 `app.js` sections:
 - **state:** `S`, `save()`, lookups `doc()` / `lib()`, `PRE_TOPIC`, `outdated(d)`, `THEMES`, `brandImg(name, cls)`
-- **analysis:** `cleanTitle`, `DOI_RE`, `ARXIV_RE`, `pdfDate`, `readMeta(pdf)` (XMP dc/prism → Info dict → DOI/arXiv regex on page 1), `analyzeBytes` (returns `{title, meta, result}`), `loadMeta(d)` (lazy metadata for older docs), online details `LOOKUP_SOURCE`, `metaOf(d)` (`d.meta` overlaid with `d.lookup.meta`), `lookupQuery(d)` (`{doi, arxiv, origin}` or `null`), `lookUp(d, quiet)` (offline → fails at once; `lookUp.busy` guard; `fl.lookupMeta` → `d.lookup`; sets `d.title` only when the PDF had no title and `!d.titleEdited`), `summary`, `addImported(info, target, opts)` (analyses an already-imported PDF and pushes the doc; `opts.origin`, `opts.title` fallback, `opts.sample`), `addPaths` (disk files → `fl.importPdf` → `addImported`), `rescan`, `rescanAll`
+- **analysis:** `cleanTitle` / `readMeta` (aliases of `Meta.*`), `analyzeBytes` (returns `{title, meta, result}`), `loadMeta(d)` (lazy metadata for older docs), online details `LOOKUP_SOURCE`, `metaOf(d)` (`d.meta` overlaid with `d.lookup.meta`), `lookupQuery(d)` (`{doi, arxiv, origin}` or `null`), `lookUp(d, quiet)` (offline → fails at once; `lookUp.busy` guard; `fl.lookupMeta` → `d.lookup`; sets `d.title` only when the PDF had no title and `!d.titleEdited`), `summary` (alias of `Order.summary`), `addImported(info, target, opts)` (analyses an already-imported PDF and pushes the doc; `opts.origin`, `opts.title` fallback, `opts.sample`), `addPaths` (disk files → `fl.importPdf` → `addImported`), `rescan`, `rescanAll`
 - **libraries:** `newLibrary`, `deleteLibrary`, `libraryMenu(id, at?, opts?)`
 - **action menu:** `openMenu(at, items, opts)` → Promise of the chosen id or `null` (themed `.amenu` popover; `at` = element (opens below) or `{x,y}`; items `{id,label,icon,hint,danger,disabled,checked,submenu}`, separators and headings; keyboard, type-ahead, submenus, ARIA `menu`/`menuitem(checkbox)`), `closeMenu()`, `MENU` (open menu or `null`), `kbdNav`, `keyHint(k, shift)`, `moreBtn(label)` (⋯ trigger), `menuKey(e, open)` (Shift+F10 / ContextMenu)
 - **doc actions:** `removeDoc`, `setMine(d, on)`, `docMenu(d, at?, opts?)` (themed menu with icons; adds Mark as my publication / Remove from My publications, Annotate, Save PDF copy / Save annotated PDF, Discard annotations made here), `moveDoc`, `annotate(d, page?)`, `savePdfCopy(d)`, `useOriginal(d)`, `relink`
 - **export:** aliases `wrapHl` / `entryLines` / `groupsOf` → `ExportFmt.*`, `exportOpts(d)`, `docText(d, fmt, frontmatter, entries?, images?)`, `docHtml(d, images)`, `safeName`, `exportFileBase`, `exportImageList(d)`, `exportWithImages(d)` (`settings.images` and the doc has images), `exportImages(d, fmt, dir, tick)` (renders crops via `Images.png`/`crop`; html → data URLs, else assets; a failed crop → placeholder ref), `exportProgress(total)` (toast "Preparing images… k/n"), `exportDoc(d, fmt?)` (no images and not html → `fl.exportFile`; else `fl.exportBundle`), `exportMenu(d, at)` (Export as Markdown/Obsidian/HTML/Plain text + "Include images" check item), `exportLibrary(id)` (`fl.exportFolder` with `assets`)
 - **layout:** `PANES` (min/max/default widths), `STRIP`, `READER_MIN`, `layout()` (normalises `settings.layout` in place), `applyLayout()`, `togglePane(k, open?)`, `resetLayout()`, `paneBtn(k)`, `strip(k, label?)`, `resizer(k)`, `syncResizer(h)`, `resizerKey(e, h)`, window `pointerdown`/`dblclick`/`resize` listeners
-- **render:** `renderSide`/`themeSwitch`/`navItem`/`go`, `renderList` (header `.head-acts`: Add PDFs, add-by-link, hide pane)/`renderDocs`/`visibleDocs`/`renderProgress`, `openDoc`, `renderReader`/`infoEl`/`infoRows`/`fmtDate`/`quoteEl`/`markEl`/`appendHits`/`TOPIC_SOURCE`/`filtered`/`filteredImages`/`withImages`/`spanCount`/`figureEl(d, img)` (Copy button + right-click menu: Copy image / Show page)/`copyImage(d, img)` (`Images.png` → `fl.copyImage`)/`IMG_ICON`/`renderBlank`, `renderSearch`/`renderResults`, `renderAll`
+- **render:** `renderSide`/`themeSwitch`/`navItem`/`go`, `renderList` (header `.head-acts`: Add PDFs, add-by-link, hide pane)/`renderDocs`/`visibleDocs`/`renderProgress`, `openDoc`, `renderReader`/`infoEl`/`infoRows`/`fmtDate`/`quoteEl`/`markEl`/`appendHits`/`TOPIC_SOURCE`/`filtered`/`filteredImages`/`withImages`/`spanCount`/`figureEl(d, img)` (Copy button + right-click menu: Copy image / Show page)/`copyImage(d, img)` (`Images.png` → `fl.copyImage`)/`IMG_ICON`/`renderBlank`, `renderSearch`/`renderResults` (matches via `Library.entryMatches`), `renderAll`
 - **add by identifier:** `addIdBtn(compact)`, `openAddId(prefill?)` (dialog with an auto-growing `<textarea>`; Enter submits, Shift+Enter adds a line; prefills from the clipboard when `looksLikeIds`), `closeAddId`, `addIdHint` (`fl.parseIds` → one label, or "N recognised · M not recognised"; Offline pill), `addIdBusy`, `addIdFail(reason, landingUrl)`, `addIdActs`, `ADD_OPEN` / `ADD_FAIL` (incl. `no-free-copy`), `submitAddId` (one item → the single flow; several → `addIdBatch(D)`: one `fl.fetchPdf` at a time, a status row per item via `addIdRow`, `stopAddBatch` / `addIdCancelLabel` for Cancel), `looksLikeIds(items)` (at least half recognised), `fl.onFetchProgress` handler
 - **guided tour:** `startTour(name)` (passes `Tour.pending` steps; `onShow` → `Tour.markShown` + `save()`; Skip → `Tour.skipAll`; finishing the app chapter → `tourSoon()`), `maybeTour()` (no tour while the add dialog, an action menu or title editing is open; picks app → viewer (if `Annot.isOpen()`) → reader by `Tour.ready(Tour.pending(…))`), `tourSoon()` (500 ms debounce; called at the end of `renderReader` and from `annotate`). `data-tour` hooks: `add`, `add-id`, `search`, `all`, `starred`, `mine` (via `navItem({tour})`), `libraries` (h3 + ul), `foot`, `pane` (sidebar `paneBtn`), `list-tools`, `start` (`.list-empty` of an empty library and the `renderBlank` button row), `view`, `copy`, `export`
 - **input:** `chooseAndAdd`, `addSample`, window drag/drop (a dropped `text/uri-list` opens the add-by-identifier dialog with all its lines), `paste` (parseable text outside inputs opens it), keydown, `fl.onMenu` (`tour` → clears `settings.tour`, `startTour("app")`), `fl.onOpenFiles`, `fl.onTheme`, `boot()` (ends with `fl.ready()`, then `maybeTour` after 900 ms); the `paste` handler ignores pastes while the tour is open
@@ -54,10 +52,10 @@ graph TD
 ### `renderer/app.js`
 - **Role:** UI controller and view layer
 - **Exports:** none (browser script; all functions are globals in the page)
-- **Imports (internal):** globals `fl` (preload), `analyzePdf` + `ANALYZER_VERSION` (core.js), `Images` (images.js), `Order` (order.js), `ExportFmt` (exportfmt.js), `Tour` (tour.js), `pdfjsLib`
+- **Imports (internal):** globals `fl` (preload), `Extract`, `Meta`, `Order`, `ExportFmt`, `Library` (core/), `Images` (images.js), `Tour` (tour.js), `pdfjsLib`
 - **Used by:** `index.html`
 - **Side effects:** every persistence and OS call goes through `fl.*`. It sets `pdfjsLib.GlobalWorkerOptions.workerSrc`, and registers window `dragenter/dragleave/dragover/drop/keydown/pointerdown/dblclick/resize` listeners. `boot()` appends the sidebar and list `.resizer` handles to `#app`; `renderReader` adds the rail one.
-- **Change impact:** export output format (`ExportFmt.docText`, `entryLines`) is what users paste into Notion and Obsidian. `ckey()` colour bucketing (rounded to multiples of 24) drives both list swatches and reader colour filters. DB field renames need a migration in `main.js loadDb`.
+- **Change impact:** export output format (`ExportFmt.docText`, `entryLines`) is what users paste into Notion and Obsidian. Doc records it builds in `addImported` / `rescan` must match the ones `cli/faelights.js add` / `rescan` build. `ckey()` colour bucketing (rounded to multiples of 24) drives both list swatches and reader colour filters. DB field renames need a migration in `main.js loadDb`.
 
 ### `renderer/images.js`
 - **Role:** cuts an image box (`result.images[i]`) out of the stored PDF as a PNG. Global `Images`.
@@ -67,31 +65,18 @@ graph TD
 - **Side effects:** keeps one pdf.js document per doc open (closed after 30 s idle); renders one crop at a time (serial queue); caches crops by `docId|hash:annotatedAt:scannedMtime|img.id|page|rect|scale`. Renders with `AnnotationMode.DISABLE`, so neither the box outline nor highlights end up in the picture; caps a crop at 2400 px.
 - **Change impact:** the doc-version part of the cache key must change whenever the stored copy changes, or stale crops show.
 
-### `renderer/order.js`
-- **Role:** pure ordering of extracts and images (no DOM). Global `Order`; `module.exports` for tests.
-- **Exports:** `ckey(color)` (copy of app.js `ckey`), `imagesOf(result)` (`[]` when missing), `filterImages(images, offSet)`, `withImages(entries, images)` → `[{kind:"entry", entry, topic} | {kind:"image", image, topic}]` (image before entry when `img.at <= e.at`), `groupItems(items)` → `[{key, topic, items, entries, images}]` (same keys as `groupsOf`)
-- **Used by:** `app.js renderReader` (via `withImages` / `filteredImages`), `exportfmt.js exportItems`, `test/reader-images.test.js`
-- **Change impact:** the placement rule here is the single source of truth for the reader and exports.
-
-### `renderer/exportfmt.js`
-- **Role:** pure export formatting (no DOM, no IPC). Global `ExportFmt`; `module.exports` for tests.
-- **Exports:** `PRE_TOPIC`, `FORMATS`, `extOf(fmt)`, `wrapHl`, `entryLines`, `groupsOf` (groups any item by `.topic`), `exportItems(entries, images)` (entries + images tagged `kind:"image"`, via `Order.withImages`), `isImage`, `imageFile(img)` (`p<page>-<n>.png`), `mdLink(path)`, `imageLines(ref, fmt)` (md `- ![…](…)`, obsidian `- ![[…]]`, plain `- [Image p. N: …]`, the copy placeholder `[Image, p. N]`, the failed-crop line), `docText(d, fmt, frontmatter, entries, opts)`, `esc`, `docHtml(d, opts)` (self-contained HTML; images as `data:` URIs only)
-- **Imports (internal):** `Order` (global, or `require("./order.js")` in Node)
-- **Used by:** `app.js` export section, `test/export.test.js`
-- **Change impact:** with no images, md/obsidian/plain output must stay byte-identical to the output before F-016 (tested).
-
 ### `renderer/tour.js`
 - **Role:** first-run guided tour: step data per chapter plus the overlay that spotlights each step's target. Global `Tour`; `module.exports` for tests (the step data and helpers load in Node; the overlay needs a DOM).
 - **Exports:** `CHAPTERS` (`app`, `reader`, `viewer`: `[{id, sel?, first?, title, body, keys?}]`; `id` = slugged title; no `sel` = centred card; `first` = spotlight only the first match), `NAMES`, `pending(settings, ch)`, `seen(settings, ch)`, `markShown(settings, ch, step)`, `skipAll(settings)`, `ready(steps, hasFn?)` (some step's target is on screen), `nextIndex(steps, from, dir, has)`, `progress(steps, i, has)`, `start(name, {steps, onShow, onEnd, extra})`, `end(skipped, quiet)`, `isOpen()`, `chapter()`
 - **Imports (internal):** none. At runtime it reads the DOM by selector: `[data-tour=…]` hooks set in `app.js`/`annotator.js`, and classes/ids `#docs`, `.doc-row`, `.r-title`, `.r-meta`, `.info-btn`, `.r-tools .seg`, `.img-btn`, `#fmt`, `.rail .chips`, `.rail .toc`, `.r-main .ex`, `.copy1`, `.pv-seg`, `.pv-swatches`, `.pv-page-box`, `.pv-zoom`
-- **Used by:** `app.js` guided-tour section, `test/tour.test.js`
+- **Used by:** `app.js` guided-tour section, `cli/faelights.js tour` (pure helpers), `test/tour.test.js`, `test/cli.test.js`
 - **Side effects:** while open, appends `.tour-shield` (eats clicks), `.tour-back` (dim layer, `clip-path` hole over the target), `.tour-ring` and `.tour-pop` (role `dialog`) to `<body>`; a capture-phase window `keydown` listener that stops every key reaching the page (←/→/Enter/Esc/Tab handled); re-places every 250 ms and on resize; moves on when the target disappears; adds `.tour-target` to spotlit elements (shows the hover-only `.copy1`). Restores focus on end.
 - **Change impact:** renaming a class or `data-tour` hook it targets silently skips that step (guarded by `test/tour.test.js`). Rewording a step title changes its id, so that step shows again for users who saw it.
 
 ### `renderer/index.html`
 - **Role:** page shell with three mount points `#side`, `#list`, `#reader`, plus `#drop` overlay (with the mote `<picture>`) and `#toast`. It links the light/dark favicons.
 - **Side effects:** CSP `default-src 'self'; script-src 'self'; worker-src 'self' blob:` and others. No inline scripts are allowed.
-- **Change impact:** script order matters: `pdf.min.js` → `pdf-lib.min.js` → `core.js` → `annotator.js` → `images.js` → `order.js` → `exportfmt.js` → `tour.js` → `app.js` (`exportfmt.js` needs `Order`). `annotator.js` must come before `app.js` because `boot()` can resume between scripts.
+- **Change impact:** script order matters: `pdf.min.js` → `pdf-lib.min.js` → `../core/topics.js` → `../core/extract.js` → `../core/meta.js` → `../core/order.js` → `../core/export.js` → `../core/library.js` → `annotator.js` → `images.js` → `tour.js` → `app.js` (`extract.js` needs `Topics`, `export.js` needs `Order`). `annotator.js` must come before `app.js` because `boot()` can resume between scripts.
 
 ### `renderer/styles.css`
 - **Role:** all styling. Design tokens on `:root` with a dark override, the three-column grid `.app` sized by `--side-w`/`--list-w` (`.wide` hides the list during search), column handles `.resizer`, collapsed `.strip`s and `*-closed` classes, `.pane-btn`, the reader split `.r-body` → `.rail-pane` + `.r-main` (each scrolls on its own; rail hidden by a `@container` query under 600 px), global `::-webkit-scrollbar` styling, and component classes used by `app.js` (`.amenu*` action menu, `.row-more` ⋯ triggers, `.doc-row` card wrapper, the add-by-identifier dialog block (`.addid*`, incl. the batch status rows), the guided tour block (`.tour-shield`, `.tour-back`, `.tour-ring`, `.tour-pop`, `.tour-step`, `.tour-acts`, `.copy1.tour-target`), `.nav`, `.doc`, `.r-head`, `.group`, `.ex`, `mark.u`/`mark.s`, `.chip`, `.info`/`.info-grid`/`.info-btn`, `.s-hit`, `.toast`, `.drop`…), and the annotator's `.pv*` classes plus a trimmed copy of pdf.js's `.textLayer` rules. `.pg` is now a `button` (page number opens the viewer)
