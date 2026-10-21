@@ -384,14 +384,19 @@ function menuKey(e, open) {
 }
 
 /* ---------------- doc actions ---------------- */
-async function removeDoc(d) {
-  const ok = await fl.confirm(`Remove “${d.title}” from Faelights?`, "Its highlights and the library's copy are removed. Your original PDF is not touched.", "Remove");
+const removeDoc = d => removeDocs([d]);
+// one confirm for the whole set
+async function removeDocs(ds) {
+  const n = ds.length; if (!n) return;
+  const ok = await (n === 1 ? fl.confirm(`Remove “${ds[0].title}” from Faelights?`, "Its highlights and the library's copy are removed. Your original PDF is not touched.", "Remove")
+    : fl.confirm(`Remove ${n} PDFs from Faelights?`, "Their highlights and the library's copies are removed. Your original PDFs are not touched.", `Remove ${n} PDFs`));
   if (!ok) return;
-  if (Annot.docId() === d.id) await Annot.close({ discard: true });
-  await fl.removeStored(d.storedPath);
-  Images.forget(d.id);
-  S.db.docs = S.db.docs.filter(x => x.id !== d.id);
-  if (S.docId === d.id) S.docId = null;
+  const gone = new Set(ds.map(d => d.id));
+  if (gone.has(Annot.docId())) await Annot.close({ discard: true });
+  for (const d of ds) { await fl.removeStored(d.storedPath); Images.forget(d.id); }
+  S.db.docs = S.db.docs.filter(x => !gone.has(x.id));
+  if (gone.has(S.docId)) S.docId = null;
+  SEL.ids = new Set();
   save(); renderAll();
 }
 // at / opts: see openMenu(); with no anchor it opens below the focused element (the reader's ⋯ button)
@@ -453,6 +458,92 @@ function moveDoc(d, libId) {
   save();
   toast(`Moved to ${lib(libId).name}`);
   renderAll();
+}
+
+/* ---------------- multi-select (T-021) ---------------- */
+// SEL.ids: PDFs picked with Ctrl/⌘- or Shift-click (empty = just the reader's PDF); anchor = last clicked
+const SEL = { ids: new Set(), anchor: null };
+const selDocs = () => visibleDocs().filter(d => SEL.ids.has(d.id));
+const multi = () => SEL.ids.size > 1;
+const inSel = d => multi() && SEL.ids.has(d.id);
+function setSel(ids) { SEL.ids = new Set(ids); renderDocs(); }
+function clickDoc(e, id) {
+  const mac = process_platform() === "darwin";
+  const r = Select.click({ sel: SEL.ids, anchor: SEL.anchor }, visibleDocs().map(d => d.id), id, { toggle: mac ? e.metaKey : e.ctrlKey, range: e.shiftKey }, S.docId);
+  SEL.ids = r.sel; SEL.anchor = r.anchor;
+  if (r.open) return openDoc(id);
+  renderDocs(); $("docs").querySelector(`[data-id="${CSS.escape(id)}"] .doc`)?.focus();
+}
+// apply f to every PDF, then one save, render and toast
+function bulk(ds, f, msg, none = "Nothing to change") { const n = ds.filter(f).length; save(); renderAll(); toast(n ? msg(n) : none); }
+function moveDocs(ds, libId) {
+  const name = lib(libId).name; SEL.ids = new Set();
+  bulk(ds, d => Library.moveDoc(d, libId), n => `Moved ${plural(n, "PDF")} to ${name}`, "Already in " + name);
+}
+// one-line dialog for a new tag name → the name, or null
+let PROMPT = null;
+function askTag(n) {
+  return new Promise(res => {
+    const back = el("div", "addid-back"), box = el("div", "addid tag-ask"), opener = document.activeElement;
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "tag-ask-h");
+    const h = el("h2", null, "Tag " + plural(n, "PDF")); h.id = "tag-ask-h";
+    const inp = el("input", "search"); inp.placeholder = "Tag name"; inp.setAttribute("aria-label", "Tag name"); inp.spellcheck = false;
+    const row = el("div", "addid-row"), no = btn("", "Cancel"), ok = btn("primary", "Add tag");
+    const done = v => { if (PROMPT !== box) return; PROMPT = null; back.remove(); if (opener?.isConnected) opener.focus(); res(v); };
+    no.onclick = () => done(null); ok.onclick = () => done(inp.value);
+    box.onkeydown = e => {
+      if (e.key === "Escape") { e.preventDefault(); done(null); }
+      else if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); done(inp.value); }
+      else if (e.key === "Tab") { const f = [inp, no, ok], i = f.indexOf(document.activeElement); e.preventDefault(); f[(i + (e.shiftKey ? 2 : 1)) % 3].focus(); }
+    };
+    back.onmousedown = e => { if (e.target === back) done(null); };
+    row.append(no, ok); box.append(h, inp, row); back.append(box); document.body.append(back);
+    PROMPT = box; inp.focus();
+  });
+}
+async function tagDocs(ds, tag, on) {
+  if (tag == null) { tag = Library.cleanTag(await askTag(ds.length)); if (!tag) return; }
+  bulk(ds, d => on ? Library.addTag(d, tag) : Library.removeTag(d, tag), n => `${on ? "Tagged" : "Untagged"} ${plural(n, "PDF")} · #${tag}`);
+}
+// the selection's menu (right-click / ⋯ on a selected row, the bar's Actions button)
+async function bulkMenu(at, opts) {
+  const ds = selDocs(), n = ds.length; if (!n) return;
+  const all = f => ds.every(f), hasTag = t => d => (d.tags || []).includes(t);
+  const tags = [...Library.tagCounts(S.db).keys()].sort((a, b) => a.localeCompare(b));
+  const add = tags.filter(t => !all(hasTag(t))).map(t => ({ id: "tag+:" + t, label: t }));
+  const rem = tags.filter(t => ds.some(hasTag(t))).map(t => ({ id: "tag-:" + t, label: t }));
+  const star = !all(d => d.starred), mine = !all(d => d.mine), read = !all(d => d.read);
+  const items = [
+    { type: "heading", label: n + " selected" },
+    { id: "star", label: star ? "Star" : "Remove star", icon: "star" },
+    { id: "mine", label: mine ? "Mark as my publications" : "Remove from My publications", icon: "pub" },
+    { id: "read", label: read ? "Mark as read" : "Mark as unread", icon: "read" },
+    { label: "Move to", icon: "move", submenu: S.db.libraries.map(l => ({ id: "move:" + l.id, label: l.name, checked: all(d => d.libraryId === l.id) })) },
+    { label: "Add tag", icon: "plus", submenu: [...add, ...(add.length ? [{ type: "separator" }] : []), { id: "tag+", label: "New tag…" }] },
+    ...(rem.length ? [{ label: "Remove tag", icon: "undo", submenu: rem }] : []),
+    { type: "separator" },
+    { id: "clear", label: "Clear selection", hint: "Esc" },
+    { id: "remove", label: `Remove ${n} PDFs from Faelights…`, icon: "trash", danger: true, hint: "Del" }
+  ];
+  const r = await openMenu(at || document.activeElement, items, { label: n + " PDFs selected", ...opts });
+  if (!r) return;
+  if (r === "star") bulk(ds, d => !!d.starred !== star && Library.setStar(d, star) === star, k => (star ? "Starred " : "Removed star from ") + plural(k, "PDF"));
+  if (r === "mine") bulk(ds, d => !!d.mine !== mine && (d.mine = mine, true), k => (mine ? "Added " : "Removed ") + plural(k, "PDF") + (mine ? " to" : " from") + " My publications");
+  if (r === "read") bulk(ds, d => !!d.read !== read && Library.setRead(d, read) === read, k => `Marked ${plural(k, "PDF")} as ${read ? "read" : "unread"}`);
+  if (r.startsWith("move:")) moveDocs(ds, r.slice(5));
+  if (r === "tag+") tagDocs(ds, null, true);
+  if (r.startsWith("tag+:")) tagDocs(ds, r.slice(5), true);
+  if (r.startsWith("tag-:")) tagDocs(ds, r.slice(5), false);
+  if (r === "clear") setSel([]);
+  if (r === "remove") removeDocs(ds);
+}
+// "3 selected · Actions · Clear" above the list while 2+ PDFs are selected
+function renderSelBar() {
+  const bar = $("selbar"); if (!bar) return;
+  bar.hidden = !multi(); bar.replaceChildren(); if (bar.hidden) return;
+  const acts = btn("", "Actions"); acts.onclick = () => bulkMenu(acts);
+  const x = btn("", "Clear"); x.title = "Clear selection (Esc)"; x.onclick = () => setSel([]);
+  bar.append(el("span", "sel-n", SEL.ids.size + " selected"), acts, x);
 }
 function annotate(d, page) {
   if (S.docId !== d.id) { S.docId = d.id; S.off = new Set(); renderAll(); }
@@ -707,7 +798,7 @@ function renderSide() {
   const starred = S.db.docs.filter(d => d.starred).length;
   top.append(navItem({ icon: svg(ICON.star), name: "Starred", count: starred, current: S.view.kind === "starred", tour: "starred", onClick: () => go({ kind: "starred" }) }));
   top.append(navItem({ icon: svg(ICON.pub), name: "My publications", count: S.db.docs.filter(d => d.mine).length, current: S.view.kind === "mine", onClick: () => go({ kind: "mine" }), tour: "mine",
-    onDrop: e => { const d = doc(e.dataTransfer.getData("application/x-faelights-doc")); if (d) setMine(d, true); } }));
+    onDrop: e => { const d = doc(e.dataTransfer.getData("application/x-faelights-doc")); if (d && inSel(d)) bulk(selDocs(), x => !x.mine && (x.mine = true), n => `Added ${plural(n, "PDF")} to My publications`); else if (d) setMine(d, true); } }));
   sc.append(top);
 
   const h = el("h3"); h.dataset.tour = "libraries"; h.append(el("span", null, "Libraries"));
@@ -725,7 +816,7 @@ function renderSide() {
       onMenu: (at, o) => libraryMenu(l.id, at, o),
       onDrop: e => {
         const did = e.dataTransfer.getData("application/x-faelights-doc");
-        if (did) { const d = doc(did); if (d) moveDoc(d, l.id); }
+        if (did) { const d = doc(did); if (d && inSel(d)) moveDocs(selDocs(), l.id); else if (d) moveDoc(d, l.id); }
         else if (e.dataTransfer.files.length) addPaths([...e.dataTransfer.files].map(f => fl.pathFor(f)), { libraryId: l.id });
       }
     }));
@@ -778,7 +869,7 @@ function go(view) {
     const sc = entering ? entryScope(S.view, view.scope, S.searchPicked) : view.scope;
     if (sc) S.searchLib = sc;
   }
-  S.view = view; S.renaming = null;
+  S.view = view; S.renaming = null; SEL.ids = new Set();
   if (view.kind !== "search") {
     const docs = visibleDocs();
     if (!docs.some(d => d.id === S.docId)) { S.docId = docs[0] ? docs[0].id : null; S.off = new Set(); }
@@ -845,12 +936,15 @@ function renderList() {
   if (S.busy) {
     const p = el("div", "progress"); p.id = "progress"; p.append(el("span")); const m = el("div", "meter"); m.append(el("i")); p.append(m); list.append(p); renderProgress();
   }
-  const docs = el("div", "docs"); docs.id = "docs"; list.append(docs, strip("list", viewTitle()));
+  const bar = el("div", "sel-bar"); bar.id = "selbar"; bar.hidden = true; bar.setAttribute("role", "toolbar"); bar.setAttribute("aria-label", "Selected PDFs");
+  const docs = el("div", "docs"); docs.id = "docs"; list.append(bar, docs, strip("list", viewTitle()));
+  docs.setAttribute("role", "listbox"); docs.setAttribute("aria-multiselectable", "true"); docs.setAttribute("aria-label", "PDFs");
   renderDocs();
 }
 function renderDocs() {
   const box = $("docs"); if (!box) return; box.replaceChildren();
   const docs = visibleDocs();
+  SEL.ids = Select.prune(SEL.ids, docs.map(d => d.id)); renderSelBar();
   if (!docs.length) {
     const e = el("div", "list-empty");
     if (S.docQuery) e.append(el("b", null, "No matches"), el("span", null, "No PDF titles or tags here contain that text."));
@@ -871,8 +965,11 @@ function renderDocs() {
   }
   for (const d of docs) {
     // wrapper holds the card button and its ⋯ sibling (buttons can't nest)
-    const row = el("div", "doc-row" + (d.id === S.docId ? " is-current" : "") + (d.read ? " is-read" : ""));
+    const picked = SEL.ids.size ? SEL.ids.has(d.id) : d.id === S.docId;
+    const row = el("div", "doc-row" + (d.id === S.docId ? " is-current" : "") + (d.read ? " is-read" : "") + (SEL.ids.has(d.id) ? " is-selected" : ""));
+    row.dataset.id = d.id; row.setAttribute("role", "none");
     const b = el("button", "doc"); b.setAttribute("aria-current", d.id === S.docId); b.draggable = true;
+    b.setAttribute("role", "option"); b.setAttribute("aria-selected", picked);
     const t = el("div", "t"); t.append(el("span", null, d.title)); if (d.starred) { const s = svg(ICON.star); s.classList.add("star"); s.style.width = "13px"; s.setAttribute("fill", "currentColor"); t.append(s); }
     const m = el("div", "m");
     m.append(el("span", null, plural(d.count || 0, "mark")), el("span", null, plural(d.pages || 0, "page")));
@@ -884,11 +981,14 @@ function renderDocs() {
     if (d.read) m.append(el("span", "pill read", "Read"));
     b.append(t, m);
     if (d.tags && d.tags.length) { const tg = el("div", "tags-inline"); for (const x of d.tags) tg.append(tint(el("span", null, x), x)); b.append(tg); }
-    b.onclick = () => openDoc(d.id);
+    b.onclick = e => clickDoc(e, d.id);
+    b.onmousedown = e => { if (e.shiftKey) e.preventDefault(); };   // no text selection on Shift-click
     b.ondragstart = e => { e.dataTransfer.setData("application/x-faelights-doc", d.id); e.dataTransfer.effectAllowed = "move"; };
-    const mb = moreBtn("Actions for " + d.title); mb.onclick = () => docMenu(d, mb);
-    row.oncontextmenu = e => { e.preventDefault(); if (!MENU) docMenu(d, { x: e.clientX, y: e.clientY }, { trigger: b }); };
-    row.onkeydown = e => menuKey(e, () => docMenu(d, mb, { trigger: e.target === mb ? mb : b, keyboard: true }));
+    // a selected row's menu acts on the whole selection
+    const menu = (at, o) => inSel(d) ? bulkMenu(at, o) : docMenu(d, at, o);
+    const mb = moreBtn(inSel(d) ? `Actions for ${SEL.ids.size} selected PDFs` : "Actions for " + d.title); mb.onclick = () => menu(mb);
+    row.oncontextmenu = e => { e.preventDefault(); if (!MENU) menu({ x: e.clientX, y: e.clientY }, { trigger: b }); };
+    row.onkeydown = e => menuKey(e, () => menu(mb, { trigger: e.target === mb ? mb : b, keyboard: true }));
     row.append(b, mb); box.append(row);
   }
 }
@@ -1516,6 +1616,10 @@ addEventListener("paste", e => {
 
 // Ctrl/⌘+F arrives as the "search" menu command (src/main.js accelerator). A press typed in a field,
 // or while the viewer, a dialog or the tour owns keys, is swallowed here and the command ignored.
+// Ctrl/⌘+A belongs to the list when focus is in it, or nothing is focused and the last click was there
+let lastClickInList = false;
+addEventListener("pointerdown", e => { lastClickInList = !!e.target.closest?.("#list"); }, true);
+const listKeys = e => !!e.target.closest?.("#list") || (e.target === document.body && lastClickInList);
 let findBlocked = 0;
 addEventListener("keydown", e => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "f") return;
@@ -1529,11 +1633,24 @@ addEventListener("keydown", e => {
   if (e.target.matches("input, select, textarea")) return;
   if (e.target.matches(".resizer")) return resizerKey(e, e.target);
   if (Annot.key(e)) return;
+  if (PROMPT || MENU || Tour.isOpen()) return;
   const docs = S.view.kind === "search" ? [] : visibleDocs();
   const i = docs.findIndex(d => d.id === S.docId);
-  if ((e.key === "ArrowDown" || e.key === "j") && docs.length) { e.preventDefault(); openDoc(docs[Math.min(docs.length - 1, i + 1)].id); }
-  if ((e.key === "ArrowUp" || e.key === "k") && docs.length) { e.preventDefault(); openDoc(docs[Math.max(0, i - 1)].id); }
-  if (e.key === "Delete" && S.docId && S.view.kind !== "search") removeDoc(doc(S.docId));
+  // Ctrl/⌘+A in the list selects every visible PDF; Esc clears; Shift+↑/↓ extends from the anchor
+  if ((process_platform() === "darwin" ? e.metaKey : e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a" && docs.length && listKeys(e)) {
+    e.preventDefault(); setSel(docs.map(d => d.id)); setTimeout(() => getSelection()?.removeAllRanges(), 0); return;   // Edit › Select All also fires
+  }
+  if (e.key === "Escape" && SEL.ids.size) { e.preventDefault(); return setSel([]); }
+  const step = j => {
+    const t = docs[Math.max(0, Math.min(docs.length - 1, j))].id;
+    if (e.shiftKey) { const a = SEL.anchor && docs.some(d => d.id === SEL.anchor) ? SEL.anchor : S.docId; SEL.anchor = a; SEL.ids = new Set(Select.range(docs.map(d => d.id), a, t)); }
+    else { SEL.ids = new Set(); SEL.anchor = t; }
+    openDoc(t);
+  };
+  if ((e.key === "ArrowDown" || e.key === "j") && docs.length) { e.preventDefault(); step(i + 1); }
+  if ((e.key === "ArrowUp" || e.key === "k") && docs.length) { e.preventDefault(); step(i - 1); }
+  if (e.key === "Delete" && multi() && S.view.kind !== "search") removeDocs(selDocs());
+  else if (e.key === "Delete" && S.docId && S.view.kind !== "search") removeDoc(doc(S.docId));
 });
 
 fl.onMenu(ch => {
