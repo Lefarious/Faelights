@@ -1176,7 +1176,8 @@ function renderReader() {
   const entries = filtered(d);
   // image boxes join the stream only while "With images" is on; clips (highlights over no text) always do
   const showImg = !!S.db.settings.images && allImgs.length > 0;
-  const groups = Order.groupItems(withImages(entries, filteredImages(d)));
+  // the user's notes (T-025) show whatever the colour filter or "With images" say
+  const groups = Order.groupItems(withImages(entries, filteredImages(d), Library.notesOf(d), d.result.entries));
   const colours = new Map();
   for (const e of d.result.entries) for (const s of e.spans) { const k = ckey(s.color); const c = colours.get(k) || { color: s.color, n: 0 }; c.n++; colours.set(k, c); }
   for (const img of Order.figuresOf(d.result, showImg)) { const k = ckey(img.color); const c = colours.get(k) || { color: img.color, n: 0 }; c.n++; colours.set(k, c); }
@@ -1209,6 +1210,9 @@ function renderReader() {
     b.append(el("h2", null, "No highlights in this PDF"), el("p", null, "Faelights reads highlight, underline and strike-through marks saved in the file. If your reader flattened them into the page, or the PDF was exported without annotations, there's nothing to read. Highlight it again and use Rescan."));
     main.append(b);
   }
+  // "Add note" closes each slot: the top of the doc (at -1), and each extract plus the notes after it (at e.at + 0.5)
+  let slot = -1;
+  const flush = sec => { if (slot != null) sec.append(noteAdd(d, slot)); slot = null; };
   groups.forEach((g, gi) => {
     const sec = el("section", "group"); sec.id = "g" + gi;
     const gh = el("div", "group-head");
@@ -1218,8 +1222,10 @@ function renderReader() {
     h.append(el("small", null, !g.images ? plural(n, "extract") : !n ? plural(g.images, "image") : plural(n, "extract") + " · " + plural(g.images, "image")));
     gh.append(h); sec.append(gh);
     for (const it of g.items) {
+      if (it.kind === "note") { if (slot != null && it.note.at > slot) flush(sec); sec.append(noteEl(d, it.note)); continue; }
+      flush(sec);
       if (it.kind === "image") { sec.append(figureEl(d, it.image)); continue; }
-      const e = it.entry;
+      const e = it.entry; slot = e.at + 0.5;
       const row = el("article", "ex"); row.id = "e" + e.n;
       const pg = el("button", "pg", "p. " + e.page); pg.title = "Show page " + e.page + " in the viewer"; pg.onclick = () => annotate(d, e.page);
       row.append(pg, quoteEl(e, S.db.settings.mode, ""));
@@ -1228,6 +1234,7 @@ function renderReader() {
       for (const s of e.spans) if (s.comment && s.comment !== s.text) { const p = el("p", "note"); p.append(el("b", null, "Note"), document.createTextNode(s.comment)); row.append(p); }
       sec.append(row);
     }
+    flush(sec);
     main.append(sec);
   });
   const loose = Order.looseOf(d.result);   // marks with no text and no usable area (clips are in the groups above)
@@ -1261,9 +1268,57 @@ function filtered(d) {
 // Clips, plus captured images while "With images" is on, whose colour isn't hidden (core/order.js)
 const filteredImages = d => Order.filterImages(Order.figuresOf(d.result, !!S.db.settings.images), S.off);
 // entries + images → [{kind: "entry", entry, topic} | {kind: "image", image, topic}] in reading order
-const withImages = (entries, images) => Order.withImages(entries, images);
-// extracts in a group of the combined list (clips count, they are highlights; images don't)
-const spanCount = g => g.items.reduce((n, it) => n + (it.kind === "entry" ? it.entry.spans.length : it.image.clip ? 1 : 0), 0);
+// notes (optional): the user's notes, slotted in by `at`; all: every entry, for a note's topic (core/order.js)
+const withImages = (entries, images, notes, all) => Order.withImages(entries, images, notes, all);
+// extracts in a group of the combined list (clips count, they are highlights; images and notes don't)
+const spanCount = g => g.items.reduce((n, it) => n + (it.kind === "entry" ? it.entry.spans.length : it.kind === "image" && it.image.clip ? 1 : 0), 0);
+/* The user's notes between extracts (T-025): Markdown in d.notes (core/library.js), rendered by core/markdown.js.
+   Edits change the DOM in place (no re-render, so the reader keeps its scroll) and save(). */
+// Under the group's <h3>: "# X" in a note shows as <h4>
+const NOTE_SHIFT = 3;
+function noteEl(d, n) {
+  const box = el("div", "unote" + (Markdown.isHeading(n.text) ? " is-head" : "")); box.dataset.note = n.id;
+  const md = el("div", "unote-md"); md.innerHTML = Markdown.html(n.text, { shift: NOTE_SHIFT });   // escaped by Markdown.html
+  md.title = "Double-click to edit"; md.ondblclick = () => box.replaceWith(noteEditor(d, n));
+  const acts = el("div", "unote-acts");
+  const eb = btn("icon", null, "pen", "Edit note"); eb.onclick = () => box.replaceWith(noteEditor(d, n));
+  const xb = btn("icon", null, "trash", "Delete note");
+  xb.onclick = () => { Library.removeNote(d, n.id); save(); box.remove(); toast("Note deleted"); };
+  acts.append(eb, xb); box.append(md, acts);
+  return box;
+}
+// n: the note to edit, or null for a new one at `at`. Ctrl/⌘+Enter or leaving the box saves, Esc cancels; saved empty = deleted.
+function noteEditor(d, n, at) {
+  const wrap = el("div", "unote editing");
+  const ta = el("textarea"); ta.value = n ? n.text : ""; ta.rows = Math.min(12, Math.max(3, ta.value.split("\n").length + 1));
+  ta.placeholder = "Your note, in Markdown. Start with # for a section heading."; ta.setAttribute("aria-label", n ? "Edit note" : "New note");
+  ta.oninput = () => { ta.rows = Math.min(12, Math.max(3, ta.value.split("\n").length + 1)); };
+  const hint = el("p", "unote-hint", (process_platform() === "darwin" ? "⌘" : "Ctrl") + " Enter to save · Esc to cancel");
+  let done = false;
+  const finish = ok => {
+    if (done) return; done = true;
+    const text = ta.value.replace(/\s+$/, "");
+    if (ok && text.trim()) {
+      if (n) Library.updateNote(d, n.id, text); else n = Library.addNote(d, at, text);
+      save(); return wrap.replaceWith(noteEl(d, n));
+    }
+    if (ok && n) { Library.removeNote(d, n.id); save(); return wrap.remove(); }
+    if (n) wrap.replaceWith(noteEl(d, n)); else wrap.remove();
+  };
+  ta.onkeydown = e => {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+    else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finish(true); }
+  };
+  ta.onblur = () => { if (document.hasFocus()) finish(true); };   // switching to another window keeps the editor open
+  wrap.append(ta, hint); setTimeout(() => ta.focus(), 0);
+  return wrap;
+}
+function noteAdd(d, at) {
+  const b = el("button", "note-add"); b.append(svg(ICON.plus), document.createTextNode("Add note"));
+  b.title = "Add your own note here (Markdown; start with # for a heading)";
+  b.onclick = () => b.before(noteEditor(d, null, at));
+  return b;
+}
 const IMG_ICON = '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>';
 // One captured image or clip (img.clip: a highlight over no text), centred in the reading column;
 // a fixed-aspect placeholder holds its place while it renders

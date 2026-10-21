@@ -1,6 +1,7 @@
 /* Faelights — export formatting (headless core; no DOM, no IPC)
    Builds the text of an export from a doc's result: Markdown (**highlight**), Obsidian (==highlight==), plain text
-   and self-contained HTML, with optional YAML frontmatter and image boxes (extract.js `result.images`) interleaved.
+   and self-contained HTML, with optional YAML frontmatter, image boxes (extract.js `result.images`) and the user's notes
+   (library.js d.notes, Markdown; markdown.js renders them for HTML) interleaved.
    Loaded by a <script> tag in the renderer (global `ExportFmt`, after order.js) and by require() in Node. */
 "use strict";
 
@@ -31,13 +32,26 @@ const ExportFmt = (() => {
      Ordering is shared with the reader (Order.withImages in order.js): an image goes before entry e when img.at <= e.at.
      Export items are the entries themselves plus images tagged kind: "image". */
   const Ord = typeof Order !== "undefined" ? Order : require("./order.js");
-  // Consecutive items (entries and/or images) sharing a topic form one group (exportItems: entries + images tagged kind: "image")
+  const MD = typeof Markdown !== "undefined" ? Markdown : require("./markdown.js");
+  // Consecutive items (entries, images, notes) sharing a topic form one group
+  // (exportItems: entries + images tagged kind: "image" + notes tagged kind: "note" with their topic)
   const groupsOf = Ord.groupItems;
   const isImage = it => !!it && it.kind === "image";
-  function exportItems(entries, images) {
-    if (!images || !images.length) return entries;
-    return Ord.withImages(entries, images).map(x => x.kind === "image" ? (isImage(x.image) ? x.image : { ...x.image, kind: "image" }) : x.entry);
+  const isNote = it => !!it && it.kind === "note";
+  // notes: the user's notes (d.notes); blank ones are left out. all: every entry, for a note's topic when `entries` is filtered.
+  function exportItems(entries, images, notes, all) {
+    notes = (notes || []).filter(n => n && String(n.text || "").trim());
+    if ((!images || !images.length) && !notes.length) return entries;
+    return Ord.withImages(entries, images, notes, all).map(x => x.kind === "image" ? (isImage(x.image) ? x.image : { ...x.image, kind: "image" })
+      : x.kind === "note" ? { ...x.note, kind: "note", topic: x.topic } : x.entry);
   }
+
+  /* ---- notes ----
+     A note sits after the extract it was added after. Its headings go under the topic heading of its group: with the group's
+     deepest topic heading at level h (## = 2), "# X" in a note becomes level h + 1, "## X" h + 2, ... (capped at 6).
+     md/obsidian: the note's own Markdown as a block; plain: its text without Markdown syntax; html: rendered (markdown.js). */
+  const groupLevel = path => Math.min(path.length + 1, 6);
+  const noteLines = (n, fmt, level) => ["", fmt === "plain" ? MD.plain(n.text) : MD.shift(n.text, level), ""];
 
   // Images live in "<file base> images/p<page>-<n>.png" next to the exported file; clips in ".../p<page>-clip<n>.png"
   const imageFile = img => `p${img.page}-${img.clip ? "clip" : ""}${img.n}.png`;
@@ -58,6 +72,8 @@ const ExportFmt = (() => {
     return lines;
   }
 
+  // o.notes: notes to interleave; left out → the doc's own (d.notes)
+  const notesOf = (d, o) => o.notes || d.notes || [];
   // o.images: images and clips to interleave; left out → the result's clips, as text placeholders
   const withClips = (d, o) => o.images ? o : { ...o, images: Ord.clipsOf(d.result) };
   // loose marks with no position: one line naming their pages
@@ -79,7 +95,7 @@ const ExportFmt = (() => {
     }
     out.push(fmt === "plain" ? d.title : `# ${d.title}`, "");
     const done = new Set();
-    for (const g of groupsOf(exportItems(entries, o.images))) {
+    for (const g of groupsOf(exportItems(entries, o.images, notesOf(d, o), d.result.entries))) {
       const path = g.topic ? g.topic.path : [o.preTopic || PRE_TOPIC];
       path.forEach((t, i) => {
         const key = path.slice(0, i + 1).join("\u0001");
@@ -87,7 +103,7 @@ const ExportFmt = (() => {
         done.add(key);
         out.push(fmt === "plain" ? t.toUpperCase() : "#".repeat(Math.min(i + 2, 6)) + " " + t, "");
       });
-      for (const it of g.items) out.push(...(isImage(it) ? imageLines(it, fmt) : entryLines(it, fmt, mode)));
+      for (const it of g.items) out.push(...(isImage(it) ? imageLines(it, fmt) : isNote(it) ? noteLines(it, fmt, groupLevel(path)) : entryLines(it, fmt, mode)));
       out.push("");
     }
     if (looseNote(d)) out.push(looseNote(d));
@@ -133,7 +149,9 @@ h1,h2,h3,h4,h5,h6{line-height:1.25;margin:2rem 0 .75rem}h1{font-size:2rem;margin
 ul{padding-left:1.2rem}li{margin:.6rem 0}li p{margin:0}mark{border-radius:2px;padding:0 .1em;color:inherit}
 .pg,.loose,.missing{color:var(--muted);font-size:.85em}.note{margin:.25rem 0 0;color:var(--muted);font-style:italic}
 figure{margin:1.5rem auto;text-align:center}figure img{max-width:100%;height:auto;border:1px solid var(--rule)}
-figcaption{color:var(--muted);font-size:.85rem;margin-top:.4rem}`;
+figcaption{color:var(--muted);font-size:.85rem;margin-top:.4rem}
+.unote{margin:1rem 0}.unote p{margin:.5rem 0}.unote blockquote{margin:.5rem 0;padding-left:1rem;border-left:3px solid var(--rule);color:var(--muted)}
+.unote code{font-size:.9em;background:var(--rule);border-radius:3px;padding:0 .2em}.unote pre code{display:block;padding:.6rem;overflow:auto}`;
 
   function docHtml(d, o) {
     o = withClips(d, o);
@@ -145,7 +163,7 @@ figcaption{color:var(--muted);font-size:.85rem;margin-top:.4rem}`;
       d.tags && d.tags.length && `Tags: ${d.tags.map(esc).join(", ")}`, `Exported ${esc(o.date || new Date().toISOString().slice(0, 10))}`].filter(Boolean);
     out.push(`<p class="meta">${meta.join(" · ")}</p>`);
     const done = new Set();
-    for (const g of groupsOf(exportItems(entries, o.images))) {
+    for (const g of groupsOf(exportItems(entries, o.images, notesOf(d, o), d.result.entries))) {
       const path = g.topic ? g.topic.path : [o.preTopic || PRE_TOPIC];
       path.forEach((t, i) => {
         const key = path.slice(0, i + 1).join("\u0001");
@@ -156,7 +174,11 @@ figcaption{color:var(--muted);font-size:.85rem;margin-top:.4rem}`;
       });
       let open = false;
       for (const it of g.items) {
-        if (isImage(it)) { if (open) { out.push("</ul>"); open = false; } out.push(figureHtml(it)); continue; }
+        if (isImage(it) || isNote(it)) {
+          if (open) { out.push("</ul>"); open = false; }
+          out.push(isNote(it) ? `<div class="unote">${MD.html(it.text, { shift: groupLevel(path) })}</div>` : figureHtml(it));
+          continue;
+        }
         if (!open) { out.push("<ul>"); open = true; }
         out.push(entryHtml(it, mode));
       }
@@ -176,7 +198,7 @@ figcaption{color:var(--muted);font-size:.85rem;margin-top:.4rem}`;
     return /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(n) ? "_" + n : n;
   };
 
-  return { PRE_TOPIC, FORMATS, extOf, safeName, fileBase, wrapHl, entryLines, groupsOf, exportItems, isImage, imageFile, mdLink, imageLines, docText, esc, docHtml };
+  return { PRE_TOPIC, FORMATS, extOf, safeName, fileBase, wrapHl, entryLines, groupsOf, exportItems, isImage, isNote, noteLines, imageFile, mdLink, imageLines, docText, esc, docHtml };
 })();
 
 if (typeof module !== "undefined") module.exports = ExportFmt;
