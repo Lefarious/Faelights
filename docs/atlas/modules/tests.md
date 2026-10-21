@@ -1,5 +1,5 @@
 # Module: tests
-> Path: test/ · Last synced commit: 9ff7a30 · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024, F-025
+> Path: test/ · Last synced commit: c9791cc · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024, F-025, F-027, F-028
 
 ## Purpose
 Automated checks run with Node's built-in `node:test` and `node:assert`, with no extra dependencies. They cover everything that loads in plain Node: core/ (extraction incl. image boxes, topics, reading order, export formatting, the library store with its lock, identifier parsing, CrossRef/arXiv mapping, paper resolving and the Node transport against a local server), the guided tour's step data (`renderer/tour.js`), export path safety (`src/exportPaths.js`) and the `faelights` CLI as a child process on a temp library. They do not launch Electron or exercise the UI, and nothing touches the network.
@@ -66,7 +66,7 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Imports (internal):** `core/extract.js`, `core/export.js`
 
 ### `test/core/library.test.js`
-- **Role:** `core/library.js`: `userDataDir` per platform and `FAELIGHTS_DATA_DIR`, empty library with Inbox, atomic saves, lock waiting / stale lock clearing, `update()` read-modify-write within and across processes, refusing to overwrite an unreadable file, tags / stars / libraries, read flag, `lastPage`, tag colours, `normalize` filling them on older files
+- **Role:** `core/library.js`: `userDataDir` per platform and `FAELIGHTS_DATA_DIR`, empty library with Inbox, atomic saves, lock waiting / stale lock clearing / `wait: 0` failing at once, the app session marker (own pid, live other pid, dead pid), `update()` read-modify-write within and across processes, refusing to overwrite an unreadable file, tags / stars / libraries, read flag, `lastPage`, tag colours, `normalize` filling them on older files
 - **Imports (internal):** `core/library.js`; spawns `node` children for the cross-process cases
 
 ### `test/core/fetch.test.js`
@@ -77,6 +77,11 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Role:** `cli/faelights.js` run as a child process: `extract` equals `ExportFmt.docText`, json rows equal `Extract.highlights`, html/obsidian/only/`--out`, usage errors exit 2; on a temp `--data-dir`: add/list/libraries/export, re-add rescans, library new/rename/delete, move, tag/untag/tags, star/unstar and filters, info, text (`--pages`, file path), rescan, remove (`--force` for annotated), search (words, notes, topics, md marks), theme (`theme.json`), tour skip/restart (`settings.tour`); `core/meta.js` `readMeta` / `cleanTitle` / `DOI_RE`
 - **Imports (internal):** `test/helpers/pdf.js`, `core/extract.js`, `core/export.js`, `core/meta.js`, `renderer/tour.js`
 - **Change impact:** CLI wording asserted here (messages, `--json` shapes) is a contract for scripts.
+
+### `test/mcp.test.js`
+- **Role:** `mcp/server.js` spawned and driven over stdio by the SDK's `Client` + `StdioClientTransport`, on temp `FAELIGHTS_DATA_DIR`s (filled with the CLI). Covers every read tool on `renderer/sample.pdf` (topics, pages, comments, colour/topic filters, search scopes, export text = `ExportFmt.docText`, `export_library` folder, the `faelights://pdf/{id}` resource), the write tools, and the errors `unknown_pdf`, `file_missing`, `no_text_layer` (blank pdf-lib PDF) and `library_in_use` (a live process's session marker, a held lock; a dead pid's marker is ignored).
+- **Imports (internal):** `test/helpers/pdf.js`, `core/extract.js`, `core/export.js`; `@modelcontextprotocol/sdk` client, `pdf-lib`
+- **Change impact:** tool names, error codes and output shapes asserted here are the MCP contract.
 
 ### `test/helpers/annotate.js`
 - **Role:** adds markup annotations (`Underline`, `StrikeOut`, `Squiggly`, `Highlight` by `find` text or `rect`) and bookmarks to a PDF in memory with pdf-lib → bytes
@@ -103,3 +108,13 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - The `npm test` glob needs Node 21 or newer. `node --test test/` (a bare directory) does not run the suites on Node 26.
 - `sample.pdf` only has Highlight marks and font-size headings; other mark types, bookmarks and loose marks are added in memory by `helpers/annotate.js`.
 - No test touches the network: `core/fetch.test.js` uses a local server and fake transports. Electron's `fetchUrl` in `main.js` is untested.
+
+### `test/core/marks.test.js` · `test/fixtures/make-marks-pdf.js` · `test/fixtures/marks.pdf`
+- **Role:** second fixture (F-028): Underline / StrikeOut / Squiggly, a nested outline, numbered headings at body size (outline stripped in memory → `patterns`), four text-less highlights (two-quad figure, one-quad figure, page 3 with no text layer, all-zero quad). Pins mark types, topics (numbered bookmark titles), clip `rect`/`at`/`topic`/`id`/`n`, the Order clip helpers, and md/obsidian/plain/html clip export lines
+- **Imports (internal):** `core/extract.js`, `core/order.js`, `core/export.js`
+
+### `test/helpers/headedpdf.js`
+- **Role:** `headedPdf(pages)` (a font size per row) and `numberedPdf("none"|"plain"|"numbered")` for section-numbering tests (`test/core/topics.test.js`, `test/core/export.test.js`)
+
+### `test/select.test.js`
+- **Role:** `renderer/select.js`: ranges, plain / Ctrl / Shift / Ctrl+Shift clicks, a vanished anchor, pruning, and the `select.js` script order in `index.html`

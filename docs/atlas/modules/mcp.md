@@ -1,8 +1,8 @@
 # Module: mcp
-> Path: mcp/ · Last synced commit: 2620815 · Related features: T-016 (Compass id assigned at log)
+> Path: mcp/ · Last synced commit: c9791cc · Related features: F-027
 
 ## Purpose
-An MCP server over stdio (`faelights-mcp`) that exposes the desktop app's library to MCP clients (Claude Code, Claude Desktop): list, read extracts grouped by topic, search, export, and three write tools. It imports core/ in-process. It does not render images, download papers or talk to a running app. It only reads the app's session marker to decide whether writing is safe.
+An MCP server over stdio (`faelights-mcp`) that exposes the desktop app's library to MCP clients (Claude Code, Claude Desktop): list, read extracts grouped by topic, search, export, and six write tools (`WRITE_TOOLS`). It imports core/ in-process. It does not render images, download papers or talk to a running app. It only reads the app's session marker to decide whether writing is safe.
 
 ## Public interface
 `node mcp/server.js [--data-dir <dir>]` (`package.json` `bin.faelights-mcp`, `npm run mcp`). Data folder: `--data-dir`, else `FAELIGHTS_DATA_DIR`, else `Library.userDataDir()`.
@@ -19,11 +19,14 @@ An MCP server over stdio (`faelights-mcp`) that exposes the desktop app's librar
 | `add_by_identifier` | `identifier` (DOI, arXiv, PMID, PMCID, ISBN, ADS, link), `library?`, `tags?`, `lookup` | `{action: added\|exists, pdf, origin, details, warnings}`; progress notifications when the request has a `progressToken` | library; network (`openWorldHint`) |
 | `tag_pdf` | `pdf_id`, `tags[]` | `{added, tags, changed}` | library |
 | `star_pdf` | `pdf_id`, `starred` | `{starred, changed}` | library |
+| `mark_read` | `pdf_id`, `read` | `{pdf_id, title, read, changed}` | library |
+| `set_tag_colour` | `tag`, `colour` (`#rgb`\|`#rrggbb`\|null) | `{tag, colour, changed}` | library |
+| `list_tags` | — | `{tags: [{tag, pdfs, colour}]}` | — |
 
-Resource template `faelights://pdf/{id}` (`text/markdown`; list = every doc). Errors come back as `isError` with `{error: {code, message}}`. The codes are `unknown_pdf`, `unknown_library`, `file_missing`, `no_text_layer`, `bad_pdf`, `invalid_input`, `library_in_use` and `internal`. `add_by_identifier` adds `offline`, `paywalled`, `not_pdf`, `not_found`, `no_free_copy`, `too_large` and `network`, which are core/fetch.js `FetchFail` reasons with `-` replaced by `_`. zod rejections arrive as protocol error -32602.
+Resource template `faelights://pdf/{id}` (`text/markdown`; list = every doc). Errors come back as `isError` with `{error: {code, message}}`. The codes are `unknown_pdf`, `unknown_library`, `unknown_tag`, `file_missing`, `no_text_layer`, `bad_pdf`, `invalid_input`, `library_in_use` and `internal`. `add_by_identifier` adds `offline`, `paywalled`, `not_pdf`, `not_found`, `no_free_copy`, `too_large` and `network`, which are core/fetch.js `FetchFail` reasons with `-` replaced by `_`. zod rejections arrive as protocol error -32602.
 
 ## Dependencies
-- **Uses:** core `library.js` (`at`, `userDataDir`, `findDoc`/`findLibrary`/`docsIn`, `cleanTag`/`addTag`/`setStar`, `searchTerms`/`entryMatches`, store `loadDb`/`update(fn, {wait: 0})`/`checkSources`/`readPdf`/`importPdf`/`removeStored`/`appSession`), `extract.js` (`ANALYZER_VERSION`), `order.js` (`summary`), `export.js` (`docText`, `groupsOf`, `fileBase`, `extOf`), `identify.js` (`parseIdentifier`, `fileNameFor`), `fetch.js` (`nodeGet` with `onProgress`, `resolver`, `FetchFail`); main-process `src/exportPaths.js` (`resolveInside`); cli `scan`/`scanned`/`ADD_FAIL`/`sameOrigin`/`fetchDetails`/`applyDetails`; `package.json` (`version`).
+- **Uses:** core `library.js` (`at`, `userDataDir`, `findDoc`/`findLibrary`/`docsIn`, `cleanTag`/`addTag`/`setStar`/`setRead`/`setTagColour`/`tagColour`/`tagCounts`, `searchTerms`/`entryMatches`, store `loadDb`/`update(fn, {wait: 0})`/`checkSources`/`readPdf`/`importPdf`/`removeStored`/`appSession`), `extract.js` (`ANALYZER_VERSION`), `order.js` (`summary`), `export.js` (`docText`, `groupsOf`, `fileBase`, `extOf`), `identify.js` (`parseIdentifier`, `fileNameFor`), `fetch.js` (`nodeGet` with `onProgress`, `resolver`, `FetchFail`); main-process `src/exportPaths.js` (`resolveInside`); cli `scan`/`scanned`/`ADD_FAIL`/`sameOrigin`/`fetchDetails`/`applyDetails`; `package.json` (`version`).
 - **Used by:** tests (`test/mcp.test.js`, over stdio).
 - **External libs:** `@modelcontextprotocol/sdk` (`McpServer`, `ResourceTemplate`, `StdioServerTransport`), `zod` 4.
 
@@ -42,7 +45,7 @@ None of its own. It reads `<userData>/library/faelights.json`, the PDFs (source 
 
 ### `mcp/tools.js`
 - **Role:** the handlers as plain async functions over core/.
-- **Exports:** `tools(dataDir)` → `{store, list_libraries, list_pdfs, get_extracts, search, export_pdf, export_library, add_pdf, add_by_identifier(args, progress?), tag_pdf, star_pdf, pdf_markdown, pdf_resources}`, `ToolError`, `FORMATS` (`markdown→md`).
+- **Exports:** `tools(dataDir)` → `{store, list_libraries, list_pdfs, get_extracts, search, export_pdf, export_library, add_pdf, add_by_identifier(args, progress?), tag_pdf, star_pdf, mark_read, set_tag_colour, list_tags, pdf_markdown, pdf_resources}`, `ToolError`, `FORMATS` (`markdown→md`).
 - **Imports (internal):** `core/library`, `core/extract`, `core/order`, `core/export`, `core/identify`, `core/fetch`, `src/exportPaths`, `cli/faelights` (`scan`, `scanned`, `ADD_FAIL`, `sameOrigin`, `fetchDetails`, `applyDetails`), `package.json`.
 - **Used by:** `mcp/server.js`.
 - **Side effects:**
@@ -60,3 +63,4 @@ None of its own. It reads `<userData>/library/faelights.json`, the PDFs (source 
 - Read tools keep working while the app is open. They see the app's last save, not its unsaved in-memory state.
 - `export_library` leaves out captured images, which need the renderer's canvas (`images.js`).
 - `add_by_identifier` checks the session marker before downloading, and `write()` checks it again before saving, so an app opened mid-download still blocks the write. Its download is bounded only by core/fetch.js's stall timeout and size cap, so a slow server can outlast a client's tool timeout. The server keeps going and adds the paper, and a retry returns `exists`.
+- `list_pdfs` takes an optional `read` boolean filter; PDF summaries carry `read` and `last_page` (null when never opened). New docs from `add_pdf` / `add_by_identifier` start `read: false, lastPage: 0`.

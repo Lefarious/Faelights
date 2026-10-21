@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-21 · **Sprint 7 merged on feature/s7-integration fa56121 (207/207), awaiting user gate 1; release as v1.3.2** · Sprint 6 closed (merged to local main 9ff7a30, 168/168, tag `sprint-6-end`; release v1.3.1; v1.3.0 draft published) · next: Sprint 7 · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
+_Last updated: 2026-10-21 · **Sprint 7 closed** (merged to local main c9791cc, 207/207, tag `sprint-7-end`; release v1.3.2; user OK to merge + push + publish) · next: Sprint 8 · Sprint 6 closed (merged to local main 9ff7a30, 168/168, tag `sprint-6-end`; release v1.3.1; v1.3.0 draft published) · next: Sprint 7 · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
@@ -86,9 +86,9 @@ Polish (reported by user):
 | T-023 search-current-library (enhancement) | Search scoped to the selected library. Accept: matches limited to that library's PDFs | renderer/app.js (search panel), core/library.js | T-022 (same panel) | S | 1 | merged 9ff7a30 (Sprint 6, F-026) |
 | T-024 tag-colours (enhancement) | Assign a colour to each tag; shown on tag chips in the library and on PDFs. Accept: colour persists across restart; CLI/MCP unaffected | renderer/app.js (tags), core/library.js (`db.tagColours`), renderer/styles.css | library-doc-fields scaffold | S | 2 | merged 9ff7a30 (Sprint 6, F-026) |
 | T-026 mark-as-read (enhancement) | Toggle read/unread per PDF; read PDFs look distinct in the list and can be filtered. Accept: toggle from item menu, persists | renderer/app.js (doc list, item menu), core/library.js (`d.read`) | library-doc-fields scaffold | S | 2 | merged 9ff7a30 (Sprint 6, F-026) |
-| T-021 multi-select (enhancement) | Select one or several PDFs (click, Ctrl/Shift-click) and apply move/tag/star/remove to all. Accept: Shift-select 3, move to a library, all 3 move | renderer/app.js (doc list, item actions), renderer/styles.css | — | M | 1 | merged on s7-integration |
-| T-027 section-numbering (feature) | Keep the document's heading structure and numbering (e.g. "12.1.12 Section A") in exports. Accept: a numbered-heading fixture exports with the same numbers and nesting | core/topics.js, core/export.js, test/ | — | M | 1 | merged on s7-integration |
-| T-028 loose-marks-as-clips (enhancement) | Highlights over images/scans with no text (today `result.loose`, page numbers only) become image clips in the extract and exports. Accept: a text-less highlight shows as a cropped image | core/extract.js, renderer/app.js (reader), renderer/images.js | — | M | 2 | merged on s7-integration |
+| T-021 multi-select (enhancement) | Select one or several PDFs (click, Ctrl/Shift-click) and apply move/tag/star/remove to all. Accept: Shift-select 3, move to a library, all 3 move | renderer/app.js (doc list, item actions), renderer/styles.css | — | M | 1 | merged c9791cc (Sprint 7, F-028) |
+| T-027 section-numbering (feature) | Keep the document's heading structure and numbering (e.g. "12.1.12 Section A") in exports. Accept: a numbered-heading fixture exports with the same numbers and nesting | core/topics.js, core/export.js, test/ | — | M | 1 | merged c9791cc (Sprint 7, F-028) |
+| T-028 loose-marks-as-clips (enhancement) | Highlights over images/scans with no text (today `result.loose`, page numbers only) become image clips in the extract and exports. Accept: a text-less highlight shows as a cropped image | core/extract.js, renderer/app.js (reader), renderer/images.js | — | M | 2 | merged c9791cc (Sprint 7, F-028) |
 | T-025 markdown-notes (enhancement) | Own Markdown notes and section headings between extracts, kept in place and included in exports. Accept: add a note after extract 3, export → note sits after it | renderer/app.js (reader), core/export.js, core/order.js, core/library.js (`d.notes`) | — | L | 1 | planned · Sprint 8 |
 | T-029 shelves (feature) | Shelves (sub-libraries) inside a library; move PDFs between shelves; CLI/MCP aware. Accept: create shelf, move 2 PDFs, they show under it after restart | core/library.js, renderer/app.js (sidebar, doc list), cli/, mcp/server.js | T-021 | L | 2 | planned · Sprint 8 |
 | T-030 ocr (feature) | OCR for scanned pages and image crops so their text is extracted. Needs engine decision (offline). | core/extract.js, renderer/app.js (reader), package.json | T-028 | L | 1 | planned · Sprint 9 |
@@ -104,7 +104,7 @@ Polish (reported by user):
 | 10 | planned | T-032 svg-diagrams (+ T-033/T-034 if approved) | — |
 | 9 | planned | T-030 ocr, T-031 ai-merge | — |
 | 8 | planned | T-025 markdown-notes, T-029 shelves | — |
-| 7 | **merged on integration** 2026-10-21 (fa56121), gate 1 pending | T-016 mcp-server (L), T-021, T-027, T-004, T-028, T-037 (7 slots, user OK to go over 5) + exempt T-005, T-009, T-011, T-036, T-038 | 207/207 |
+| 7 | **closed** 2026-10-21 (tag `sprint-7-end`, main c9791cc) | T-016 mcp-server (L), T-021, T-027, T-004, T-028, T-037 (7 slots, user OK to go over 5) + exempt T-005, T-009, T-011, T-036, T-038 | 207/207 |
 | 6 | **closed** 2026-10-21 (tag `sprint-6-end`, main 9ff7a30) | T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read | 168/168 |
 | 5 | **closed** 2026-10-21 (tag `sprint-5-end`, main 20a8e58) | bugs: T-017, T-018, T-019, T-002, T-008 (all exempt) | 156/156 |
 | 4 | **closed** 2026-10-10 (tag `sprint-4-end`, main 43721ca) | T-014 onboarding-tour | 81/81 |
@@ -114,7 +114,7 @@ Polish (reported by user):
 
 Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 
-### Sprint 7 — merged on integration, awaiting gate 1 (2026-10-21)
+### Sprint 7 — closed (2026-10-21)
 - Scope (7 slots, user approved): T-016 mcp-server (L, built earlier on its branch), T-021 multi-select, T-027 section-numbering, T-004 second-test-pdf, T-028 loose-marks-as-clips, T-037 cli-mcp-sprint6-fields; exempt: T-005, T-009, T-011, T-036, T-038. Release: v1.3.2 (user: stay on 1.3.x).
 - Backup: `backup/sprint-7-pre-20261021` · Tag: `sprint-7-start` (202abe5) · Baseline: 168/168
 - Merge flow: `feature/s7-integration` (worktree `../fl-s7`); agents in `../fl-T-021`, `../fl-T-027`, `../fl-T-028` (T-004 → T-028 in sequence), `../fl-T-037`; exempt fixes built directly in `../fl-polish`.
@@ -133,6 +133,7 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
   | 9 | T-004 second-test-pdf | (merge) | none | 201/203 — marks.pdf expects unnumbered bookmark titles; fixed in 10 |
   | 10 | T-028 loose-marks-as-clips | fa56121 | order.js comment, styles.css EOF (both kept); groupItems now takes flat export items too (T-011 × T-028); marks tests updated for T-027 numbering; ANALYZER_VERSION stays 5 | 207/207 |
 - Checked: integration app on a scratch profile with marks.pdf + sample.pdf → both v5, marks.pdf 3 clips, numbered topics on both.
+- 2026-10-21: user asked "is sprint 7 ready to merge, if yes merge" → merged into local main c9791cc; 207/207; tag `sprint-7-end`. Atlas synced (all modules, incl. T-016 docs redone), compass F-027 (MCP, renumbered from the branch's F-025), F-028, D-021…D-024. User: sync with remote and publish version → v1.3.2.
 - Test rounds: 168 (baseline) → 183 → 184 → 184 → 184 → 185 → 188 → 195 → 199 → 199 → 201/203 → 207; new failures left: 0
 
 ### Sprint 6 — closed (2026-10-21)
