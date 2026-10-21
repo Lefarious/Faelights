@@ -1,5 +1,5 @@
 # Module: renderer-ui
-> Path: renderer/ (app.js, images.js, tour.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: 796478d · Related features: F-001…F-011, F-013, F-014, F-015, F-016, F-022, F-023
+> Path: renderer/ (app.js, images.js, tour.js, index.html, splash.html, styles.css, assets/brand/, sample.pdf) · Last synced commit: 20a8e58 · Related features: F-001…F-011, F-013, F-014, F-015, F-016, F-022, F-023, F-025
 
 ## Purpose
 This is the whole user interface plus the splash page and brand artwork. It holds app state (`S`), renders the three panes (library sidebar, PDF list, extract reader) and the search view, and drives exports. It drives PDF import, rescan and analysis by combining `window.fl` (OS access) with core (`Extract.analyzePdf`, `Meta.readMeta`, `Order`, `ExportFmt`, `Library` pure ops), loaded as globals from `../core/*.js`. It does not touch the filesystem directly.
@@ -126,4 +126,5 @@ graph TD
 - Image figures (`figureEl`) and image colours only join the reader while "With images" is on, so the reader DOM is unchanged when it is off or the doc has no images. When on, the colour chips count image colours too and `S.off` hides both extracts and images.
 - Copy with images on adds `[Image, p. N]` placeholders and respects the colour filter (`filteredImages`); exports include every image regardless of `S.off`.
 - Exports with images build the text before the save dialog: a random `dirToken` stands for the images folder, and `main.js export:bundle` replaces it with the real `<file base> images` name (URL-encoded for Markdown).
-- A batch in the add dialog runs strictly one fetch at a time, because main has a single `fetchCtl`; batches are capped at 200 items (`id:parseMany`).
+- A batch in the add dialog runs strictly one fetch at a time, because main has a single `fetchCtl`; the dialog refuses more than 200 items (`ADD_MAX`) or 100000 chars (`ADD_MAX_CHARS`) with `too-many`; `id:parseMany` returns 201 so it can tell. Keep `ADD_MAX` and the main.js cap in sync (the renderer can't load core).
+- The reader's "Filter by colour" shows whenever the doc has at least one colour (entries, plus images while "With images" is on).

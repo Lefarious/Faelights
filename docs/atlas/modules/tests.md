@@ -1,5 +1,5 @@
 # Module: tests
-> Path: test/ · Last synced commit: 796478d · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024
+> Path: test/ · Last synced commit: 20a8e58 · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024, F-025
 
 ## Purpose
 Automated checks run with Node's built-in `node:test` and `node:assert`, with no extra dependencies. They cover everything that loads in plain Node: core/ (extraction incl. image boxes, topics, reading order, export formatting, the library store with its lock, identifier parsing, CrossRef/arXiv mapping, paper resolving and the Node transport against a local server), the guided tour's step data (`renderer/tour.js`), export path safety (`src/exportPaths.js`) and the `faelights` CLI as a child process on a temp library. They do not launch Electron or exercise the UI, and nothing touches the network.
@@ -26,7 +26,7 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Imports (internal):** `renderer/tour.js`; reads `renderer/app.js`, `renderer/annotator.js` as text
 
 ### `test/identify.test.js`
-- **Role:** unit tests for `parseIdentifier` (accepted and rejected forms incl. ISBN-10/13 checksums, PMID forms, ADS bibcodes and URLs, trimming), `parseIdentifiers` (batch splitting, de-dupe), `findPdfLink`, `isPdf`, `fileNameFor` and `fetchFailureReason` (offline vs network mapping)
+- **Role:** unit tests for `parseIdentifier` (accepted and rejected forms incl. ISBN-10/13 checksums, PMID forms, ADS bibcodes and URLs, trimming), `parseIdentifiers` (batch splitting, de-dupe), `findPdfLink`, `isPdf`, `fileNameFor` and `fetchFailureReason` (offline / unreachable / network by error code and host); long and messy pastes (CRLF, tabs, NBSP, zero-width, soft hyphen, 6000-char link, prose with a DOI, 60 ids, 100000-char cut) and a < 200 ms timing guard
 - **Imports (internal):** `core/identify.js`
 
 ### `test/metadata.test.js`
@@ -46,8 +46,8 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Imports (internal):** `src/exportPaths.js`, `core/export.js`
 
 ### `test/core/extract.test.js`
-- **Role:** `core/extract.js` in plain Node: no DOM/canvas, path vs bytes give the same result, progress, reading order, `highlights()` rows, Underline/Squiggly/StrikeOut among highlights, loose marks, `normQuads` forms
-- **Imports (internal):** `test/helpers/pdf.js`, `test/helpers/annotate.js`, `core/extract.js`
+- **Role:** `core/extract.js` in plain Node: no DOM/canvas, path vs bytes give the same result, progress, reading order, `highlights()` rows, Underline/Squiggly/StrikeOut among highlights, loose marks, `normQuads` forms; sentence splitting (after quotes/brackets, `no.`, `et al.`, `etc.`, `vitamin C.`; a mark starting on the previous `. `; one extract for a mark across two sentences, `e.g.`, `Fig. 3`, `No. 5`, `3.5`, `J. Smith`, `J. A. Smith`)
+- **Imports (internal):** `test/helpers/pdf.js`, `test/helpers/annotate.js`, `test/helpers/textpdf.js`, `core/extract.js`
 
 ### `test/core/topics.test.js`
 - **Role:** topic precedence (bookmarks → font-size headings → wording → pages), grouping of extracts, `topicAt`, wording fallback dropping captions and running headers
@@ -62,7 +62,7 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Imports (internal):** `core/library.js`; spawns `node` children for the cross-process cases
 
 ### `test/core/fetch.test.js`
-- **Role:** `core/fetch.js` offline: `nodeGet` against a local `http` server (redirects, cookie carried through a sign-in bounce, 404/403/500, size cap, redirect loop, non-http URL, refused port → `offline`, aborted signal → `cancelled`); `resolver` with a fake transport (arXiv `citation_pdf_url`, DOI → CrossRef `link[]` fallback, `paywalled`, offline stops at once); `lookupMeta` CrossRef / `invalid` / `not-found`
+- **Role:** `core/fetch.js` offline: `nodeGet` against a local `http` server (redirects, cookie carried through a sign-in bounce, 404/403/500, size cap, redirect loop, non-http URL, refused port → `unreachable`, aborted signal → `cancelled`); a stubbed global `fetch` failing DNS (mistyped link → `unreachable` when doi.org answers, `offline` when nothing resolves; DOI → `offline` after one request); `resolver` with a fake transport (arXiv `citation_pdf_url`, DOI → CrossRef `link[]` fallback, `paywalled`, offline stops at once, PMC bucket / Europe PMC / PMC fallbacks, PMID → idconv → PMC sources, `no-free-copy` / `not-found`); `lookupMeta` CrossRef / `invalid` / `not-found`
 - **Imports (internal):** `core/fetch.js`
 
 ### `test/cli.test.js`
@@ -77,6 +77,11 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 
 ### `test/fixtures/make-images-pdf.js` · `test/fixtures/images.pdf`
 - **Role:** pdf-lib script (not a test; run `node test/fixtures/make-images-pdf.js`) that writes the image-box fixture deterministically (fixed dates), and the committed output
+
+### `test/helpers/textpdf.js`
+- **Role:** builds a one-page PDF from lines of text with pdf-lib (Helvetica, one pdf.js text item per line) and saves it to a temp file, for sentence tests
+- **Exports:** `textPdf(lines, {size})` → temp file path
+- **Used by:** `test/core/extract.test.js`
 
 ### `test/helpers/pdf.js`
 - **Role:** loads a PDF in Node through `core/extract.js openPdf` (the same path scripts use)
