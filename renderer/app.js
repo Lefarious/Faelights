@@ -222,14 +222,58 @@ async function deleteLibrary(id) {
 // at / opts: see openMenu()
 async function libraryMenu(id, at, opts) {
   const l = lib(id), cur = S.view.kind === "library" && S.view.id === id;
-  const items = [{ id: "search", label: "Search this library", icon: "search" }, { id: "rename", label: "Rename", icon: "pen" }, { id: "export", label: "Export to folder…", icon: "export", hint: cur ? keyHint("E", true) : "" }];
+  const items = [{ id: "search", label: "Search this library", icon: "search" }, { id: "shelf", label: "New shelf", icon: "plus" }, { id: "rename", label: "Rename", icon: "pen" }, { id: "export", label: "Export to folder…", icon: "export", hint: cur ? keyHint("E", true) : "" }];
   if (!l.system) items.push({ type: "separator" }, { id: "delete", label: "Delete library…", icon: "trash", danger: true });
   const r = await openMenu(at || document.activeElement, items, { label: l.name, ...opts });
   if (r === "search") { S.searchPicked = true; go({ kind: "search", scope: id }); }
+  if (r === "shelf") newShelf(id);
   if (r === "rename") { S.renaming = id; renderSide(); }
   if (r === "export") exportLibrary(id);
   if (r === "delete") deleteLibrary(id);
 }
+
+/* ---------------- shelves (T-029) ---------------- */
+// One level inside a library. The shelf view is a library view with view.shelf set, so adding, search scope
+// and export still see the library.
+const shelf = id => Library.findShelf(S.db, id);
+const placeName = (libId, shelfId) => (lib(libId)?.name || "") + (shelfId && shelf(shelfId) ? " › " + shelf(shelfId).name : "");
+function newShelf(libId) {
+  const s = Library.addShelf(S.db, libId); if (!s) return;
+  S.renaming = s.id; S.view = { kind: "library", id: libId, shelf: s.id }; S.docId = null; SEL.ids = new Set(); save(); renderAll();
+}
+async function deleteShelf(id) {
+  const s = shelf(id); if (!s) return;
+  const n = Library.docsOnShelf(S.db, id).length;
+  const ok = await fl.confirm(`Delete the shelf “${s.name}”?`, n ? `Its ${plural(n, "PDF")} stay in ${lib(s.libraryId).name}, off any shelf. No highlights are lost.` : "It's empty.", "Delete shelf");
+  if (!ok) return;
+  Library.removeShelf(S.db, id);
+  if (S.view.kind === "library" && S.view.shelf === id) S.view = { kind: "library", id: s.libraryId };
+  save(); renderAll();
+}
+// at / opts: see openMenu()
+async function shelfMenu(id, at, opts) {
+  const s = shelf(id);
+  const items = [{ id: "rename", label: "Rename", icon: "pen" }, { type: "separator" }, { id: "delete", label: "Delete shelf…", icon: "trash", danger: true }];
+  const r = await openMenu(at || document.activeElement, items, { label: s.name, ...opts });
+  if (r === "rename") { S.renaming = id; renderSide(); }
+  if (r === "delete") deleteShelf(id);
+}
+// "Move to" submenu: each library; one with shelves opens its own (No shelf, then its shelves).
+// here(libId, shelfId|null) → checked. Ids: "move:<library id>" (its root), "shelf:<shelf id>". Pure (tested).
+function moveItems(db, here) {
+  return db.libraries.map(l => {
+    const sh = Library.shelvesIn(db, l.id), root = { id: "move:" + l.id, label: sh.length ? "No shelf" : l.name, checked: here(l.id, null) };
+    return sh.length ? { label: l.name, submenu: [root, { type: "separator" }, ...sh.map(s => ({ id: "shelf:" + s.id, label: s.name, checked: here(l.id, s.id) }))] } : root;
+  });
+}
+// a menu result → [libId, shelfId|null], or null if it isn't a move. Pure (tested).
+function moveTarget(db, r) {
+  if (r.startsWith("move:")) return [r.slice(5), null];
+  const s = r.startsWith("shelf:") && Library.findShelf(db, r.slice(6));
+  return s ? [s.libraryId, s.id] : null;
+}
+// onto a shelf, or a library's root (leaving any shelf) → changed?
+const putDoc = (d, libId, shelfId) => shelfId ? Library.moveToShelf(S.db, d, shelfId) : Library.moveDoc(d, libId) || Library.moveToShelf(S.db, d, null);
 
 /* ---------------- tag colours ---------------- */
 // Mid-tone hues: readable as dots and tints on both the light and dark themes
@@ -406,7 +450,7 @@ async function removeDocs(ds) {
 // at / opts: see openMenu(); with no anchor it opens below the focused element (the reader's ⋯ button)
 async function docMenu(d, at, opts) {
   const cur = d.id === S.docId && S.view.kind !== "search";
-  const libs = S.db.libraries.map(l => ({ id: "move:" + l.id, label: l.name, checked: l.id === d.libraryId }));
+  const libs = moveItems(S.db, (l, s) => d.libraryId === l && (d.shelfId || null) === s);
   const items = [
     { id: "annotate", label: "View", icon: "pen" },
     { id: "open", label: "Open PDF", icon: "open" },
@@ -438,7 +482,7 @@ async function docMenu(d, at, opts) {
   if (r === "star") { Library.setStar(d); save(); renderAll(); }
   if (r === "mine") setMine(d, !d.mine);
   if (r === "read") setRead(d);
-  if (r.startsWith("move:")) moveDoc(d, r.slice(5));
+  if (moveTarget(S.db, r)) moveDoc(d, ...moveTarget(S.db, r));
   if (r === "export") exportDoc(d);
   if (r === "copy") copyText(docText(d, S.db.settings.fmt, false), "All extracts");
   if (r === "remove") removeDoc(d);
@@ -457,10 +501,11 @@ function setRead(d, on) {
 }
 const readFilter = () => S.db.settings.read || "all";
 function process_platform() { return navigator.userAgent.includes("Mac") ? "darwin" : "other"; }
-function moveDoc(d, libId) {
-  if (!Library.moveDoc(d, libId)) return;
+// shelfId: onto that shelf; omitted: the library's root
+function moveDoc(d, libId, shelfId = null) {
+  if (!putDoc(d, libId, shelfId)) return;
   save();
-  toast(`Moved to ${lib(libId).name}`);
+  toast(`Moved to ${placeName(libId, shelfId)}`);
   renderAll();
 }
 
@@ -480,9 +525,9 @@ function clickDoc(e, id) {
 }
 // apply f to every PDF, then one save, render and toast
 function bulk(ds, f, msg, none = "Nothing to change") { const n = ds.filter(f).length; save(); renderAll(); toast(n ? msg(n) : none); }
-function moveDocs(ds, libId) {
-  const name = lib(libId).name; SEL.ids = new Set();
-  bulk(ds, d => Library.moveDoc(d, libId), n => `Moved ${plural(n, "PDF")} to ${name}`, "Already in " + name);
+function moveDocs(ds, libId, shelfId = null) {
+  const name = placeName(libId, shelfId); SEL.ids = new Set();
+  bulk(ds, d => putDoc(d, libId, shelfId), n => `Moved ${plural(n, "PDF")} to ${name}`, "Already in " + name);
 }
 // one-line dialog for a new tag name → the name, or null
 let PROMPT = null;
@@ -522,7 +567,7 @@ async function bulkMenu(at, opts) {
     { id: "star", label: star ? "Star" : "Remove star", icon: "star" },
     { id: "mine", label: mine ? "Mark as my publications" : "Remove from My publications", icon: "pub" },
     { id: "read", label: read ? "Mark as read" : "Mark as unread", icon: "read" },
-    { label: "Move to", icon: "move", submenu: S.db.libraries.map(l => ({ id: "move:" + l.id, label: l.name, checked: all(d => d.libraryId === l.id) })) },
+    { label: "Move to", icon: "move", submenu: moveItems(S.db, (l, s) => all(d => d.libraryId === l && (d.shelfId || null) === s)) },
     { label: "Add tag", icon: "plus", submenu: [...add, ...(add.length ? [{ type: "separator" }] : []), { id: "tag+", label: "New tag…" }] },
     ...(rem.length ? [{ label: "Remove tag", icon: "undo", submenu: rem }] : []),
     { type: "separator" },
@@ -534,7 +579,7 @@ async function bulkMenu(at, opts) {
   if (r === "star") bulk(ds, d => !!d.starred !== star && Library.setStar(d, star) === star, k => (star ? "Starred " : "Removed star from ") + plural(k, "PDF"));
   if (r === "mine") bulk(ds, d => !!d.mine !== mine && (d.mine = mine, true), k => (mine ? "Added " : "Removed ") + plural(k, "PDF") + (mine ? " to" : " from") + " My publications");
   if (r === "read") bulk(ds, d => !!d.read !== read && Library.setRead(d, read) === read, k => `Marked ${plural(k, "PDF")} as ${read ? "read" : "unread"}`);
-  if (r.startsWith("move:")) moveDocs(ds, r.slice(5));
+  if (moveTarget(S.db, r)) moveDocs(ds, ...moveTarget(S.db, r));
   if (r === "tag+") tagDocs(ds, null, true);
   if (r.startsWith("tag+:")) tagDocs(ds, r.slice(5), true);
   if (r.startsWith("tag-:")) tagDocs(ds, r.slice(5), false);
@@ -760,11 +805,12 @@ addEventListener("resize", () => { if (S.db) applyLayout(); });
 /* ---------------- rendering: sidebar ---------------- */
 // onMenu(at, opts): row actions — adds a ⋯ trigger, right-click and Shift+F10 / ContextMenu.
 // The <li> wraps the main button and the ⋯ sibling (buttons can't nest) and is the drop target.
-function navItem({ icon, name, count, current, onClick, onMenu, onDrop, editing, onRename, tour }) {
-  const li = el("li", onMenu ? "has-more" + (current ? " is-current" : "") : null);
+// cls: extra <li> class (shelf rows); what: the rename field's label
+function navItem({ icon, name, count, current, onClick, onMenu, onDrop, editing, onRename, tour, cls, what = "Library name" }) {
+  const li = el("li", [onMenu ? "has-more" + (current ? " is-current" : "") : "", cls || ""].join(" ").trim() || null);
   if (tour) li.dataset.tour = tour;
   if (editing) {
-    const inp = el("input"); inp.value = name; inp.setAttribute("aria-label", "Library name");
+    const inp = el("input"); inp.value = name; inp.setAttribute("aria-label", what);
     const done = commit => { if (inp.dataset.done) return; inp.dataset.done = 1; onRename(commit ? inp.value.trim() : null); };
     inp.onkeydown = e => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); };
     inp.onblur = () => done(true);
@@ -814,7 +860,7 @@ function renderSide() {
     const n = S.db.docs.filter(d => d.libraryId === l.id).length;
     ul.append(navItem({
       icon: svg(l.system ? ICON.inbox : ICON.lib), name: l.name, count: n,
-      current: S.view.kind === "library" && S.view.id === l.id,
+      current: S.view.kind === "library" && S.view.id === l.id && !S.view.shelf,
       editing: S.renaming === l.id,
       onRename: v => { if (v) Library.renameLibrary(S.db, l.id, v); S.renaming = null; save(); renderAll(); },
       onClick: () => go({ kind: "library", id: l.id }),
@@ -826,6 +872,7 @@ function renderSide() {
       }
     }));
     ul.lastChild.querySelector("button")?.addEventListener("dblclick", () => { S.renaming = l.id; renderSide(); });
+    for (const s of Library.shelvesIn(S.db, l.id)) ul.append(shelfItem(s));
   }
   sc.append(ul);
 
@@ -846,6 +893,29 @@ function renderSide() {
   const rb = el("button", "linkbtn", stale ? "Rescan" : "Rescan all"); rb.onclick = rescanAll; if (S.db.docs.length) status.append(rb);
   foot.append(status, themeSwitch());
   side.append(foot, strip("side"));
+}
+// A shelf's row, indented under its library: same click, menu, rename and drop behaviour as a library's.
+// Files dropped on it are added to the library, then put on the shelf.
+function shelfItem(s) {
+  const li = navItem({
+    icon: svg(ICON.folder), name: s.name, count: Library.docsOnShelf(S.db, s.id).length, cls: "shelf", what: "Shelf name",
+    current: S.view.kind === "library" && S.view.shelf === s.id,
+    editing: S.renaming === s.id,
+    onRename: v => { if (v) Library.renameShelf(S.db, s.id, v); S.renaming = null; save(); renderAll(); },
+    onClick: () => go({ kind: "library", id: s.libraryId, shelf: s.id }),
+    onMenu: (at, o) => shelfMenu(s.id, at, o),
+    onDrop: async e => {
+      const did = e.dataTransfer.getData("application/x-faelights-doc");
+      if (did) { const d = doc(did); if (d && inSel(d)) moveDocs(selDocs(), s.libraryId, s.id); else if (d) moveDoc(d, s.libraryId, s.id); return; }
+      if (!e.dataTransfer.files.length) return;
+      const had = new Set(S.db.docs.map(d => d.id));
+      await addPaths([...e.dataTransfer.files].map(f => fl.pathFor(f)), { libraryId: s.libraryId });
+      const added = S.db.docs.filter(d => !had.has(d.id) && Library.moveToShelf(S.db, d, s.id));
+      if (added.length) { S.view = { kind: "library", id: s.libraryId, shelf: s.id }; save(); renderAll(); }
+    }
+  });
+  li.querySelector("button")?.addEventListener("dblclick", () => { S.renaming = s.id; renderSide(); });
+  return li;
 }
 
 // One icon per theme; clicking an icon applies it straight away
@@ -886,7 +956,7 @@ function go(view) {
 /* ---------------- rendering: list ---------------- */
 function viewTitle() {
   const v = S.view;
-  if (v.kind === "library") return lib(v.id)?.name || "Library";
+  if (v.kind === "library") return (v.shelf && shelf(v.shelf)?.name) || lib(v.id)?.name || "Library";
   if (v.kind === "starred") return "Starred";
   if (v.kind === "mine") return "My publications";
   if (v.kind === "tag") return "#" + v.tag;
@@ -894,7 +964,7 @@ function viewTitle() {
 }
 function visibleDocs() {
   const v = S.view; let docs = S.db.docs;
-  if (v.kind === "library") docs = docs.filter(d => d.libraryId === v.id);
+  if (v.kind === "library") docs = docs.filter(d => d.libraryId === v.id && (!v.shelf || d.shelfId === v.shelf));
   if (v.kind === "starred") docs = docs.filter(d => d.starred);
   if (v.kind === "mine") docs = docs.filter(d => d.mine);
   if (v.kind === "tag") docs = docs.filter(d => (d.tags || []).includes(v.tag));
@@ -920,13 +990,14 @@ function renderList() {
   if (S.view.kind === "search") return;
   const head = el("div", "list-head");
   const h = el("h2", null, viewTitle());
-  if (S.view.kind === "library") { h.ondblclick = () => { S.renaming = S.view.id; renderSide(); }; h.title = "Double-click to rename in the sidebar"; }
+  if (S.view.kind === "library") { h.ondblclick = () => { S.renaming = S.view.shelf || S.view.id; renderSide(); }; h.title = "Double-click to rename in the sidebar"; }
   const docsAll = visibleDocs();
   const hl = docsAll.reduce((n, d) => n + (d.count || 0), 0);
   const add = btn("icon", null, "add", "Add PDFs"); add.onclick = chooseAndAdd;
   const acts = el("div", "head-acts"); acts.append(add, addIdBtn(true), paneBtn("list"));
   const hr = el("div", "head-row"); hr.append(h, acts);
-  head.append(hr, el("div", "sub", `${plural(docsAll.length, "PDF")} · ${plural(hl, "highlight")}`));
+  const onShelf = S.view.kind === "library" && S.view.shelf ? `Shelf in ${lib(S.view.id)?.name || ""} · ` : "";
+  head.append(hr, el("div", "sub", `${onShelf}${plural(docsAll.length, "PDF")} · ${plural(hl, "highlight")}`));
   const tools = el("div", "list-tools"); tools.dataset.tour = "list-tools";
   const q = el("input", "search"); q.id = "dq"; q.placeholder = "Filter by title or tag"; q.value = S.docQuery; q.setAttribute("aria-label", "Filter PDFs");
   q.oninput = () => { S.docQuery = q.value; renderDocs(); };
@@ -959,6 +1030,7 @@ function renderDocs() {
       e.append(el("b", null, un ? "No unread PDFs" : "No read PDFs"), el("span", null, un ? "Everything here is marked as read." : "Mark a PDF as read from its ⋯ menu or the reader."));
       const a = btn("", "Show all PDFs"); a.onclick = () => { S.db.settings.read = "all"; save(); renderAll(); }; e.append(a);
     }
+    else if (S.view.kind === "library" && S.view.shelf) e.append(el("b", null, "Empty shelf"), el("span", null, "Drag PDFs onto this shelf in the sidebar, or use Move to in a PDF's ⋯ menu."));
     else if (S.view.kind === "library") {
       e.append(el("b", null, "Nothing here yet"), el("span", null, "Drag PDFs onto this window, or add them from your computer. Highlights are read straight away."));
       const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; e.append(a, addIdBtn()); e.dataset.tour = "start";
@@ -979,7 +1051,9 @@ function renderDocs() {
     const m = el("div", "m");
     m.append(el("span", null, plural(d.count || 0, "mark")), el("span", null, plural(d.pages || 0, "page")));
     if (d.colours && d.colours.length) { const sw = el("span", "swatches"); for (const c of d.colours) { const i = el("i"); i.style.background = `rgb(${c.join(",")})`; sw.append(i); } m.append(sw); }
-    if (S.view.kind !== "library") m.append(el("span", null, lib(d.libraryId)?.name || ""));
+    // where it sits: the library (other views) and its shelf (unless this is that shelf's view)
+    if (S.view.kind !== "library") m.append(el("span", null, placeName(d.libraryId, d.shelfId)));
+    else if (d.shelfId && !S.view.shelf && shelf(d.shelfId)) { const sp = el("span", "on-shelf"); sp.append(svg(ICON.folder), document.createTextNode(shelf(d.shelfId).name)); sp.title = "On the shelf " + shelf(d.shelfId).name; m.append(sp); }
     if (d.sourceMissing) m.append(el("span", "pill warn", "Original moved"));
     else if (d.stale) m.append(el("span", "pill", "Changed"));
     if (d.annotated) m.append(el("span", "pill", "Annotated"));
