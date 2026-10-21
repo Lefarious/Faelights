@@ -56,6 +56,7 @@ before(async () => {
   run(readDir, "library", "new", "Biology");
   [doc] = cli(readDir, "add", SAMPLE, "--library", "Biology", "--tag", "light");
   run(readDir, "star", doc.id);
+  run(readDir, "tag", "colour", "light", "#3a7");
   // a scanned PDF: pages with no text layer
   const blank = await PDFDocument.create();
   blank.addPage(); blank.addPage();
@@ -73,12 +74,16 @@ after(async () => {
 
 test("lists every tool and the pdf resource template", async () => {
   const names = (await reader.listTools()).tools.map(t => t.name).sort();
-  assert.deepEqual(names, ["add_by_identifier", "add_pdf", "export_library", "export_pdf", "get_extracts", "list_libraries", "list_pdfs", "search", "star_pdf", "tag_pdf"]);
+  assert.deepEqual(names, ["add_by_identifier", "add_pdf", "export_library", "export_pdf", "get_extracts", "list_libraries", "list_pdfs", "list_tags", "mark_read", "search", "set_tag_colour", "star_pdf", "tag_pdf"]);
   const { tools } = await reader.listTools();
-  for (const n of ["add_pdf", "add_by_identifier", "tag_pdf", "star_pdf"]) assert.match(tools.find(t => t.name === n).description, /only four tools that change/);
+  for (const n of ["add_pdf", "add_by_identifier", "tag_pdf", "star_pdf", "mark_read", "set_tag_colour"]) assert.match(tools.find(t => t.name === n).description, /only 6 tools that change/);
   assert.equal(tools.find(t => t.name === "add_by_identifier").annotations.openWorldHint, true);
   const { resourceTemplates } = await reader.listResourceTemplates();
   assert.equal(resourceTemplates[0].uriTemplate, "faelights://pdf/{id}");
+});
+
+test("list_tags gives each tag's count and colour", async () => {
+  assert.deepEqual((await call(reader, "list_tags")).tags, [{ tag: "light", pdfs: 1, colour: "#33aa77" }]);
 });
 
 test("list_libraries", async () => {
@@ -95,6 +100,9 @@ test("list_pdfs filters by library, tag and starred", async () => {
   assert.equal((await call(reader, "list_pdfs", { library: "Inbox" })).pdfs.length, 0);
   assert.equal((await call(reader, "list_pdfs", { tag: "nope" })).pdfs.length, 0);
   assert.equal((await call(reader, "list_pdfs", { starred: false })).pdfs.length, 0);
+  assert.deepEqual([all[0].read, all[0].last_page], [false, null]);
+  assert.equal((await call(reader, "list_pdfs", { read: false })).pdfs.length, 1);
+  assert.equal((await call(reader, "list_pdfs", { read: true })).pdfs.length, 0);
   await rejects(call(reader, "list_pdfs", { library: "Nowhere" }), "unknown_library");
 });
 
@@ -191,7 +199,7 @@ test("clear errors: unknown pdf_id, missing file, no text layer", async () => {
   await rejects(call(writer, "get_extracts", { pdf_id: added.pdf.id }), "no_text_layer");
 });
 
-test("write tools: add_pdf, tag_pdf, star_pdf on a temp library", async () => {
+test("write tools: add_pdf, tag_pdf, star_pdf, mark_read, set_tag_colour on a temp library", async () => {
   const r = await call(writer, "add_pdf", { path: SAMPLE, tags: ["#firefly"] });
   assert.equal(r.action, "added");
   assert.deepEqual([r.pdf.library, r.pdf.tags, r.pdf.highlights], ["Inbox", ["firefly"], 8]);
@@ -203,10 +211,21 @@ test("write tools: add_pdf, tag_pdf, star_pdf on a temp library", async () => {
   assert.deepEqual(await call(writer, "star_pdf", { pdf_id: id, starred: true }), { pdf_id: id, title: "Notes on Bioluminescence", starred: true, changed: true });
   await rejects(call(writer, "star_pdf", { pdf_id: "nope", starred: true }), "unknown_pdf");
 
+  assert.deepEqual(await call(writer, "mark_read", { pdf_id: id, read: true }), { pdf_id: id, title: "Notes on Bioluminescence", read: true, changed: true });
+  assert.equal((await call(writer, "mark_read", { pdf_id: id, read: true })).changed, false);
+  assert.deepEqual((await call(writer, "list_pdfs", { read: false })).pdfs.map(p => p.id).includes(id), false);
+  assert.deepEqual(await call(writer, "set_tag_colour", { tag: "#essay", colour: "#3A7" }), { tag: "essay", colour: "#33aa77", changed: true });
+  assert.deepEqual(await call(writer, "set_tag_colour", { tag: "firefly", colour: "#d64550" }), { tag: "firefly", colour: "#d64550", changed: true });
+  assert.deepEqual(await call(writer, "set_tag_colour", { tag: "firefly", colour: null }), { tag: "firefly", colour: null, changed: true });
+  assert.deepEqual((await call(writer, "list_tags")).tags.map(t => [t.tag, t.colour]), [["essay", "#33aa77"], ["firefly", null]]);
+  await rejects(call(writer, "set_tag_colour", { tag: "nope", colour: "#3a7" }), "unknown_tag");
+  await rejects(call(writer, "mark_read", { pdf_id: "nope", read: true }), "unknown_pdf");
+
   // the change is on disk, where the app reads it
   const db = JSON.parse(fs.readFileSync(path.join(writeDir, "library", "faelights.json"), "utf8"));
   const d = db.docs.find(x => x.id === id);
-  assert.deepEqual([d.tags, d.starred, d.libraryId], [["firefly", "essay"], true, "inbox"]);
+  assert.deepEqual([d.tags, d.starred, d.read, d.lastPage, d.libraryId], [["firefly", "essay"], true, true, 0, "inbox"]);
+  assert.deepEqual(db.tagColours, { essay: "#33aa77" });
   assert.ok(fs.existsSync(d.storedPath));
   assert.deepEqual(fs.readdirSync(path.join(writeDir, "library")).filter(f => /\.tmp$|\.lock$/.test(f)), []);
 });
@@ -222,6 +241,8 @@ test("writes refuse with library_in_use while the app is open or the lock is hel
     await rejects(call(writer, "star_pdf", { pdf_id: p.id, starred: false }), "library_in_use");
     await rejects(call(writer, "tag_pdf", { pdf_id: p.id, tags: ["x"] }), "library_in_use");
     await rejects(call(writer, "add_pdf", { path: SAMPLE }), "library_in_use");
+    await rejects(call(writer, "mark_read", { pdf_id: p.id, read: false }), "library_in_use");
+    await rejects(call(writer, "set_tag_colour", { tag: "essay", colour: "#000" }), "library_in_use");
     assert.equal((await call(writer, "list_pdfs")).pdfs.length, 2, "reads still work while the app is open");
   } finally { app.kill(); }
   await new Promise(r => app.once("exit", r));

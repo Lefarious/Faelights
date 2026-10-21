@@ -2,7 +2,7 @@
 /* Faelights — command line (T-015)
    A thin shell over core/: read highlights and text from any PDF, and manage the desktop app's library (the same
    <userData>/library folder, through Library.at() and its lock file): add files or papers by identifier, libraries,
-   moving, tags, stars, rescans, paper details, export. No Electron needed. Every change is one locked
+   moving, tags and their colours, stars, read state, rescans, paper details, export. No Electron needed. Every change is one locked
    read-modify-write (Library update()), so two commands never interleave. */
 "use strict";
 
@@ -30,10 +30,10 @@ Reading
   extract <file.pdf>              Highlights of any PDF, grouped by topic (no library needed)
   export <pdf>                    Highlights of a PDF in your library
   text <pdf | file.pdf>           The PDF's full text, page by page (--pages 1-3,7)
-  info <pdf>                      Paper details: title, authors, DOI, pages, tags, where it came from
-  list [library]                  Your PDFs (all, or one library; --tag, --starred to filter)
+  info <pdf>                      Paper details: title, authors, DOI, pages, tags, read, where it came from
+  list [library]                  Your PDFs (all, or one library; --tag, --starred, --read, --unread to filter)
   libraries                       Your libraries
-  tags                            Every tag and how many PDFs have it
+  tags                            Every tag, how many PDFs have it, and its colour
   search <words>...               Highlights containing every word (in the sentence, highlight,
                                   note or topic), across your library or one --library
 
@@ -53,6 +53,9 @@ Organising
   tag <pdf> <tag>...              Add tags
   untag <pdf> <tag>...            Remove tags
   star <pdf> / unstar <pdf>       Star or unstar
+  read <pdf>... / unread <pdf>... Mark as read or unread
+  tag colour <tag> [<#hex>]       Show or set a tag's colour: #rgb or #rrggbb (quote it, or leave out
+                                  the #, since a shell reads # as a comment); none or --clear removes it
   remove <pdf>                    Remove a PDF and the library's copy (your original isn't touched;
                                   --force for one annotated in the app, since those marks live only there)
 
@@ -68,12 +71,15 @@ Options
   -l, --library <name>    Library name or id (add, list)
   -t, --tag <tag>         Tag new PDFs (add) or filter (list); repeatable
       --starred           Only starred PDFs (list)
+      --read, --unread    Only read / unread PDFs (list)
+      --clear             Remove a tag's colour (tag colour)
       --pages <list>      Pages for "text", e.g. 1-3,7
       --all               Every PDF (rescan)
       --force             Remove a PDF annotated in the app
       --no-lookup         Don't fetch paper details after adding by identifier
       --frontmatter       Start md/obsidian exports with YAML frontmatter
-      --json              Machine-readable output for list, libraries, tags, search, info, add, rescan, tour
+      --json              Machine-readable output for list, libraries, tags, search, info, add, rescan, tour,
+                          read, unread, tag colour
       --data-dir <dir>    The app's data folder (default: where Faelights keeps it, or FAELIGHTS_DATA_DIR)
   -h, --help              Show this help
   -v, --version           Show the version
@@ -108,7 +114,7 @@ function parse(argv) {
       args: argv, allowPositionals: true, options: {
         format: { type: "string", short: "f" }, mode: { type: "string", short: "m" }, out: { type: "string", short: "o" },
         library: { type: "string", short: "l" }, tag: { type: "string", short: "t", multiple: true },
-        starred: { type: "boolean" }, pages: { type: "string" }, all: { type: "boolean" }, force: { type: "boolean" },
+        starred: { type: "boolean" }, read: { type: "boolean" }, unread: { type: "boolean" }, clear: { type: "boolean" }, pages: { type: "string" }, all: { type: "boolean" }, force: { type: "boolean" },
         "no-lookup": { type: "boolean" }, frontmatter: { type: "boolean" }, json: { type: "boolean" },
         "data-dir": { type: "string" }, help: { type: "boolean", short: "h" }, version: { type: "boolean", short: "v" }
       }
@@ -231,7 +237,7 @@ async function cmdInfo(store, args, o) {
   const info = { id: d.id, title: d.title, authors: m.authors || [], publication: m.publication, date: m.date, volume: m.volume,
     issue: m.issue, pages: m.pages, doi: m.doi, arxiv: m.arxiv, isbn: m.isbn, publisher: m.publisher, url: m.url, abstract: m.abstract,
     keywords: m.keywords || [], library: libName(db, d.libraryId), tags: d.tags || [], starred: !!d.starred,
-    pdfPages: d.pages, highlights: d.count, images: Order.imagesOf(d.result).length, fileName: d.fileName,
+    read: !!d.read, lastPage: d.lastPage || 0, pdfPages: d.pages, highlights: d.count, images: Order.imagesOf(d.result).length, fileName: d.fileName,
     sourcePath: d.sourcePath || null, sourceMissing: !!d.sourceMissing, stale: !!d.stale, annotated: !!d.annotated,
     origin: d.origin || null, addedAt: d.addedAt ? new Date(d.addedAt).toISOString() : null,
     details: d.lookup ? { source: LOOKUP_SOURCE[d.lookup.source] || d.lookup.source, at: new Date(d.lookup.at).toISOString() } : null };
@@ -241,6 +247,7 @@ async function cmdInfo(store, args, o) {
     ["Volume", [info.volume, info.issue && "(" + info.issue + ")"].filter(Boolean).join(" ")], ["Pages", info.pages], ["Date", info.date],
     ["DOI", info.doi], ["arXiv", info.arxiv], ["ISBN", info.isbn], ["Publisher", info.publisher], ["URL", info.url],
     ["Keywords", info.keywords.join(", ")], ["Library", info.library], ["Tags", info.tags.join(", ")], ["Starred", info.starred ? "yes" : ""],
+    ["Read", info.read ? "yes" : ""], ["Last page", info.lastPage ? String(info.lastPage) : ""],
     ["PDF", `${plural(info.pdfPages || 0, "page")}, ${plural(info.highlights || 0, "highlight")}` + (info.images ? `, ${plural(info.images, "image")}` : "")],
     ["File", info.sourcePath ? info.sourcePath + (info.sourceMissing ? " (moved or deleted)" : info.stale ? " (changed since scan)" : "") : info.fileName],
     ["From", info.origin ? `${info.origin.kind} ${info.origin.value}` : ""], ["Annotated", info.annotated ? "yes, in Faelights" : ""],
@@ -262,10 +269,11 @@ async function cmdLibraries(store, args, o) {
 }
 
 async function cmdTags(store, args, o) {
-  const tags = [...Library.tagCounts(await store.loadDb())].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  if (o.json) return emit(json(tags.map(([tag, pdfs]) => ({ tag, pdfs }))));
+  const db = await store.loadDb();
+  const tags = [...Library.tagCounts(db)].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  if (o.json) return emit(json(tags.map(([tag, pdfs]) => ({ tag, pdfs, colour: Library.tagColour(db, tag) || null }))));
   if (!tags.length) return emit("No tags yet. Add one with: faelights tag <pdf> <tag>\n");
-  emit(tags.map(([t, n]) => `${t} (${plural(n, "PDF")})`).join("\n") + "\n");
+  emit(tags.map(([t, n]) => `${t} (${plural(n, "PDF")})` + (Library.tagColour(db, t) ? "  " + Library.tagColour(db, t) : "")).join("\n") + "\n");
 }
 
 async function cmdList(store, args, o) {
@@ -274,13 +282,15 @@ async function cmdList(store, args, o) {
   let docs = q ? Library.docsIn(db, findLibrary(db, q).id) : db.docs;
   for (const t of o.tag || []) docs = docs.filter(d => (d.tags || []).includes(Library.cleanTag(t)));
   if (o.starred) docs = docs.filter(d => d.starred);
+  if (o.read) docs = docs.filter(d => d.read);
+  if (o.unread) docs = docs.filter(d => !d.read);
   const rows = docs.map(d => ({ id: d.id, title: d.title, library: libName(db, d.libraryId), pages: d.pages, highlights: d.count,
-    tags: d.tags || [], starred: !!d.starred, stale: !!d.stale, sourceMissing: !!d.sourceMissing, sourcePath: d.sourcePath || null }));
+    tags: d.tags || [], starred: !!d.starred, read: !!d.read, lastPage: d.lastPage || 0, stale: !!d.stale, sourceMissing: !!d.sourceMissing, sourcePath: d.sourcePath || null }));
   if (o.json) return emit(json(rows));
   if (!rows.length) return emit(db.docs.length ? "No PDFs match.\n" : "No PDFs yet. Add one with: faelights add <file.pdf>\n");
   const w = Math.max(...rows.map(r => r.id.length));
   emit(rows.map(r => `${r.id.padEnd(w)}  ${String(r.highlights ?? 0).padStart(4)} hl  ${r.starred ? "★ " : ""}${r.title}` +
-    `  [${r.library}]${r.tags.length ? "  #" + r.tags.join(" #") : ""}${r.stale ? "  (changed since scan)" : ""}${r.sourceMissing ? "  (original moved)" : ""}`).join("\n") + "\n");
+    `  [${r.library}]${r.tags.length ? "  #" + r.tags.join(" #") : ""}${r.read ? "  (read)" : ""}${r.stale ? "  (changed since scan)" : ""}${r.sourceMissing ? "  (original moved)" : ""}`).join("\n") + "\n");
 }
 
 async function cmdSearch(store, args, o) {
@@ -355,7 +365,7 @@ async function cmdAdd(store, args, o) {
     try {
       const { title, meta, result } = await scan(fs.readFileSync(info.storedPath));
       const d = { id: info.id, libraryId: target.id, title: title || extra.title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
-        sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...tags], starred: false,
+        sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...tags], starred: false, read: false, lastPage: 0,
         scannedMtime: info.mtime, meta, ...scanned(result) };
       if (extra.origin) d.origin = extra.origin;
       if (extra.origin && !o["no-lookup"]) {   // added by identifier: fill in details, as the app does
@@ -511,6 +521,7 @@ async function cmdMove(store, args, o) {
 }
 
 async function cmdTag(store, args, o, remove) {
+  if (!remove && /^colou?r$/i.test(args[0] || "")) return cmdTagColour(store, args.slice(1), o);
   if (args.length < 2) throw usage(`${remove ? "untag" : "tag"} <pdf> <tag>...`);
   const [d, did] = await store.update(db => {
     const d = findDoc(db, args[0]);
@@ -527,6 +538,47 @@ async function cmdStar(store, args, o, on) {
   const [d, was] = await store.update(db => { const d = findDoc(db, args[0]); const was = !!d.starred; Library.setStar(d, on); return [d, was]; });
   console.log(`${on ? "Starred" : "Unstarred"} ${d.title}` + (was === on ? " (no change)" : ""));
   if (was !== on) changed();
+}
+
+// "#3a7", "3a7", "#33AA77" → "#33aa77"; anything else → null
+function hexColour(s) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(s).trim());
+  if (!m) return null;
+  const h = m[1].toLowerCase();
+  return "#" + (h.length === 3 ? [...h].map(c => c + c).join("") : h);
+}
+
+// tag colour <tag> [<#hex> | none | --clear]: the app's tag menu colour (db.tagColours). Only tags some PDF has
+// (or one that still has a colour, so it can be cleared).
+async function cmdTagColour(store, args, o) {
+  const clear = !!o.clear || /^(none|clear)$/i.test(args[1] || "");
+  if (!args.length || args.length > 2 || (o.clear && args.length > 1)) throw usage("tag colour <tag> [<#hex> | none | --clear]");
+  const tag = Library.cleanTag(args[0]);
+  const known = db => {
+    const tags = [...Library.tagCounts(db).keys()];
+    if (!tags.includes(tag) && !Library.tagColour(db, tag)) throw new Fail(`No PDF has the tag "${tag}". Tags: ${tags.join(", ") || "none yet"}.`);
+  };
+  if (args.length === 1 && !clear) {
+    const db = await store.loadDb();
+    known(db);
+    const c = Library.tagColour(db, tag);
+    if (o.json) return emit(json({ tag, colour: c || null }));
+    return console.log(c || `${tag} has no colour`);
+  }
+  const colour = clear ? "" : hexColour(args[1]);
+  if (colour === null) throw new Fail(`"${args[1]}" isn't a colour. Use #rgb or #rrggbb, e.g. #3a7 or #33aa77.`, 2);
+  const was = await store.update(db => { known(db); const was = Library.tagColour(db, tag); Library.setTagColour(db, tag, colour); return was; });
+  if (o.json) emit(json({ tag, colour: colour || null, changed: was !== colour }));
+  else console.log(`${tag}: ${colour || "no colour"}` + (was === colour ? " (no change)" : ""));
+  if (was !== colour) changed();
+}
+
+async function cmdRead(store, args, o, on) {
+  if (!args.length) throw usage(`${on ? "read" : "unread"} <pdf>...`);
+  const done = await store.update(db => [...new Set(args.map(a => findDoc(db, a)))].map(d => { const was = !!d.read; Library.setRead(d, on); return { d, was }; }));
+  if (o.json) emit(json(done.map(({ d, was }) => ({ id: d.id, title: d.title, read: d.read, changed: was !== on }))));
+  else for (const { d, was } of done) console.log(`Marked ${d.title} as ${on ? "read" : "unread"}` + (was === on ? " (no change)" : ""));
+  if (done.some(x => x.was !== on)) changed();
 }
 
 async function cmdRemove(store, args, o) {
@@ -597,6 +649,7 @@ async function main(argv) {
     add: cmdAdd, rescan: cmdRescan, lookup: cmdLookup, library: cmdLibrary, move: cmdMove, remove: cmdRemove, rm: cmdRemove,
     tag: (s, a, o) => cmdTag(s, a, o, false), untag: (s, a, o) => cmdTag(s, a, o, true),
     star: (s, a, o) => cmdStar(s, a, o, true), unstar: (s, a, o) => cmdStar(s, a, o, false),
+    read: (s, a, o) => cmdRead(s, a, o, true), unread: (s, a, o) => cmdRead(s, a, o, false),
     search: cmdSearch, find: cmdSearch, theme: cmdTheme, tour: cmdTour
   }[cmd];
   if (!run) throw new Fail(`Unknown command "${cmd}". Run faelights --help for usage.`, 2);
