@@ -176,6 +176,71 @@ test("libraries: add, rename, move, remove (PDFs go back to the Inbox; the Inbox
   assert.deepEqual(db.docs.map(d => d.libraryId), ["inbox", "inbox"]);
 });
 
+test("normalize fills shelves, shelfId and notes; drops shelves of gone libraries and stray shelf ids", () => {
+  const db = L.normalize({ libraries: [{ id: "inbox" }, { id: "l1" }],
+    shelves: [{ id: "s1", libraryId: "l1" }, { id: "s2", libraryId: "gone" }],
+    docs: [doc("a", { libraryId: "l1", shelfId: "s1" }), doc("b", { shelfId: "s1" }), doc("c", { shelfId: "s2", notes: [{ id: "n" }] }), doc("d")] });
+  assert.deepEqual(db.shelves.map(s => s.id), ["s1"]);
+  assert.deepEqual(db.docs.map(d => d.shelfId), ["s1", null, null, null]);
+  assert.deepEqual(db.docs.map(d => d.notes.length), [0, 0, 1, 0]);
+  assert.deepEqual(L.normalize({ libraries: [] }).shelves, []);
+});
+
+test("shelves: add, rename, move PDFs on and off, remove (PDFs go back to the library's root)", () => {
+  const db = { ...L.EMPTY_DB(), docs: [doc("a"), doc("b"), doc("c")] };
+  const l = L.addLibrary(db, "Thesis");
+  assert.equal(L.addShelf(db, "nope"), null);
+  const s = L.addShelf(db, l.id);
+  assert.equal(s.name, "New shelf");
+  const s2 = L.addShelf(db, l.id, "Methods");
+  assert.notEqual(s.id, s2.id);
+  L.renameShelf(db, s.id, "Background");
+  assert.deepEqual(L.shelvesIn(db, l.id).map(x => x.name), ["Background", "Methods"]);
+  // a shelf in another library moves the doc into that library
+  assert.equal(L.moveToShelf(db, db.docs[0], s.id), true);
+  assert.equal(L.moveToShelf(db, db.docs[0], s.id), false);
+  assert.equal(L.moveToShelf(db, db.docs[1], s.id), true);
+  assert.equal(L.moveToShelf(db, db.docs[2], "nope"), false);
+  assert.deepEqual([db.docs[0].libraryId, db.docs[0].shelfId], [l.id, s.id]);
+  assert.deepEqual(L.docsOnShelf(db, s.id).map(d => d.id), ["a", "b"]);
+  // null → the library's root
+  assert.equal(L.moveToShelf(db, db.docs[1], null), true);
+  assert.equal(L.moveToShelf(db, db.docs[1], null), false);
+  assert.deepEqual([db.docs[1].libraryId, db.docs[1].shelfId], [l.id, null]);
+  // moving to another library leaves the shelf
+  L.moveToShelf(db, db.docs[1], s2.id);
+  assert.equal(L.moveDoc(db.docs[1], "inbox"), true);
+  assert.equal(db.docs[1].shelfId, null);
+  assert.equal(L.removeShelf(db, "nope"), false);
+  assert.equal(L.removeShelf(db, s.id), true);
+  assert.deepEqual([db.docs[0].libraryId, db.docs[0].shelfId], [l.id, null]);
+  assert.deepEqual(L.shelvesIn(db, l.id).map(x => x.id), [s2.id]);
+});
+
+test("removing a library removes its shelves and puts its PDFs at the Inbox's root", () => {
+  const db = { ...L.EMPTY_DB(), docs: [doc("a")] };
+  const l = L.addLibrary(db);
+  const s = L.addShelf(db, l.id);
+  L.moveToShelf(db, db.docs[0], s.id);
+  L.removeLibrary(db, l.id);
+  assert.deepEqual(db.shelves, []);
+  assert.deepEqual([db.docs[0].libraryId, db.docs[0].shelfId], ["inbox", null]);
+});
+
+test("notes: add, update, remove; notesOf is a copy in reading order", () => {
+  const d = doc("a");
+  const n1 = L.addNote(d, 40, "later");
+  const n2 = L.addNote(d, 10.5, "## Section");
+  const n3 = L.addNote(d, 40, "also later");
+  assert.deepEqual(L.notesOf(d).map(n => n.id), [n2.id, n1.id, n3.id]);
+  assert.equal(L.notesOf(d) !== d.notes, true);
+  assert.equal(L.updateNote(d, n1.id, "edited").text, "edited");
+  assert.equal(L.updateNote(d, "nope", "x"), null);
+  assert.equal(L.removeNote(d, n2.id), true);
+  assert.equal(L.removeNote(d, n2.id), false);
+  assert.deepEqual(L.notesOf(d).map(n => n.text), ["edited", "also later"]);
+});
+
 test("stored PDF copies: import, read freshest, write only inside files/, remove", async () => {
   const s = L.at(tmpDir()), src = path.join(tmpDir(), "paper.pdf");
   fs.copyFileSync(repoPath("renderer", "sample.pdf"), src);
