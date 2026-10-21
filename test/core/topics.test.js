@@ -5,6 +5,7 @@ const { test, before } = require("node:test");
 const assert = require("node:assert/strict");
 const { repoPath } = require("../helpers/pdf");
 const { annotate } = require("../helpers/annotate");
+const { numberedPdf } = require("../helpers/headedpdf");
 const X = require("../../core/extract.js");
 const T = require("../../core/topics.js");
 
@@ -85,8 +86,24 @@ test("wording fallback finds numbered and named sections and drops captions and 
   assert.deepEqual(T.patternTopics(lines, text).map(t => [t.title, t.level, t.path]), [
     ["Abstract", 1, ["Abstract"]],
     ["1 Introduction", 1, ["1 Introduction"]],
-    ["2.1 Field Methods", 2, ["1 Introduction", "2.1 Field Methods"]],
+    // 2.1 isn't part of 1 (and there is no "2" heading to go under)
+    ["2.1 Field Methods", 1, ["2.1 Field Methods"]],
     ["Conclusion", 1, ["Conclusion"]]
+  ]);
+});
+
+test("wording fallback nests by section number: 1 > 1.1 > 1.1.2, A. > A.1, roman > lettered", () => {
+  const { lines, text } = stream([
+    [1, "1 Introduction"], [1, "1.1 Scope"], [1, "1.1.2 Detail"], [1, "1.2 Aims"], [1, "2 Methods"],
+    [2, "12 Results"], [2, "12.1 Data"], [2, "12.1.12 Section A"],
+    [3, "A. Proofs"], [3, "A.1 Lemmas"], [3, "IV. RESULTS"], [3, "A. Setup"], [3, "B. Runs"], [3, "V. DISCUSSION"]
+  ]);
+  assert.deepEqual(T.patternTopics(lines, text).map(t => [t.level, t.path.join(" > ")]), [
+    [1, "1 Introduction"], [2, "1 Introduction > 1.1 Scope"], [3, "1 Introduction > 1.1 Scope > 1.1.2 Detail"],
+    [2, "1 Introduction > 1.2 Aims"], [1, "2 Methods"],
+    [1, "12 Results"], [2, "12 Results > 12.1 Data"], [3, "12 Results > 12.1 Data > 12.1.12 Section A"],
+    [1, "A. Proofs"], [2, "A. Proofs > A.1 Lemmas"],
+    [1, "IV. RESULTS"], [2, "IV. RESULTS > A. Setup"], [2, "IV. RESULTS > B. Runs"], [1, "V. DISCUSSION"]
   ]);
 });
 
@@ -101,4 +118,26 @@ test("buildTopics falls back to wording, then to one topic per page", async () =
   const p = await T.buildTopics(noOutline, b.lines, b.text, sizes(100));
   assert.equal(p.topicSource, "pages");
   assert.deepEqual(p.topics.map(t => t.title), ["Page 1", "Page 2"]);
+});
+
+// numbered headings on a real PDF: number-based nesting for font-size headings and for bookmarks
+const NUMBERED_PATHS = [
+  "1 Introduction", "1 Introduction > 1.1 Scope", "1 Introduction > 1.1 Scope > 1.1.2 Detail", "2 Methods",
+  "3 Discussion", "3 Discussion > 3.1 Limits", "12 Results", "12 Results > 12.1 Data", "12 Results > 12.1 Data > 12.1.12 Section A"
+];
+test("numbered font-size headings nest by number, keep a number on its own line, and don't merge 3 with 3.1", async () => {
+  const r = await X.extractPdf(await numberedPdf());
+  assert.equal(r.topicSource, "headings");
+  // same-size "1" and "1.1" used to be siblings; "12" was dropped; "3 Discussion 3.1 Limits" was one heading
+  assert.deepEqual(r.topics.map(t => t.path.join(" > ")), ["Numbered Report", ...NUMBERED_PATHS.map(p => "Numbered Report > " + p)]);
+  assert.deepEqual(r.topics.map(t => t.level), [1, 2, 3, 4, 2, 2, 3, 2, 3, 4]);
+  assert.deepEqual(byTopic(r).map(([k]) => k.split(" > ").pop()), ["1.1 Scope", "1.1.2 Detail", "2 Methods", "3.1 Limits", "12.1.12 Section A"]);
+});
+test("flat bookmarks nest by number; bookmarks without numbers take them from the heading they point at", async () => {
+  for (const kind of ["numbered", "plain"]) {
+    const r = await X.extractPdf(await numberedPdf(kind));
+    assert.equal(r.topicSource, "outline");
+    assert.deepEqual(r.topics.map(t => t.path.join(" > ")), NUMBERED_PATHS, kind);
+    assert.deepEqual(r.topics.map(t => t.level), NUMBERED_PATHS.map(p => p.split(" > ").length), kind);
+  }
 });

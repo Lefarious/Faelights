@@ -1,24 +1,25 @@
 # Module: annotator
-> Path: renderer/annotator.js · Last synced commit: 796478d · Related features: F-007, F-015, F-022
+> Path: renderer/annotator.js · Last synced commit: 9ff7a30 · Related features: F-007, F-015, F-022, F-026
 
 ## Purpose
 The in-app PDF viewer and annotator. It renders a doc's pages with pdf.js (canvas + selectable text layer), and writes real PDF annotations (Highlight, Underline, StrikeOut, Text notes, Ink, Square image boxes) into the bytes with pdf-lib. Each edit is saved straight to the library's stored copy. It does not extract highlights itself: when it closes after changes, it calls `rescan()` from renderer-ui, which runs core `Extract.analyzePdf`.
 
 ## Public interface
 The global `Annot` (an IIFE that returns these):
-- `open(d, page?)` opens the viewer for doc `d`, optionally at a 1-based page. If `d` is already open it jumps to that page.
+- `open(d, page?)` opens the viewer for doc `d` at `startPage(d, page)`: a valid explicit 1-based page, else `d.lastPage` if > 0, else 1. If `d` is already open it jumps to that page.
+- `startPage(d, page?)` → 1-based page (pure; tested)
 - `close({discard?}) → Promise` tears down the UI and resolves once queued edits and disk writes have finished. Unless `discard` is set and the session changed anything, it then runs `rescan(d)` + `renderAll()`.
 - `mount(r)` re-attaches the live viewer root into `#reader`, restoring its scroll position.
 - `key(e) → boolean` handles keys while open; `true` means app.js must skip its own shortcuts.
 - `isOpen()`, `docId()`
 
 ## Dependencies
-- **Uses:** pdf-lib (`PDFLib` global: `PDFDocument`, `PDFName`, `PDFString`, `PDFHexString`, `PDFArray`, `PDFDict`, `PDFRef`, `PDFNumber`); pdfjs-dist (`getDocument`, `renderTextLayer`, `AnnotationMode`, `Util`); core `Extract.normQuads` (hit-testing); renderer-ui globals `el`, `svg`, `btn`, `toast`, `copyText`, `plural`, `safeName`, `save`, `S`, `rescan`, `renderAll`, `renderReader`; preload-bridge `fl.readPdf`, `fl.writeStored`, `fl.savePdfAs`
+- **Uses:** pdf-lib (`PDFLib` global: `PDFDocument`, `PDFName`, `PDFString`, `PDFHexString`, `PDFArray`, `PDFDict`, `PDFRef`, `PDFNumber`); pdfjs-dist (`getDocument`, `renderTextLayer`, `AnnotationMode`, `Util`); core `Extract.normQuads` (hit-testing), `Library.setLastPage`; renderer-ui globals `el`, `svg`, `btn`, `toast`, `copyText`, `plural`, `safeName`, `save`, `S`, `rescan`, `renderAll`, `renderReader`; preload-bridge `fl.readPdf`, `fl.writeStored`, `fl.savePdfAs`
 - **Used by:** renderer-ui (`renderReader`, `annotate`, `openDoc`, `removeDoc`, `useOriginal`, window keydown)
 
 ## Data & state owned
 - `A` (in memory, one session): `d`, `bytes` (current PDF bytes), `pdf` (pdf.js doc for those bytes), `libP` (promise of the pdf-lib doc, `null` after undo/redo), `readOnly` (reason string), `scale`, `fit`, `slots[]` (per page: `vp1` scale-1 viewport, `el`, `canvas`, `text`, `over`, `annots` cache, `drawn` key), `pageVer[]`, `undo[]`/`redo[]` (`{bytes, pages}`, max 40), `tool`, `sel`, `queue` (serial edit chain), `writing` (serial disk-write chain), `changed`, `wasAnnotated`
-- Writes doc fields `annotated` (boolean) and `annotatedAt`, and the setting `S.db.settings.annotColor` (`[r,g,b]` in 0–1)
+- Writes doc fields `annotated` (boolean), `annotatedAt` and `lastPage` (`trackPage` → `Library.setLastPage` → `save()` only when it changed; `close()` calls `trackPage` once more first), and the setting `S.db.settings.annotColor` (`[r,g,b]` in 0–1)
 - Writes `userData/library/files/<docId>.pdf` through `fl.writeStored`
 
 ## Files

@@ -133,6 +133,33 @@ test("stars toggle or set", () => {
   assert.equal(L.setStar(d, true), true);
 });
 
+test("read flag toggles or sets; last page keeps positive whole pages only", () => {
+  const d = doc("a");
+  assert.equal(L.setRead(d), true);
+  assert.equal(L.setRead(d), false);
+  assert.equal(L.setRead(d, true), true);
+  assert.equal(L.setLastPage(d, 12), true);
+  assert.equal(L.setLastPage(d, 12), false);
+  assert.equal(d.lastPage, 12);
+  for (const bad of [0, -3, 2.5, "7", null]) { L.setLastPage(d, bad); assert.equal(d.lastPage, 0); }
+});
+
+test("tag colours: set, read back, cleared by an empty or invalid colour", () => {
+  const db = L.EMPTY_DB();
+  assert.equal(L.setTagColour(db, "#ml", "#AA3300"), "#aa3300");
+  assert.equal(L.tagColour(db, "ml"), "#aa3300");
+  assert.equal(L.setTagColour(db, "ml", "red"), "");
+  assert.equal(L.tagColour(db, "ml"), "");
+  L.setTagColour(db, "ml", "#112233"); L.setTagColour(db, "ml", "");
+  assert.deepEqual(db.tagColours, {});
+});
+
+test("normalize fills read, lastPage and tagColours on older files", () => {
+  const db = L.normalize({ libraries: [], docs: [doc("a"), doc("b", { read: true, lastPage: 4 }), doc("c", { lastPage: -1 })] });
+  assert.deepEqual(db.docs.map(d => [d.read, d.lastPage]), [[false, 0], [true, 4], [false, 0]]);
+  assert.deepEqual(db.tagColours, {});
+});
+
 test("libraries: add, rename, move, remove (PDFs go back to the Inbox; the Inbox stays)", () => {
   const db = { ...L.EMPTY_DB(), docs: [doc("a"), doc("b")] };
   const l = L.addLibrary(db);
@@ -184,4 +211,36 @@ test("checkSources flags missing and changed originals", async () => {
     { sourcePath: src, scannedMtime: mtime - 5000, annotated: true }, { sourcePath: src + ".gone" }, { sourcePath: null }] };
   await s.checkSources(db);
   assert.deepEqual(db.docs.map(d => [d.stale, d.sourceMissing]), [[false, false], [true, false], [false, false], [false, true], [false, false]]);
+});
+
+test("update with wait: 0 fails at once with ELOCKED while another process holds the lock", async () => {
+  const s = L.at(tmpDir());
+  await s.saveDb(L.EMPTY_DB());
+  fs.writeFileSync(s.paths.lock, "{}");
+  const t0 = Date.now();
+  await assert.rejects(s.update(db => { db.x = 1; }, { wait: 0 }), e => e.code === "ELOCKED");
+  assert.ok(Date.now() - t0 < 1000);
+  fs.rmSync(s.paths.lock);
+  await s.update(db => { db.x = 1; }, { wait: 0 });
+  assert.equal((await s.loadDb()).x, 1);
+});
+
+test("app session marker: written and removed by its own process, ignored once that process is gone", async () => {
+  const s = L.at(tmpDir());
+  s.openSession();
+  assert.ok(fs.existsSync(s.paths.session));
+  assert.equal(s.appSession(), null, "this process doesn't block itself");
+  s.closeSession();
+  assert.equal(fs.existsSync(s.paths.session), false);
+
+  const { spawn } = require("node:child_process");
+  const app = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  try {
+    fs.writeFileSync(s.paths.session, JSON.stringify({ pid: app.pid, at: Date.now() }));
+    assert.equal(s.appSession().pid, app.pid);
+    s.closeSession();   // not ours: left in place
+    assert.ok(fs.existsSync(s.paths.session));
+  } finally { app.kill(); }
+  await new Promise(r => app.once("exit", r));
+  assert.equal(s.appSession(), null);
 });

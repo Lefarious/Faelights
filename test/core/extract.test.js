@@ -92,8 +92,13 @@ test("underlines, squiggles and strike-throughs are extracted in reading order a
   assert.equal(hs.find(h => h.type === "Strike").sentence, "Its discovery and development earned the Nobel Prize in Chemistry in 2008.");
 });
 
-test("a mark over no text is reported as loose, not as an entry", () => {
-  assert.deepEqual(marked.loose, [{ page: 2, color: [255, 217, 51], type: "Highlight", comment: "figure note" }]);
+test("a mark over no text is reported as loose (an image clip of its area), not as an entry", () => {
+  assert.equal(marked.loose.length, 1);
+  const { topic, ...l } = marked.loose[0];
+  assert.deepEqual(l, { id: l.id, n: 1, page: 2, rect: [100, 300, 200, 320], color: [255, 217, 51], type: "Highlight",
+    comment: "figure note", at: l.at });
+  assert.equal(typeof l.id, "string");
+  assert.deepEqual(topic.path, ["Notes on Bioluminescence", "4. Uses in the lab"]);
   assert.ok(!X.highlights(marked).some(h => h.comment === "figure note"));
   assert.deepEqual(sample.loose, []);
 });

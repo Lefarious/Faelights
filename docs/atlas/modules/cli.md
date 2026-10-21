@@ -1,5 +1,5 @@
 # Module: cli
-> Path: cli/faelights.js · Last synced commit: 20a8e58 · Related features: F-024, F-025
+> Path: cli/faelights.js · Last synced commit: c9791cc · Related features: F-024, F-025, F-027
 
 ## Purpose
 The `faelights` command line: a thin shell over core/ that reads highlights and text from any PDF and manages the desktop app's library on disk (the same `<userData>/library` folder) without Electron. It doesn't render anything (no image crops), doesn't talk to a running app, and has no state of its own.
@@ -13,18 +13,19 @@ The `faelights` command line: a thin shell over core/ that reads highlights and 
 | `export <pdf>` | highlights of a library doc | `store.loadDb`, same renderers |
 | `text <pdf \| file.pdf>` | full text per page (`--pages 1-3,7`) | `store.readPdf`, `Extract.openPdf`, `getTextContent` |
 | `info <pdf>` | details: `metaOf(d)` (= `d.meta` overlaid with `d.lookup.meta`), library, tags, origin, flags | `store.checkSources` |
-| `list [library]`, `libraries`, `tags` | listings (`--tag`, `--starred`) | `Library.docsIn`, `tagCounts`, `cleanTag` |
+| `list [library]`, `libraries`, `tags` | listings (`--tag`, `--starred`, `--read`, `--unread`); rows carry `read` / `lastPage`; `tags` shows each colour (`--json` `[{tag, pdfs, colour}]`) | `Library.docsIn`, `tagCounts`, `cleanTag`, `tagColour` |
 | `search <words>` | entries where every word matches (`-l` one library) | `Library.searchTerms` / `entryMatches`, `ExportFmt.entryLines` |
 | `add <file.pdf \| identifier>...` | import files (same `sourcePath` → rescan) or download by identifier (dupes by `origin` or `hash` → "Already in your library"); `-l`, `-t`, `--no-lookup` | `store.importPdf` / `readPdf` / `update` / `removeStored`, `identify.parseIdentifier` / `describe` / `fileNameFor`, `fetch.resolver(nodeGet).resolvePdf`, `fetch.lookupMeta` |
 | `rescan [pdf...]` | stale or outdated docs (`--all`) | `store.readPdf`, `update` |
 | `lookup <pdf>` | CrossRef / arXiv details → `d.lookup` | `fetch.lookupMeta` |
 | `library new \| rename \| delete` | libraries (Inbox can't be deleted; names unique, case-insensitive) | `Library.addLibrary` / `renameLibrary` / `removeLibrary` |
-| `move`, `tag`, `untag`, `star`, `unstar` | doc fields | `Library.moveDoc` / `addTag` / `removeTag` / `setStar` |
+| `move`, `tag`, `untag`, `star`, `unstar`, `read`, `unread` | doc fields (one `store.update`; an unknown doc aborts all) | `Library.moveDoc` / `addTag` / `removeTag` / `setStar` / `setRead` |
+| `tag colour <tag> [<#hex> \| none \| --clear]` (`color`) | show / set / clear `db.tagColours[tag]`; `#rgb` expands to `#rrggbb`; bad hex exit 2, unknown tag exit 1 | `Library.setTagColour` / `tagColour` |
 | `remove <pdf>` | drop doc + stored copy; annotated docs need `--force` | `update`, `store.removeStored` |
 | `theme [system\|light\|dark]` | read/write `<userData>/theme.json` | — |
 | `tour [status\|skip\|restart]` | `settings.tour` | `Tour.pending` / `skipAll` (from `renderer/tour.js`) |
 
-Options: `-f md|obsidian|html|plain|json`, `-m full|only`, `-o file`, `-l`, `-t` (repeatable), `--starred`, `--pages`, `--all`, `--force`, `--no-lookup`, `--frontmatter`, `--json`, `--data-dir`, `-h`, `-v`. Exit codes: 0 ok, 1 failure (`Fail`, `ELOCKED`), 2 usage. Also `module.exports = {main, Fail}`.
+Options: `-f md|obsidian|html|plain|json`, `-m full|only`, `-o file`, `-l`, `-t` (repeatable), `--starred`, `--pages`, `--all`, `--force`, `--no-lookup`, `--frontmatter`, `--json`, `--data-dir`, `-h`, `-v`. Exit codes: 0 ok, 1 failure (`Fail`, `ELOCKED`), 2 usage. Also `module.exports = {main, Fail, scan, scanned, ADD_FAIL, sameOrigin, fetchDetails, applyDetails}`, reused by `mcp/tools.js` `add_pdf` / `add_by_identifier`.
 
 ## Dependencies
 - **Uses:** core (`extract`, `meta`, `order`, `export`, `library`, `identify`, `fetch`), renderer-ui's `renderer/tour.js` (pure helpers only), `package.json` (`version`), node `fs`, `os`, `path`, `util.parseArgs`

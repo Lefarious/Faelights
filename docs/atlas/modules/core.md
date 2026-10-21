@@ -1,27 +1,27 @@
 # Module: core
-> Path: core/ (extract.js, topics.js, meta.js, order.js, export.js, library.js, identify.js, metadata.js, fetch.js) · Last synced commit: 20a8e58 · Related features: F-001, F-002, F-006, F-007, F-011, F-012, F-014, F-015, F-016, F-020, F-023, F-024, F-025
+> Path: core/ (extract.js, topics.js, meta.js, order.js, export.js, library.js, identify.js, metadata.js, fetch.js) · Last synced commit: c9791cc · Related features: F-001, F-027, F-028, F-002, F-006, F-007, F-011, F-012, F-014, F-015, F-016, F-020, F-023, F-024, F-025, F-026
 
 ## Purpose
 This is the headless, framework-free core: PDF highlight extraction, topic detection, PDF metadata, reading order with images, export formatting, search matching, the library on disk, identifier parsing, and finding/downloading papers. It has no DOM, no IPC and no Electron. The browser-loadable files (`extract`, `topics`, `meta`, `order`, `export`, `library`) load two ways: through a `<script>` tag in the renderer, where each defines one global namespace, and through `require()` in plain Node (main process, CLI, tests). The fs half of `library.js` is Node-only; the renderer only uses its pure db operations. `identify.js`, `metadata.js` and `fetch.js` are plain CommonJS, used only from Node (main process and CLI).
 
 ## Public interface
 - **`Extract`** (`core/extract.js`)
-  - `analyzePdf(pdf, onProgress?)` → `{ v, entries, loose, topics, topicSource, pages, count, images }` on any pdf.js document
+  - `analyzePdf(pdf, onProgress?)` → `{ v, entries, loose, topics, topicSource, pages, count, images, textless }` (`textless`: page numbers with no text layer) on any pdf.js document
     - `entries[]`: `{ n, page, at, segs:[{t, hl}], spans:[{id, color, type, comment, text}], topic, sentence }`
-    - `loose[]`: `{ page, color, type, comment }` for marks with no text under them
+    - `loose[]`: `{ id, n, page, rect, color, type, comment, at, topic }` for marks with no text under them; `rect` = union of the quads (`null` under 1pt), `at` / `topic` placed like image boxes. Ones with a rect are shown and exported as image clips (F-028). Older scans: `{ page, color, type, comment }`
     - `topics[]`: `{ title, path[], level, page, at }`; `topicSource` `"outline"` | `"headings"` | `"patterns"` | `"pages"`
     - `images[]`: `{ id, n, page, rect, color, comment, at, topic }` from every `Square` annotation, sorted by `at`, then top-to-bottom and left-to-right. Not counted in `count`, never in `loose`
     - `onProgress(page, numPages)` once per page
   - `highlights(result)` → one row per mark in reading order: `{ n, page, type, color, comment, text (highlighted words only), sentence, topic: path[] | null }`
-  - `ANALYZER_VERSION` (4), `MARK_TYPES`, `normQuads(a)`, `colorOf(a)`, `imgStreamAt(im, lines, textLen)`, `imgSnapToFacts(imgs, groups)`
+  - `ANALYZER_VERSION` (5), `MARK_TYPES`, `normQuads(a)`, `colorOf(a)`, `imgStreamAt(im, lines, textLen)`, `imgSnapToFacts(imgs, groups)`
   - Node only: `loadPdfjs()` (lazy `require("pdfjs-dist/legacy/build/pdf.js")`, with the "Cannot polyfill" canvas warning silenced), `openPdf(pathOrBytes)` → pdf.js document (no worker, font faces off), `extractPdf(pathOrBytes, {onProgress})` → open + `analyzePdf` + destroy
-- **`Topics`** (`core/topics.js`): `buildTopics(pdf, lines, text, sizeHist)` → `{topics, topicSource}` (sorted by `at`); `resolveOutline(pdf)`, `headingTopics(lines, text, body)`, `patternTopics(lines, text)`, `pageTopics(lines)`, `topicAt(topics, at)`
+- **`Topics`** (`core/topics.js`): `buildTopics(pdf, lines, text, sizeHist)` → `{topics, topicSource}` (sorted by `at`); `resolveOutline(pdf)`, `headingTopics(lines, text, body)`, `patternTopics(lines, text)`, `pageTopics(lines)`, `nest(topics)` (paths/levels from section numbers, else rank), `topicAt(topics, at)`
 - **`Meta`** (`core/meta.js`): `readMeta(pdf)` → `{title, authors[], abstract, publication, volume, issue, pages, date, doi, arxiv, issn, isbn, publisher, url, rights, keywords[], creator, producer, created, modified, pdfVersion}` (XMP dc/prism → Info dict → DOI/arXiv regex on page 1; empty fields dropped), `cleanTitle(t)` (drops `Microsoft Word - `, file extensions, `untitled`, < 3 chars → `""`), `DOI_RE`, `ARXIV_RE`
-- **`Order`** (`core/order.js`): `ckey(color)`, `imagesOf(result)`, `filterImages(images, offSet)`, `withImages(entries, images)` (an image goes before an entry when `img.at <= e.at`), `groupItems(items)`, `summary(result)` → `{count, colours}` (the doc's list fields: marks incl. loose; up to 6 colours, extracts then images)
-- **`ExportFmt`** (`core/export.js`): `PRE_TOPIC`, `FORMATS`, `extOf(fmt)`, `wrapHl`, `entryLines`, `groupsOf`, `exportItems`, `isImage`, `imageFile(img)`, `mdLink(path)`, `imageLines(ref, fmt)`, `docText(d, {fmt, mode, frontmatter, libraryName, date, preTopic, entries, images})`, `esc`, `docHtml(d, opts)`
+- **`Order`** (`core/order.js`): `ckey(color)`, `imagesOf(result)`, `filterImages(images, offSet)`, `withImages(entries, images)` (an image goes before an entry when `img.at <= e.at`), `groupItems(items)` (reader items `{kind, image}` or export items tagged `kind: "image"`; counts `entries`, `images`, `clips`), `clipsOf(result)` (loose marks with a rect, tagged `clip: true`), `looseOf(result)` (loose marks without one), `figuresOf(result, boxes)` (clips + image boxes when `boxes`), `summary(result)` → `{count, colours}` (the doc's list fields: marks incl. loose; up to 6 colours, extracts then clips then images)
+- **`ExportFmt`** (`core/export.js`): `PRE_TOPIC`, `FORMATS`, `extOf(fmt)`, `wrapHl`, `entryLines`, `groupsOf` (= `Order.groupItems`), `exportItems`, `isImage`, `imageFile(img)`, `mdLink(path)`, `imageLines(ref, fmt)`, `safeName(title)` / `fileBase(title)` (export file names; `fileBase` also safe on Windows), `docText(d, {fmt, mode, frontmatter, libraryName, date, preTopic, entries, images})`, `esc`, `docHtml(d, opts)`
 - **`Library`** (`core/library.js`)
-  - pure (renderer + Node): `EMPTY_DB()`, `normalize(db)`, `findDoc`, `findLibrary`, `docsIn(db, libId)`, `addLibrary(db, name?)`, `renameLibrary(db, id, name)`, `removeLibrary(db, id)` (docs → Inbox; refuses system), `moveDoc(d, libId)`, `cleanTag`, `addTag(d, tag)` → the added tag or `""`, `removeTag(d, tag)`, `tagCounts(db)` → `Map`, `setStar(d, on?)` (toggles when `on` is omitted), `searchTerms(q)` (lower-cased words), `entryMatches(e, terms)` (every term in the sentence, a span's text or comment, or the topic path), `INBOX`, `APP_NAME`
-  - Node only: `userDataDir(env?, platform?, home?)` (`FAELIGHTS_DATA_DIR`, else `%APPDATA%\Faelights`, `~/Library/Application Support/Faelights`, `$XDG_CONFIG_HOME|~/.config/Faelights`); `at(userData?)` → a store (one per folder per process): `paths {userData, dir, db, files, lock}`, `loadDb()`, `saveDb(db)`, `update(fn)`, `withLock(fn)`, `checkSources(db)`, `isStored(p)`, `importPdf(srcPath)`, `readPdf(doc)`, `pdfPath(doc)`, `writeStored(storedPath, bytes)`, `removeStored(storedPath)`
+  - pure (renderer + Node): `EMPTY_DB()`, `normalize(db)`, `findDoc`, `findLibrary`, `docsIn(db, libId)`, `addLibrary(db, name?)`, `renameLibrary(db, id, name)`, `removeLibrary(db, id)` (docs → Inbox; refuses system), `moveDoc(d, libId)`, `cleanTag`, `addTag(d, tag)` → the added tag or `""`, `removeTag(d, tag)`, `tagCounts(db)` → `Map`, `setStar(d, on?)` (toggles when `on` is omitted), `setRead(d, on?)` (same), `setLastPage(d, page)` (positive whole pages, else 0; → changed?), `setTagColour(db, tag, colour)` (`#rrggbb`; empty/invalid clears; → the colour kept or `""`), `tagColour(db, tag)` → `""` when none, `searchTerms(q)` (lower-cased words), `entryMatches(e, terms)` (every term in the sentence, a span's text or comment, or the topic path), `INBOX`, `APP_NAME`
+  - Node only: `userDataDir(env?, platform?, home?)` (`FAELIGHTS_DATA_DIR`, else `%APPDATA%\Faelights`, `~/Library/Application Support/Faelights`, `$XDG_CONFIG_HOME|~/.config/Faelights`); `at(userData?)` → a store (one per folder per process): `paths {userData, dir, db, files, lock, session}`, `loadDb()`, `saveDb(db)`, `update(fn, opts?)`, `withLock(fn, opts?)` (`opts.wait` ms before `ELOCKED`, default 10 s; 0 = fail at once), `openSession()` / `closeSession()` / `appSession()` (the desktop app's `faelights.app` marker; `appSession()` → `{pid, at}` only for a live process other than this one), `checkSources(db)`, `isStored(p)`, `importPdf(srcPath)`, `readPdf(doc)`, `pdfPath(doc)`, `writeStored(storedPath, bytes)`, `removeStored(storedPath)`
 
 - **identify** (`core/identify.js`, CommonJS): `parseIdentifier(text)` → `{kind: doi|arxiv|pmcid|pmid|isbn|ads|url, value, url}` | `null`, `parseIdentifiers(text)` → `[{text, id}]`, `describe(id)`, `findPdfLink(html, baseUrl)` → `{pdf, refresh, title}`, `isPdf(buf)`, `fileNameFor(id, pdfUrl)`, `fetchFailureReason(err, url?)` → `offline` | `unreachable` | `network`
 - **metadata** (`core/metadata.js`, CommonJS): `lookupTarget(meta, origin)` → `{source: crossref|arxiv, id}` | `null`, `fromCrossref(json)`, `fromArxivAtom(xml)` (both → the `Meta.readMeta` field shape, plus `itemType`)
@@ -49,7 +49,7 @@ graph TD
 In the browser, a dependency is found as a global (`typeof Topics !== "undefined" ? Topics : require("./topics.js")`). `index.html` therefore loads `topics.js` before `extract.js` and `order.js` before `export.js`; `meta.js` follows `extract.js` and only needs the `pdfjsLib` global.
 
 ## Data & state owned
-- `library.js` reads and writes `<userData>/library/faelights.json` (`{version, libraries, docs, settings}`), `faelights.json.lock` (`{pid, at}`, only while writing), `faelights.json.<pid>-<hex>.tmp` (during a write), `faelights.json.broken-<ts>` (copy of an unreadable file), and `<userData>/library/files/<docId>.pdf` (stored copies, `.tmp` during `writeStored`).
+- `library.js` reads and writes `<userData>/library/faelights.json` (`{version, libraries, docs, tagColours, settings}`; `normalize` fills `tagColours = {}` and per doc `read = false`, `lastPage = 0` (never opened)), `faelights.json.lock` (`{pid, at}`, only while writing), `faelights.json.<pid>-<hex>.tmp` (during a write), `faelights.json.broken-<ts>` (copy of an unreadable file), and `<userData>/library/files/<docId>.pdf` (stored copies, `.tmp` during `writeStored`).
 - In memory, per store: `queue` (saves/updates from this process run one at a time) and `pdfWrites` (serial stored-PDF writes); module-level `stores` Map.
 - `extract.js` caches the loaded pdfjs module (`pdfjs`).
 - `fetch.js nodeGet`: one in-memory cookie jar (`domain → Map(name → value)`) per transport. Nothing else owns state.
@@ -68,7 +68,7 @@ In the browser, a dependency is found as a global (`typeof Topics !== "undefined
 ### `core/topics.js`
 - **Role:** topic detection on the text stream: outline → font-size headings → wording → pages
 - **Exports:** `Topics`, see Public interface
-- **Internal:** regexes `SECTION_NAMES`, `NUMBERED`, `RUN_IN`, `CAPTION`; `headingText`, `capsHeading`
+- **Internal:** regexes `SECTION_NAMES`, `NUMBERED` (up to 5 components, `A.1`), `RUN_IN`, `CAPTION`; `headingText`, `capsHeading`; `nest()` shared by all sources: a numbered heading goes under the nearest earlier heading whose number is its prefix (`A.`–`H.` under roman `I.`–`X.`), otherwise under one of lower rank; `level === path.length`. Unnumbered bookmarks take `<number> ` from their target line; in font-size headings a number on its own line joins the next line and a numbered line never merges into the heading above
 - **Imports (internal):** none
 - **Used by:** `core/extract.js`; `test/core/topics.test.js`
 - **Change impact:** any change alters `result.topics` and therefore grouping in the reader and exports; bump `ANALYZER_VERSION`.
@@ -83,27 +83,27 @@ In the browser, a dependency is found as a global (`typeof Topics !== "undefined
 ### `core/order.js`
 - **Role:** pure ordering of extracts and images (moved from `renderer/order.js`)
 - **Exports:** `Order`, see Public interface
-- **Used by:** `renderer/app.js renderReader` / `filteredImages` / `summary` (alias of `Order.summary`), `core/export.js exportItems`, `cli/faelights.js` (`summary`, `imagesOf`), `test/reader-images.test.js`
-- **Change impact:** the placement rule here is the single source of truth for the reader and exports. `ckey` duplicates `app.js ckey`.
+- **Used by:** `renderer/app.js renderReader` / `filteredImages` / `summary` (alias of `Order.summary`), `core/export.js exportItems`, `cli/faelights.js` (`summary`, `imagesOf`), `mcp/tools.js` (`summary`), `test/reader-images.test.js`, `test/core/marks.test.js`
+- **Change impact:** the placement rule here is the single source of truth for the reader and exports. `app.js ckey` and `export.js groupsOf` are this module's `ckey` / `groupItems`.
 
 ### `core/export.js`
 - **Role:** export text and HTML (moved from `renderer/exportfmt.js`): Markdown `**hl**`, Obsidian `==hl==`, plain, self-contained HTML; YAML frontmatter; `mode` `full` (sentence with marks) or `only` (marked words joined by ` … `)
 - **Exports:** `ExportFmt`, see Public interface
 - **Imports (internal):** `Order` (global or `./order.js`)
-- **Used by:** `renderer/app.js` export section, `cli/faelights.js` `render` / `search` (`docText`, `docHtml`, `entryLines`), `test/export.test.js`, `test/core/export.test.js`, `test/cli.test.js`
+- **Used by:** `renderer/app.js` export section (`safeName`, `exportFileBase` = `fileBase`), `cli/faelights.js` `render` / `search` (`docText`, `docHtml`, `entryLines`), `mcp/tools.js` (`docText`, `groupsOf`, `fileBase`, `extOf`), `test/export.test.js`, `test/core/export.test.js`, `test/cli.test.js`
 - **Change impact:** this is the text users paste into Notion and Obsidian; with no images, md/obsidian/plain must stay identical to the pre-F-016 output (tested).
 
 ### `core/library.js`
 - **Role:** library data: pure db operations and the on-disk store
 - **Exports:** `Library`, see Public interface
 - **Imports (internal):** none
-- **Used by:** `cli/faelights.js` (every library command, through `at()` + `update()`; `searchTerms` / `entryMatches` for `search`); `src/main.js` (`db:load`, `db:save`, `pdf:import`, `pdf:fetch`, `pdf:read`, `pdf:open`, `pdf:reveal`, `pdf:writeStored`, `pdf:removeStored`, "Show Library Folder"); `renderer/app.js` (`newLibrary`, `deleteLibrary`, rename, `moveDoc`, star buttons, tag editor, sidebar tag counts, `renderResults` via `entryMatches`); `test/core/library.test.js`
+- **Used by:** `cli/faelights.js` (every library command, through `at()` + `update()`; `searchTerms` / `entryMatches` for `search`); `mcp/tools.js` (reads, `update(fn, {wait: 0})`, `appSession()`); `src/main.js` `whenReady` / `will-quit` (`openSession` / `closeSession`); `src/main.js` (`db:load`, `db:save`, `pdf:import`, `pdf:fetch`, `pdf:read`, `pdf:open`, `pdf:reveal`, `pdf:writeStored`, `pdf:removeStored`, "Show Library Folder"); `renderer/app.js` (`newLibrary`, `deleteLibrary`, rename, `moveDoc`, star buttons, read toggle (`setRead`), tag editor and tag colours (`setTagColour` / `tagColour`), sidebar tag counts, `renderResults` via `entryMatches`); `renderer/annotator.js` (`setLastPage` in `trackPage`); `test/core/library.test.js`
 - **Side effects:** the files listed under Data & state; reads `FAELIGHTS_DATA_DIR`, `APPDATA`, `XDG_CONFIG_HOME` in `userDataDir()`
 - **Change impact:** `saveDb` writes the whole object it is given (the desktop app's in-memory copy), so it can overwrite a script's change made after the app loaded. Scripts should use `update()`. Changing `paths` moves users' data.
 
 ### `core/identify.js`
 - **Role:** pure helpers for add-by-identifier (moved unchanged from `src/identify.js`; CommonJS, no Electron)
-- **Exports:** see Public interface. `parseIdentifier` accepts bare, `doi:` and doi.org DOIs, new and old arXiv ids (`arXiv:` prefix, abs/pdf links), `PMC…` ids, PMIDs, ISBN-10/13 (checksum), ADS bibcodes and other http(s) URLs; rejects other schemes, hosts without a dot and URLs with credentials. `parseIdentifier` takes up to `MAX_ID` (16384) chars and strips `INVISIBLE` chars (zero-width, word joiner, soft hyphen); `tidy` / `trimEnd` run in linear time. `parseIdentifiers` splits a pasted list on newlines, whitespace and `,`/`;`, drops duplicates, and cuts input over 100000 chars at whitespace. `fetchFailureReason(err, url)`: no-connection codes (`OFFLINE_CODES`) → `offline`; DNS/refused/host-unreachable (`NO_HOST_CODES`) → `offline` for the app's own `SERVICE_HOSTS` (doi.org, crossref.org, arxiv.org, ncbi.nlm.nih.gov, the PMC bucket, europepmc.org, openlibrary.org, archive.org, adsabs.harvard.edu; subdomains count) or with no url, else `unreachable`; anything else → `network`
+- **Exports:** see Public interface. `parseIdentifier` accepts bare, `doi:` and doi.org DOIs, new and old arXiv ids (`arXiv:` prefix, abs/pdf links), `PMC…` ids, PMIDs, ISBN-10/13 (checksum), ADS bibcodes and other http(s) URLs; drops tracking query keys (`TRACKING`: `utm_*`, `fbclid`, `gclid`, `mc_cid`, … via `stripTracking` for DOIs, `searchParams` for links); rejects other schemes, hosts without a dot and URLs with credentials. `parseIdentifier` takes up to `MAX_ID` (16384) chars and strips `INVISIBLE` chars (zero-width, word joiner, soft hyphen); `tidy` / `trimEnd` run in linear time. `parseIdentifiers` splits a pasted list on newlines, whitespace and `,`/`;`, drops duplicates, and cuts input over 100000 chars at whitespace. `fetchFailureReason(err, url)`: no-connection codes (`OFFLINE_CODES`) → `offline`; DNS/refused/host-unreachable (`NO_HOST_CODES`) → `offline` for the app's own `SERVICE_HOSTS` (doi.org, crossref.org, arxiv.org, ncbi.nlm.nih.gov, the PMC bucket, europepmc.org, openlibrary.org, archive.org, adsabs.harvard.edu; subdomains count) or with no url, else `unreachable`; anything else → `network`
 - **Used by:** `src/main.js` (`id:parse`, `id:parseMany`, `pdf:fetch`, `fetchUrl` errors), `core/fetch.js`, `cli/faelights.js add`, `test/identify.test.js`
 - **Change impact:** decides what the app's add dialog, paste and link-drop handlers and `faelights add` accept.
 
@@ -118,6 +118,7 @@ In the browser, a dependency is found as a global (`typeof Topics !== "undefined
 - **Exports:** see Public interface
 - **Imports (internal):** `./identify.js`, `./metadata.js`
 - **Used by:** `src/main.js` (`resolver(fetchUrl, sendProgress)` at load, `lookupMeta(fetchUrl, …)` in `meta:lookup`, `FetchFail` / `statusFail` / limits in `fetchUrl`), `cli/faelights.js` (`resolver(nodeGet(…))`, `lookupMeta`, `FetchFail`), `test/core/fetch.test.js`
+- **ISBN:** reads the edition record `openlibrary.org/isbn/<isbn>.json` first; its `ocaid` scan is tried before the work's other `ia` scans (`search.json`). Result carries `edition` (`edition_name, publish_date`, or `"scan of another edition"`), passed on by `pdf:fetch` and shown by the add dialog
 - **Side effects:** network only through the given transport; `nodeGet` uses Node's `fetch` and sends `User-Agent`, `Accept` and jar cookies
 - **Change impact:** the app's add-by-identifier and `faelights add` / `lookup` both go through `resolvePdf` / `lookupMeta`. Failure reasons are string-keyed to `ADD_FAIL` in `renderer/app.js` and `cli/faelights.js`.
 
@@ -128,7 +129,7 @@ In the browser, a dependency is found as a global (`typeof Topics !== "undefined
 - Heading detection uses lines ≥ 1.12× the most common (body) font size, at most 110 chars, and keeps up to 4 size levels. Consecutive same-size lines are merged as wrapped headings.
 - Sentences are capped at about 320 chars on each side of the highlight. Overlapping sentence groups merge, so one entry can hold several spans.
 - Outline destinations that fail to resolve are skipped silently.
-- `patternTopics` runs only when font-size detection finds fewer than 2 headings. It drops captions and any title found on 3+ pages (running headers). Short numbered list items can be misread as headings. Numbered level comes from dot depth (`2.1` → 2), capped at 3; `A.` → 2, roman → 1.
+- `patternTopics` runs only when font-size detection finds fewer than 2 headings. It drops captions and any title found on 3+ pages (running headers). Short numbered list items can be misread as headings. Nesting of numbered headings comes from `nest()` (number prefixes), for every topic source.
 - `extract.js` keeps a no-op ternary `last.hl === -2 ? -1 : -1`.
 - Consumers place an image before entry `e` when `img.at <= e.at`; `imgSnapToFacts` makes an image inside a fact take that fact's `at`.
 - Any Square annotation counts as an image box, including ones made by other apps (Zotero exports image annotations as Squares).

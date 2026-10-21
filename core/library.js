@@ -17,14 +17,21 @@ const Library = (() => {
     version: 1,
     libraries: [{ id: INBOX, name: "Inbox", createdAt: Date.now(), system: true }],
     docs: [],
+    tagColours: {},
     settings: { mode: "full", fmt: "md", sort: "added" }
   });
 
-  // Fill in what older or hand-edited files may lack: the Inbox, default settings, a docs list
+  // Fill in what older or hand-edited files may lack: the Inbox, default settings, a docs list, tag colours,
+  // and per doc the read flag and the viewer's last page (0 = never opened)
   function normalize(db) {
     if (!db.libraries?.some(l => l.id === INBOX)) db.libraries.unshift(EMPTY_DB().libraries[0]);
     db.settings = { ...EMPTY_DB().settings, ...(db.settings || {}) };
     db.docs = db.docs || [];
+    db.tagColours = db.tagColours || {};
+    for (const d of db.docs) {
+      if (typeof d.read !== "boolean") d.read = false;
+      if (!Number.isInteger(d.lastPage) || d.lastPage < 0) d.lastPage = 0;
+    }
     return db;
   }
 
@@ -82,6 +89,29 @@ const Library = (() => {
     return d.starred;
   }
 
+  // on omitted → toggle. → the new state
+  function setRead(d, on) {
+    d.read = on === undefined ? !d.read : !!on;
+    return d.read;
+  }
+  // The page (1-based) the viewer was last on; anything else resets it to 0. → changed?
+  function setLastPage(d, page) {
+    const p = Number.isInteger(page) && page > 0 ? page : 0;
+    if (d.lastPage === p) return false;
+    d.lastPage = p;
+    return true;
+  }
+  // Tag colours are "#rrggbb", keyed by tag; an empty or invalid colour clears it. → the colour kept, or ""
+  function setTagColour(db, tag, colour) {
+    const t = cleanTag(tag);
+    db.tagColours = db.tagColours || {};
+    const c = /^#[0-9a-f]{6}$/i.test(colour || "") ? colour.toLowerCase() : "";
+    if (!t) return "";
+    if (c) db.tagColours[t] = c; else delete db.tagColours[t];
+    return c;
+  }
+  const tagColour = (db, tag) => (db.tagColours && db.tagColours[tag]) || "";
+
   // Search highlights: every word must appear in the sentence, a highlight, its note or the topic path
   const searchTerms = q => String(q || "").toLowerCase().split(/\s+/).filter(Boolean);
   function entryMatches(e, terms) {
@@ -120,7 +150,8 @@ const Library = (() => {
   function makeStore(userData) {
     const { fs, fsp, path, crypto } = node();
     const dir = path.join(userData, "library");
-    const paths = { userData, dir, db: path.join(dir, "faelights.json"), files: path.join(dir, "files"), lock: path.join(dir, "faelights.json.lock") };
+    const paths = { userData, dir, db: path.join(dir, "faelights.json"), files: path.join(dir, "files"), lock: path.join(dir, "faelights.json.lock"),
+      session: path.join(dir, "faelights.app") };
     const statOrNull = async p => { try { return await fsp.stat(p); } catch (_) { return null; } };
 
     // strict: throw on an unreadable file instead of starting empty (used before writing back)
@@ -137,10 +168,11 @@ const Library = (() => {
     }
     const loadDb = () => readDb(false);
 
-    // Exclusive lock file next to the library (created with O_EXCL). Waits while another process holds it.
-    async function withLock(fn) {
+    // Exclusive lock file next to the library (created with O_EXCL). Waits while another process holds it,
+    // up to opts.wait ms (0: fail at once with ELOCKED).
+    async function withLock(fn, opts = {}) {
       await fsp.mkdir(dir, { recursive: true });
-      const deadline = Date.now() + LOCK_WAIT_MS;
+      const deadline = Date.now() + (opts.wait ?? LOCK_WAIT_MS);
       for (;;) {
         try {
           const h = await fsp.open(paths.lock, "wx");
@@ -178,12 +210,30 @@ const Library = (() => {
     // Replace the library file with db (what the desktop app does with its in-memory copy)
     const saveDb = db => enqueue(() => withLock(() => write(db)));
     // Read, change and write back under one lock (for scripts): fn(db) may be async; its return value is passed on
-    const update = fn => enqueue(() => withLock(async () => {
+    const update = (fn, opts) => enqueue(() => withLock(async () => {
       const db = await readDb(true);
       const out = await fn(db);
       await write(db);
       return out;
-    }));
+    }, opts));
+
+    /* ---- the desktop app's session marker ----
+       The app keeps the library in memory and writes all of it back on every save, so a change another process makes
+       while it is open is lost at its next save. The app marks the folder while it runs; scripts can refuse to write. */
+    const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; } };
+    function openSession() {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(paths.session, JSON.stringify({ pid: process.pid, at: Date.now() }));
+    }
+    function closeSession() {
+      try { if (JSON.parse(fs.readFileSync(paths.session, "utf8")).pid === process.pid) fs.unlinkSync(paths.session); } catch (_) {}
+    }
+    // → {pid, at} while the app is running on this folder, else null (a marker left by a crash is ignored)
+    function appSession() {
+      let s;
+      try { s = JSON.parse(fs.readFileSync(paths.session, "utf8")); } catch (_) { return null; }
+      return s && Number.isInteger(s.pid) && s.pid !== process.pid && alive(s.pid) ? s : null;
+    }
 
     // Flag docs whose source PDF changed or went missing since the last scan
     async function checkSources(db) {
@@ -240,11 +290,11 @@ const Library = (() => {
       return true;
     }
 
-    return { paths, loadDb, saveDb, update, withLock, checkSources, isStored, importPdf, readPdf, pdfPath, writeStored, removeStored };
+    return { paths, loadDb, saveDb, update, withLock, openSession, closeSession, appSession, checkSources, isStored, importPdf, readPdf, pdfPath, writeStored, removeStored };
   }
 
   return { APP_NAME, INBOX, EMPTY_DB, normalize, findDoc, findLibrary, docsIn, addLibrary, renameLibrary, removeLibrary, moveDoc,
-    cleanTag, addTag, removeTag, tagCounts, setStar, searchTerms, entryMatches, userDataDir, at };
+    cleanTag, addTag, removeTag, tagCounts, setStar, setRead, setLastPage, setTagColour, tagColour, searchTerms, entryMatches, userDataDir, at };
 })();
 
 if (typeof module !== "undefined") module.exports = Library;

@@ -34,7 +34,8 @@ const ICON = {
   download: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
   undo: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
-  chevron: '<path d="m9 18 6-6-6-6"/>'
+  chevron: '<path d="m9 18 6-6-6-6"/>',
+  read: '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>'
 };
 // Brand artwork with light/dark variants (renderer/assets/brand/<name>-light|dark.svg)
 function brandImg(name, cls) {
@@ -52,7 +53,9 @@ const S = {
   docId: null,
   docQuery: "",
   searchQuery: "",
-  searchLib: "all",
+  searchLib: "all",        // search scope: "all", "doc" (searchDoc) or a library id
+  searchDoc: null,         // the PDF the reader showed when search opened ("This PDF")
+  searchPicked: false,     // the user chose a scope this session (select or "Search this library")
   off: new Set(),          // colour keys hidden in the reader
   busy: null,              // {label, done, total}
   renaming: null,          // library id being renamed
@@ -66,7 +69,7 @@ function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => fl.saveD
 const doc = id => S.db.docs.find(d => d.id === id);
 const lib = id => S.db.libraries.find(l => l.id === id);
 const rgb = c => `${c[0]} ${c[1]} ${c[2]}`;
-const ckey = c => c.map(v => Math.round(v / 24) * 24).join(",");
+const ckey = Order.ckey;
 const plural = (n, a, b) => n + " " + (n === 1 ? a : (b || a + "s"));
 // extracts that come before the first topic (title page, abstract) are grouped under this label
 const PRE_TOPIC = "Abstract";
@@ -141,7 +144,7 @@ const summary = Order.summary;
 // opts.title: the landing page's title, used when the PDF has none of its own.
 async function addImported(info, target, opts = {}) {
   const d = { id: info.id, libraryId: target, title: "", fileName: info.fileName, sourcePath: opts.sample ? null : info.sourcePath,
-    storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [], starred: false, scannedMtime: info.mtime };
+    storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [], starred: false, read: false, lastPage: 0, scannedMtime: info.mtime };
   if (opts.origin) d.origin = opts.origin;
   const { bytes } = await fl.readPdf({ ...d, sourcePath: null });
   const { title, meta, result } = await analyzeBytes(bytes, (pg, n) => { if (S.busy) { S.busy.page = `page ${pg} of ${n}`; renderProgress(); } });
@@ -216,17 +219,37 @@ async function deleteLibrary(id) {
 // at / opts: see openMenu()
 async function libraryMenu(id, at, opts) {
   const l = lib(id), cur = S.view.kind === "library" && S.view.id === id;
-  const items = [{ id: "rename", label: "Rename", icon: "pen" }, { id: "export", label: "Export to folder…", icon: "export", hint: cur ? keyHint("E", true) : "" }];
+  const items = [{ id: "search", label: "Search this library", icon: "search" }, { id: "rename", label: "Rename", icon: "pen" }, { id: "export", label: "Export to folder…", icon: "export", hint: cur ? keyHint("E", true) : "" }];
   if (!l.system) items.push({ type: "separator" }, { id: "delete", label: "Delete library…", icon: "trash", danger: true });
   const r = await openMenu(at || document.activeElement, items, { label: l.name, ...opts });
+  if (r === "search") { S.searchPicked = true; go({ kind: "search", scope: id }); }
   if (r === "rename") { S.renaming = id; renderSide(); }
   if (r === "export") exportLibrary(id);
   if (r === "delete") deleteLibrary(id);
 }
 
+/* ---------------- tag colours ---------------- */
+// Mid-tone hues: readable as dots and tints on both the light and dark themes
+const TAG_COLOURS = [["Red", "#d64550"], ["Orange", "#e07b39"], ["Yellow", "#c9a227"], ["Green", "#3a9d5d"], ["Teal", "#2a9d9f"], ["Blue", "#3b7dd8"], ["Purple", "#8a5cd6"], ["Pink", "#d0559b"]];
+// Paints a tag's dot / chip with its colour (--tc); uncoloured tags are left as they are
+function tint(node, tag) {
+  const c = Library.tagColour(S.db, tag);
+  if (c) { node.classList.add("tc"); node.style.setProperty("--tc", c); }
+  return node;
+}
+// at / opts: see openMenu()
+async function tagMenu(tag, at, opts) {
+  const cur = Library.tagColour(S.db, tag);
+  const items = [{ type: "heading", label: "Colour" }, ...TAG_COLOURS.map(([n, c]) => ({ id: c, label: n, checked: cur === c, swatch: c })),
+    { type: "separator" }, { id: "none", label: "No colour", checked: !cur }];
+  const r = await openMenu(at || document.activeElement, items, { label: "Tag " + tag, ...opts });
+  if (!r) return;
+  Library.setTagColour(S.db, tag, r === "none" ? "" : r); save(); renderAll();
+}
+
 /* ---------------- action menu ---------------- */
-// Themed in-app popover menu (the native fl.popup is no longer used). Items:
-//   { id, label, icon, hint, danger, disabled, checked, submenu: [items] } | { type: "separator" } | { type: "heading", label }
+// Themed in-app popover menu. Items:
+//   { id, label, icon, hint, danger, disabled, checked, swatch: css colour, submenu: [items] } | { type: "separator" } | { type: "heading", label }
 // at: an element (menu opens below it) or { x, y } (opens at the pointer).
 // opts: { trigger: element focus returns to, keyboard: focus the first item, label: aria-label }.
 // Resolves with the chosen item's id, or null when dismissed.
@@ -319,6 +342,7 @@ function openMenu(at, items, opts = {}) {
         if ("checked" in it) r.setAttribute("aria-checked", !!it.checked);
         if (it.disabled) r.setAttribute("aria-disabled", "true");
         if (lead) { const ic = el("span", "ai-ico"); if (it.checked) ic.append(svg(ICON.check)); else if (it.icon && !("checked" in it)) ic.append(svg(ICON[it.icon])); r.append(ic); }
+        if (it.swatch) { const sw = el("span", "ai-sw"); sw.style.background = it.swatch; r.append(sw); }
         r.append(el("span", "ai-label", it.label));
         if (it.hint) r.append(el("span", "ai-hint", it.hint));
         if (it.submenu) { r.setAttribute("aria-haspopup", "menu"); r.setAttribute("aria-expanded", "false"); const c = svg(ICON.chevron); c.classList.add("ai-sub"); r.append(c); }
@@ -361,14 +385,19 @@ function menuKey(e, open) {
 }
 
 /* ---------------- doc actions ---------------- */
-async function removeDoc(d) {
-  const ok = await fl.confirm(`Remove “${d.title}” from Faelights?`, "Its highlights and the library's copy are removed. Your original PDF is not touched.", "Remove");
+const removeDoc = d => removeDocs([d]);
+// one confirm for the whole set
+async function removeDocs(ds) {
+  const n = ds.length; if (!n) return;
+  const ok = await (n === 1 ? fl.confirm(`Remove “${ds[0].title}” from Faelights?`, "Its highlights and the library's copy are removed. Your original PDF is not touched.", "Remove")
+    : fl.confirm(`Remove ${n} PDFs from Faelights?`, "Their highlights and the library's copies are removed. Your original PDFs are not touched.", `Remove ${n} PDFs`));
   if (!ok) return;
-  if (Annot.docId() === d.id) await Annot.close({ discard: true });
-  await fl.removeStored(d.storedPath);
-  Images.forget(d.id);
-  S.db.docs = S.db.docs.filter(x => x.id !== d.id);
-  if (S.docId === d.id) S.docId = null;
+  const gone = new Set(ds.map(d => d.id));
+  if (gone.has(Annot.docId())) await Annot.close({ discard: true });
+  for (const d of ds) { await fl.removeStored(d.storedPath); Images.forget(d.id); }
+  S.db.docs = S.db.docs.filter(x => !gone.has(x.id));
+  if (gone.has(S.docId)) S.docId = null;
+  SEL.ids = new Set();
   save(); renderAll();
 }
 // at / opts: see openMenu(); with no anchor it opens below the focused element (the reader's ⋯ button)
@@ -376,7 +405,7 @@ async function docMenu(d, at, opts) {
   const cur = d.id === S.docId && S.view.kind !== "search";
   const libs = S.db.libraries.map(l => ({ id: "move:" + l.id, label: l.name, checked: l.id === d.libraryId }));
   const items = [
-    { id: "annotate", label: "Annotate", icon: "pen" },
+    { id: "annotate", label: "View", icon: "pen" },
     { id: "open", label: "Open PDF", icon: "open" },
     { id: "reveal", label: process_platform() === "darwin" ? "Show in Finder" : "Show in folder", icon: "folder" },
     { id: "rescan", label: "Rescan highlights", icon: "refresh" },
@@ -384,6 +413,7 @@ async function docMenu(d, at, opts) {
     { type: "separator" },
     { id: "star", label: d.starred ? "Remove star" : "Star", icon: "star" },
     { id: "mine", label: d.mine ? "Remove from My publications" : "Mark as my publication", icon: "pub" },
+    { id: "read", label: d.read ? "Mark as unread" : "Mark as read", icon: "read" },
     { label: "Move to", icon: "move", submenu: libs },
     { type: "separator" },
     { id: "export", label: "Export as Markdown…", icon: "export", hint: cur ? keyHint("E") : "" },
@@ -404,6 +434,7 @@ async function docMenu(d, at, opts) {
   if (r === "relink") relink(d);
   if (r === "star") { Library.setStar(d); save(); renderAll(); }
   if (r === "mine") setMine(d, !d.mine);
+  if (r === "read") setRead(d);
   if (r.startsWith("move:")) moveDoc(d, r.slice(5));
   if (r === "export") exportDoc(d);
   if (r === "copy") copyText(docText(d, S.db.settings.fmt, false), "All extracts");
@@ -415,12 +446,105 @@ function setMine(d, on) {
   d.mine = on; save(); renderAll();
   toast(on ? "Added to My publications" : "Removed from My publications");
 }
+// Read state (d.read); on omitted toggles. Says so when the list's read filter now hides the PDF.
+function setRead(d, on) {
+  Library.setRead(d, on); save(); renderAll();
+  const f = readFilter();
+  toast((d.read ? "Marked as read" : "Marked as unread") + (f !== "all" && (f === "read") !== d.read ? " · hidden by the filter" : ""));
+}
+const readFilter = () => S.db.settings.read || "all";
 function process_platform() { return navigator.userAgent.includes("Mac") ? "darwin" : "other"; }
 function moveDoc(d, libId) {
   if (!Library.moveDoc(d, libId)) return;
   save();
   toast(`Moved to ${lib(libId).name}`);
   renderAll();
+}
+
+/* ---------------- multi-select (T-021) ---------------- */
+// SEL.ids: PDFs picked with Ctrl/⌘- or Shift-click (empty = just the reader's PDF); anchor = last clicked
+const SEL = { ids: new Set(), anchor: null };
+const selDocs = () => visibleDocs().filter(d => SEL.ids.has(d.id));
+const multi = () => SEL.ids.size > 1;
+const inSel = d => multi() && SEL.ids.has(d.id);
+function setSel(ids) { SEL.ids = new Set(ids); renderDocs(); }
+function clickDoc(e, id) {
+  const mac = process_platform() === "darwin";
+  const r = Select.click({ sel: SEL.ids, anchor: SEL.anchor }, visibleDocs().map(d => d.id), id, { toggle: mac ? e.metaKey : e.ctrlKey, range: e.shiftKey }, S.docId);
+  SEL.ids = r.sel; SEL.anchor = r.anchor;
+  if (r.open) return openDoc(id);
+  renderDocs(); $("docs").querySelector(`[data-id="${CSS.escape(id)}"] .doc`)?.focus();
+}
+// apply f to every PDF, then one save, render and toast
+function bulk(ds, f, msg, none = "Nothing to change") { const n = ds.filter(f).length; save(); renderAll(); toast(n ? msg(n) : none); }
+function moveDocs(ds, libId) {
+  const name = lib(libId).name; SEL.ids = new Set();
+  bulk(ds, d => Library.moveDoc(d, libId), n => `Moved ${plural(n, "PDF")} to ${name}`, "Already in " + name);
+}
+// one-line dialog for a new tag name → the name, or null
+let PROMPT = null;
+function askTag(n) {
+  return new Promise(res => {
+    const back = el("div", "addid-back"), box = el("div", "addid tag-ask"), opener = document.activeElement;
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "tag-ask-h");
+    const h = el("h2", null, "Tag " + plural(n, "PDF")); h.id = "tag-ask-h";
+    const inp = el("input", "search"); inp.placeholder = "Tag name"; inp.setAttribute("aria-label", "Tag name"); inp.spellcheck = false;
+    const row = el("div", "addid-row"), no = btn("", "Cancel"), ok = btn("primary", "Add tag");
+    const done = v => { if (PROMPT !== box) return; PROMPT = null; back.remove(); if (opener?.isConnected) opener.focus(); res(v); };
+    no.onclick = () => done(null); ok.onclick = () => done(inp.value);
+    box.onkeydown = e => {
+      if (e.key === "Escape") { e.preventDefault(); done(null); }
+      else if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); done(inp.value); }
+      else if (e.key === "Tab") { const f = [inp, no, ok], i = f.indexOf(document.activeElement); e.preventDefault(); f[(i + (e.shiftKey ? 2 : 1)) % 3].focus(); }
+    };
+    back.onmousedown = e => { if (e.target === back) done(null); };
+    row.append(no, ok); box.append(h, inp, row); back.append(box); document.body.append(back);
+    PROMPT = box; inp.focus();
+  });
+}
+async function tagDocs(ds, tag, on) {
+  if (tag == null) { tag = Library.cleanTag(await askTag(ds.length)); if (!tag) return; }
+  bulk(ds, d => on ? Library.addTag(d, tag) : Library.removeTag(d, tag), n => `${on ? "Tagged" : "Untagged"} ${plural(n, "PDF")} · #${tag}`);
+}
+// the selection's menu (right-click / ⋯ on a selected row, the bar's Actions button)
+async function bulkMenu(at, opts) {
+  const ds = selDocs(), n = ds.length; if (!n) return;
+  const all = f => ds.every(f), hasTag = t => d => (d.tags || []).includes(t);
+  const tags = [...Library.tagCounts(S.db).keys()].sort((a, b) => a.localeCompare(b));
+  const add = tags.filter(t => !all(hasTag(t))).map(t => ({ id: "tag+:" + t, label: t }));
+  const rem = tags.filter(t => ds.some(hasTag(t))).map(t => ({ id: "tag-:" + t, label: t }));
+  const star = !all(d => d.starred), mine = !all(d => d.mine), read = !all(d => d.read);
+  const items = [
+    { type: "heading", label: n + " selected" },
+    { id: "star", label: star ? "Star" : "Remove star", icon: "star" },
+    { id: "mine", label: mine ? "Mark as my publications" : "Remove from My publications", icon: "pub" },
+    { id: "read", label: read ? "Mark as read" : "Mark as unread", icon: "read" },
+    { label: "Move to", icon: "move", submenu: S.db.libraries.map(l => ({ id: "move:" + l.id, label: l.name, checked: all(d => d.libraryId === l.id) })) },
+    { label: "Add tag", icon: "plus", submenu: [...add, ...(add.length ? [{ type: "separator" }] : []), { id: "tag+", label: "New tag…" }] },
+    ...(rem.length ? [{ label: "Remove tag", icon: "undo", submenu: rem }] : []),
+    { type: "separator" },
+    { id: "clear", label: "Clear selection", hint: "Esc" },
+    { id: "remove", label: `Remove ${n} PDFs from Faelights…`, icon: "trash", danger: true, hint: "Del" }
+  ];
+  const r = await openMenu(at || document.activeElement, items, { label: n + " PDFs selected", ...opts });
+  if (!r) return;
+  if (r === "star") bulk(ds, d => !!d.starred !== star && Library.setStar(d, star) === star, k => (star ? "Starred " : "Removed star from ") + plural(k, "PDF"));
+  if (r === "mine") bulk(ds, d => !!d.mine !== mine && (d.mine = mine, true), k => (mine ? "Added " : "Removed ") + plural(k, "PDF") + (mine ? " to" : " from") + " My publications");
+  if (r === "read") bulk(ds, d => !!d.read !== read && Library.setRead(d, read) === read, k => `Marked ${plural(k, "PDF")} as ${read ? "read" : "unread"}`);
+  if (r.startsWith("move:")) moveDocs(ds, r.slice(5));
+  if (r === "tag+") tagDocs(ds, null, true);
+  if (r.startsWith("tag+:")) tagDocs(ds, r.slice(5), true);
+  if (r.startsWith("tag-:")) tagDocs(ds, r.slice(5), false);
+  if (r === "clear") setSel([]);
+  if (r === "remove") removeDocs(ds);
+}
+// "3 selected · Actions · Clear" above the list while 2+ PDFs are selected
+function renderSelBar() {
+  const bar = $("selbar"); if (!bar) return;
+  bar.hidden = !multi(); bar.replaceChildren(); if (bar.hidden) return;
+  const acts = btn("", "Actions"); acts.onclick = () => bulkMenu(acts);
+  const x = btn("", "Clear"); x.title = "Clear selection (Esc)"; x.onclick = () => setSel([]);
+  bar.append(el("span", "sel-n", SEL.ids.size + " selected"), acts, x);
 }
 function annotate(d, page) {
   if (S.docId !== d.id) { S.docId = d.id; S.off = new Set(); renderAll(); }
@@ -449,22 +573,20 @@ async function relink(d) {
 
 /* ---------------- export ---------------- */
 // Text builders live in core/export.js (pure, unit-tested); these names stay for the rest of app.js
-const wrapHl = ExportFmt.wrapHl, entryLines = ExportFmt.entryLines, groupsOf = ExportFmt.groupsOf;
+const wrapHl = ExportFmt.wrapHl, entryLines = ExportFmt.entryLines;
 const exportOpts = d => ({ mode: S.db.settings.mode, libraryName: (lib(d.libraryId) || {}).name || "", preTopic: PRE_TOPIC });
 // images (optional): image boxes to interleave — with `path` they link to a file, without it they become "[Image, p. N]"
 function docText(d, fmt, frontmatter, entries, images) {
   return ExportFmt.docText(d, { ...exportOpts(d), fmt, frontmatter, entries, images });
 }
 const docHtml = (d, images) => ExportFmt.docHtml(d, { ...exportOpts(d), images });
-const safeName = s => s.replace(/[\\/:*?"<>|#^[\]]/g, "").replace(/\s+/g, " ").trim().slice(0, 120) || "Untitled";
+const safeName = ExportFmt.safeName;
 // safeName that Windows also accepts as a file/folder name (exports with assets are path-checked in main.js)
-const exportFileBase = s => {
-  const n = safeName(s).replace(/[\u0000-\u001f]/g, "").replace(/[. ]+$/, "") || "Untitled";
-  return /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(n) ? "_" + n : n;
-};
-const exportImageList = d => (d.result && d.result.images) || [];
-const exportWithImages = d => !!S.db.settings.images && exportImageList(d).length > 0;
-// Render a doc's image boxes for export. html → embedded data URLs; others → PNG assets under `dir`.
+const exportFileBase = ExportFmt.fileBase;
+// clips (highlights over no text) always go out; image boxes only with "Include images"
+const exportImageList = d => Order.figuresOf(d.result, !!S.db.settings.images);
+const exportWithImages = d => exportImageList(d).length > 0;
+// Render a doc's image boxes and clips for export. html → embedded data URLs; others → PNG assets under `dir`.
 // A crop that fails becomes a placeholder line instead of failing the export.
 async function exportImages(d, fmt, dir, tick) {
   const refs = [], assets = [];
@@ -503,7 +625,7 @@ async function exportMenu(d, at) {
   for (;;) {
     const fmt = S.db.settings.fmt, rect = at instanceof Element ? at.getBoundingClientRect() : null;
     const items = [{ type: "heading", label: "Export as" }, ...ExportFmt.FORMATS.map(([v, t]) => ({ id: "fmt:" + v, label: t, checked: fmt === v }))];
-    if (exportImageList(d).length) items.push({ type: "separator" }, { id: "images", label: "Include images", checked: !!S.db.settings.images });
+    if (Order.imagesOf(d.result).length) items.push({ type: "separator" }, { id: "images", label: "Include images", checked: !!S.db.settings.images });
     const r = await openMenu(at, items, { label: "Export" });
     if (!r) return;
     if (r === "images") {   // toggle, then reopen where the menu was (the reader re-renders its toolbar)
@@ -678,7 +800,7 @@ function renderSide() {
   const starred = S.db.docs.filter(d => d.starred).length;
   top.append(navItem({ icon: svg(ICON.star), name: "Starred", count: starred, current: S.view.kind === "starred", tour: "starred", onClick: () => go({ kind: "starred" }) }));
   top.append(navItem({ icon: svg(ICON.pub), name: "My publications", count: S.db.docs.filter(d => d.mine).length, current: S.view.kind === "mine", onClick: () => go({ kind: "mine" }), tour: "mine",
-    onDrop: e => { const d = doc(e.dataTransfer.getData("application/x-faelights-doc")); if (d) setMine(d, true); } }));
+    onDrop: e => { const d = doc(e.dataTransfer.getData("application/x-faelights-doc")); if (d && inSel(d)) bulk(selDocs(), x => !x.mine && (x.mine = true), n => `Added ${plural(n, "PDF")} to My publications`); else if (d) setMine(d, true); } }));
   sc.append(top);
 
   const h = el("h3"); h.dataset.tour = "libraries"; h.append(el("span", null, "Libraries"));
@@ -696,7 +818,7 @@ function renderSide() {
       onMenu: (at, o) => libraryMenu(l.id, at, o),
       onDrop: e => {
         const did = e.dataTransfer.getData("application/x-faelights-doc");
-        if (did) { const d = doc(did); if (d) moveDoc(d, l.id); }
+        if (did) { const d = doc(did); if (d && inSel(d)) moveDocs(selDocs(), l.id); else if (d) moveDoc(d, l.id); }
         else if (e.dataTransfer.files.length) addPaths([...e.dataTransfer.files].map(f => fl.pathFor(f)), { libraryId: l.id });
       }
     }));
@@ -709,7 +831,8 @@ function renderSide() {
     sc.append(Object.assign(el("h3"), { textContent: "Tags" }));
     const tl = el("ul", "nav");
     for (const [t, n] of [...tags].sort((a, b) => a[0].localeCompare(b[0])))
-      tl.append(navItem({ icon: el("i", "tagdot"), name: t, count: n, current: S.view.kind === "tag" && S.view.tag === t, onClick: () => go({ kind: "tag", tag: t }) }));
+      tl.append(navItem({ icon: tint(el("i", "tagdot"), t), name: t, count: n, current: S.view.kind === "tag" && S.view.tag === t, onClick: () => go({ kind: "tag", tag: t }),
+        onMenu: (at, o) => tagMenu(t, at, o) }));
     sc.append(tl);
   }
   side.append(sc);
@@ -734,8 +857,21 @@ function themeSwitch() {
   return seg;
 }
 
+// Scope on entering search: an explicit one wins; else, from a library view, that library unless
+// the user already picked a scope this session (sidebar, menu, or Ctrl+F with no PDF open); else
+// null = keep the last scope. Pure (tested).
+function entryScope(from, scope, picked) { return scope || (!picked && from.kind === "library" ? from.id : null); }
+// The PDF the reader is showing, if any
+function readerDocId() { return S.view.kind !== "search" && S.docId && visibleDocs().some(d => d.id === S.docId) ? S.docId : null; }
 function go(view) {
-  S.view = view; S.renaming = null;
+  // entering search pins "This PDF" to the reader's PDF; view.scope (optional) sets the scope
+  if (view.kind === "search") {
+    const entering = S.view.kind !== "search";
+    if (entering) S.searchDoc = readerDocId();
+    const sc = entering ? entryScope(S.view, view.scope, S.searchPicked) : view.scope;
+    if (sc) S.searchLib = sc;
+  }
+  S.view = view; S.renaming = null; SEL.ids = new Set();
   if (view.kind !== "search") {
     const docs = visibleDocs();
     if (!docs.some(d => d.id === S.docId)) { S.docId = docs[0] ? docs[0].id : null; S.off = new Set(); }
@@ -761,6 +897,8 @@ function visibleDocs() {
   if (v.kind === "tag") docs = docs.filter(d => (d.tags || []).includes(v.tag));
   const q = S.docQuery.trim().toLowerCase();
   if (q) docs = docs.filter(d => (d.title + " " + d.fileName + " " + (d.tags || []).join(" ")).toLowerCase().includes(q));
+  const rf = readFilter();
+  if (rf !== "all") docs = docs.filter(d => !!d.read === (rf === "read"));
   const sort = S.db.settings.sort;
   docs = [...docs].sort(sort === "title" ? (a, b) => a.title.localeCompare(b.title)
     : sort === "count" ? (a, b) => (b.count || 0) - (a.count || 0)
@@ -792,20 +930,32 @@ function renderList() {
   const sort = el("select"); sort.id = "sort"; sort.setAttribute("aria-label", "Sort PDFs");
   for (const [v, t] of [["added", "Newest"], ["title", "Title"], ["count", "Most marks"]]) { const o = el("option", null, t); o.value = v; sort.append(o); }
   sort.value = S.db.settings.sort; sort.onchange = () => { S.db.settings.sort = sort.value; save(); renderDocs(); };
-  tools.append(q, sort); head.append(tools);
+  const rd = el("select"); rd.id = "readf"; rd.setAttribute("aria-label", "Show read or unread PDFs");
+  for (const [v, t] of [["all", "All"], ["unread", "Unread"], ["read", "Read"]]) { const o = el("option", null, t); o.value = v; rd.append(o); }
+  rd.value = readFilter(); rd.onchange = () => { S.db.settings.read = rd.value; save(); renderAll(); };
+  tools.append(q, rd, sort); head.append(tools);
   list.append(head);
   if (S.busy) {
     const p = el("div", "progress"); p.id = "progress"; p.append(el("span")); const m = el("div", "meter"); m.append(el("i")); p.append(m); list.append(p); renderProgress();
   }
-  const docs = el("div", "docs"); docs.id = "docs"; list.append(docs, strip("list", viewTitle()));
+  const bar = el("div", "sel-bar"); bar.id = "selbar"; bar.hidden = true; bar.setAttribute("role", "toolbar"); bar.setAttribute("aria-label", "Selected PDFs");
+  const docs = el("div", "docs"); docs.id = "docs"; list.append(bar, docs, strip("list", viewTitle()));
+  docs.setAttribute("role", "listbox"); docs.setAttribute("aria-multiselectable", "true"); docs.setAttribute("aria-label", "PDFs");
   renderDocs();
 }
 function renderDocs() {
   const box = $("docs"); if (!box) return; box.replaceChildren();
   const docs = visibleDocs();
+  SEL.ids = Select.prune(SEL.ids, docs.map(d => d.id)); renderSelBar();
   if (!docs.length) {
     const e = el("div", "list-empty");
     if (S.docQuery) e.append(el("b", null, "No matches"), el("span", null, "No PDF titles or tags here contain that text."));
+    else if (readFilter() !== "all") {
+      // the read filter hides everything here
+      const un = readFilter() === "unread";
+      e.append(el("b", null, un ? "No unread PDFs" : "No read PDFs"), el("span", null, un ? "Everything here is marked as read." : "Mark a PDF as read from its ⋯ menu or the reader."));
+      const a = btn("", "Show all PDFs"); a.onclick = () => { S.db.settings.read = "all"; save(); renderAll(); }; e.append(a);
+    }
     else if (S.view.kind === "library") {
       e.append(el("b", null, "Nothing here yet"), el("span", null, "Drag PDFs onto this window, or add them from your computer. Highlights are read straight away."));
       const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; e.append(a, addIdBtn()); e.dataset.tour = "start";
@@ -817,8 +967,11 @@ function renderDocs() {
   }
   for (const d of docs) {
     // wrapper holds the card button and its ⋯ sibling (buttons can't nest)
-    const row = el("div", "doc-row" + (d.id === S.docId ? " is-current" : ""));
+    const picked = SEL.ids.size ? SEL.ids.has(d.id) : d.id === S.docId;
+    const row = el("div", "doc-row" + (d.id === S.docId ? " is-current" : "") + (d.read ? " is-read" : "") + (SEL.ids.has(d.id) ? " is-selected" : ""));
+    row.dataset.id = d.id; row.setAttribute("role", "none");
     const b = el("button", "doc"); b.setAttribute("aria-current", d.id === S.docId); b.draggable = true;
+    b.setAttribute("role", "option"); b.setAttribute("aria-selected", picked);
     const t = el("div", "t"); t.append(el("span", null, d.title)); if (d.starred) { const s = svg(ICON.star); s.classList.add("star"); s.style.width = "13px"; s.setAttribute("fill", "currentColor"); t.append(s); }
     const m = el("div", "m");
     m.append(el("span", null, plural(d.count || 0, "mark")), el("span", null, plural(d.pages || 0, "page")));
@@ -827,13 +980,17 @@ function renderDocs() {
     if (d.sourceMissing) m.append(el("span", "pill warn", "Original moved"));
     else if (d.stale) m.append(el("span", "pill", "Changed"));
     if (d.annotated) m.append(el("span", "pill", "Annotated"));
+    if (d.read) m.append(el("span", "pill read", "Read"));
     b.append(t, m);
-    if (d.tags && d.tags.length) { const tg = el("div", "tags-inline"); for (const x of d.tags) tg.append(el("span", null, x)); b.append(tg); }
-    b.onclick = () => openDoc(d.id);
+    if (d.tags && d.tags.length) { const tg = el("div", "tags-inline"); for (const x of d.tags) tg.append(tint(el("span", null, x), x)); b.append(tg); }
+    b.onclick = e => clickDoc(e, d.id);
+    b.onmousedown = e => { if (e.shiftKey) e.preventDefault(); };   // no text selection on Shift-click
     b.ondragstart = e => { e.dataTransfer.setData("application/x-faelights-doc", d.id); e.dataTransfer.effectAllowed = "move"; };
-    const mb = moreBtn("Actions for " + d.title); mb.onclick = () => docMenu(d, mb);
-    row.oncontextmenu = e => { e.preventDefault(); if (!MENU) docMenu(d, { x: e.clientX, y: e.clientY }, { trigger: b }); };
-    row.onkeydown = e => menuKey(e, () => docMenu(d, mb, { trigger: e.target === mb ? mb : b, keyboard: true }));
+    // a selected row's menu acts on the whole selection
+    const menu = (at, o) => inSel(d) ? bulkMenu(at, o) : docMenu(d, at, o);
+    const mb = moreBtn(inSel(d) ? `Actions for ${SEL.ids.size} selected PDFs` : "Actions for " + d.title); mb.onclick = () => menu(mb);
+    row.oncontextmenu = e => { e.preventDefault(); if (!MENU) menu({ x: e.clientX, y: e.clientY }, { trigger: b }); };
+    row.onkeydown = e => menuKey(e, () => menu(mb, { trigger: e.target === mb ? mb : b, keyboard: true }));
     row.append(b, mb); box.append(row);
   }
 }
@@ -953,6 +1110,8 @@ function renderReader() {
   const acts = el("div", "r-actions");
   const ob = btn("icon", null, "open", "Open PDF in your PDF app"); ob.onclick = async () => { const e = await fl.openPdf(d); if (e !== true) toast("Couldn't open the PDF"); };
   const mb = btn("icon", null, "more", "More actions"); mb.onclick = () => docMenu(d);
+  // continue reading (T-020): back to the page the viewer was last on
+  if (d.lastPage > 1) { const kb = btn("continue", "Continue · p. " + d.lastPage, "view", "Continue reading at page " + d.lastPage); kb.onclick = () => annotate(d, d.lastPage); acts.append(kb); }
   acts.append(ob, mb); tt.append(acts); head.append(tt);
 
   const meta = el("div", "r-meta");
@@ -971,9 +1130,12 @@ function renderReader() {
   const mine = el("button", "lib"); mine.append(svg(ICON.pub), document.createTextNode(d.mine ? "My publication" : "Mark as mine"));
   mine.querySelector("svg").style.width = "13px"; mine.setAttribute("aria-pressed", !!d.mine);
   mine.title = d.mine ? "Remove from My publications" : "Mark as my publication"; mine.onclick = () => setMine(d, !d.mine); meta.append(mine);
+  const rb = el("button", "lib"); rb.append(svg(ICON.read), document.createTextNode(d.read ? "Read" : "Mark as read"));
+  rb.querySelector("svg").style.width = "13px"; rb.setAttribute("aria-pressed", !!d.read);
+  rb.title = d.read ? "Mark as unread" : "Mark as read"; rb.onclick = () => setRead(d); meta.append(rb);
   const tools = el("div", "r-tools");
   const tagedit = el("div", "tagedit");
-  for (const t of d.tags) { const g = el("span", "tg", t); const x = el("button", null, "×"); x.title = "Remove tag"; x.setAttribute("aria-label", "Remove tag " + t); x.onclick = () => { Library.removeTag(d, t); save(); renderAll(); }; g.append(x); tagedit.append(g); }
+  for (const t of d.tags) { const g = tint(el("span", "tg", t), t); const x = el("button", null, "×"); x.title = "Remove tag"; x.setAttribute("aria-label", "Remove tag " + t); x.onclick = () => { Library.removeTag(d, t); save(); renderAll(); }; g.append(x); tagedit.append(g); }
   const ti = el("input"); ti.id = "tagin"; ti.placeholder = "+ tag"; ti.setAttribute("aria-label", "Add tag");
   const known = [...new Set(S.db.docs.flatMap(x => x.tags))]; if (known.length) { const dl = el("datalist"); dl.id = "tagsdl"; for (const k of known) { const o = el("option"); o.value = k; dl.append(o); } tagedit.append(dl); ti.setAttribute("list", "tagsdl"); }
   ti.onkeydown = e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); if (Library.addTag(d, ti.value)) { save(); renderAll(); setTimeout(() => $("tagin")?.focus(), 0); } } };
@@ -1012,12 +1174,12 @@ function renderReader() {
   const rail = el("aside", "rail");
   const main = el("div", "r-main");
   const entries = filtered(d);
-  // images join the stream only while "With images" is on; off, the list is entries alone (same DOM as before)
+  // image boxes join the stream only while "With images" is on; clips (highlights over no text) always do
   const showImg = !!S.db.settings.images && allImgs.length > 0;
-  const groups = Order.groupItems(withImages(entries, showImg ? filteredImages(d) : []));
+  const groups = Order.groupItems(withImages(entries, filteredImages(d)));
   const colours = new Map();
   for (const e of d.result.entries) for (const s of e.spans) { const k = ckey(s.color); const c = colours.get(k) || { color: s.color, n: 0 }; c.n++; colours.set(k, c); }
-  if (showImg) for (const img of allImgs) { const k = ckey(img.color); const c = colours.get(k) || { color: img.color, n: 0 }; c.n++; colours.set(k, c); }
+  for (const img of Order.figuresOf(d.result, showImg)) { const k = ckey(img.color); const c = colours.get(k) || { color: img.color, n: 0 }; c.n++; colours.set(k, c); }
   if (colours.size) {   // even one colour: hiding it made the filter look tied to "With images"
     const sec = el("section"); sec.append(el("p", "label", "Filter by colour"));
     const chips = el("div", "chips");
@@ -1053,7 +1215,7 @@ function renderReader() {
     if (g.topic && g.topic.path.length > 1) gh.append(el("p", "crumb", g.topic.path.slice(0, -1).join("  ›  ")));
     const h = el("h3"); h.append(document.createTextNode(g.topic ? g.topic.title : PRE_TOPIC));
     const n = spanCount(g);
-    h.append(el("small", null, !g.images ? plural(n, "extract") : !g.entries ? plural(g.images, "image") : plural(n, "extract") + " · " + plural(g.images, "image")));
+    h.append(el("small", null, !g.images ? plural(n, "extract") : !n ? plural(g.images, "image") : plural(n, "extract") + " · " + plural(g.images, "image")));
     gh.append(h); sec.append(gh);
     for (const it of g.items) {
       if (it.kind === "image") { sec.append(figureEl(d, it.image)); continue; }
@@ -1068,10 +1230,11 @@ function renderReader() {
     }
     main.append(sec);
   });
-  if (d.result.loose.length) {
+  const loose = Order.looseOf(d.result);   // marks with no text and no usable area (clips are in the groups above)
+  if (loose.length) {
     const sec = el("section", "group"); const gh = el("div", "group-head"); gh.append(el("h3", null, "Marks without text")); sec.append(gh);
-    sec.append(el("p", "loose", `${plural(d.result.loose.length, "mark")} sit over images or scanned pages (p. ${[...new Set(d.result.loose.map(l => l.page))].join(", ")}). Run OCR on the PDF, then rescan, to read them.`));
-    for (const l of d.result.loose.filter(l => l.comment)) { const p = el("p", "note"); p.append(el("b", null, "Note p." + l.page), document.createTextNode(l.comment)); sec.append(p); }
+    sec.append(el("p", "loose", `${plural(loose.length, "mark")} sit over images or scanned pages (p. ${[...new Set(loose.map(l => l.page))].join(", ")}). Run OCR on the PDF, then rescan, to read them.`));
+    for (const l of loose.filter(l => l.comment)) { const p = el("p", "note"); p.append(el("b", null, "Note p." + l.page), document.createTextNode(l.comment)); sec.append(p); }
     main.append(sec);
   }
   if (rail.childElementCount) {
@@ -1095,32 +1258,35 @@ const TOPIC_SOURCE = {
 function filtered(d) {
   return d.result.entries.map(e => ({ ...e, spans: e.spans.filter(s => !S.off.has(ckey(s.color))) })).filter(e => e.spans.length);
 }
-// Captured images whose colour isn't hidden (core/order.js; [] for results without images)
-const filteredImages = d => Order.filterImages(Order.imagesOf(d.result), S.off);
+// Clips, plus captured images while "With images" is on, whose colour isn't hidden (core/order.js)
+const filteredImages = d => Order.filterImages(Order.figuresOf(d.result, !!S.db.settings.images), S.off);
 // entries + images → [{kind: "entry", entry, topic} | {kind: "image", image, topic}] in reading order
 const withImages = (entries, images) => Order.withImages(entries, images);
-// extracts in a group of the combined list (images don't count)
-const spanCount = g => g.items.reduce((n, it) => n + (it.kind === "entry" ? it.entry.spans.length : 0), 0);
+// extracts in a group of the combined list (clips count, they are highlights; images don't)
+const spanCount = g => g.items.reduce((n, it) => n + (it.kind === "entry" ? it.entry.spans.length : it.image.clip ? 1 : 0), 0);
 const IMG_ICON = '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>';
-// One captured image, centred in the reading column; a fixed-aspect placeholder holds its place while it renders
+// One captured image or clip (img.clip: a highlight over no text), centred in the reading column;
+// a fixed-aspect placeholder holds its place while it renders
 function figureEl(d, img) {
-  const f = el("figure", "fig"); f.id = "i" + img.n; f.style.setProperty("--mc", rgb(img.color));
+  const c0 = !!img.clip, what = c0 ? "highlighted area" : "image";
+  const f = el("figure", c0 ? "fig clip" : "fig"); f.id = (c0 ? "c" : "i") + img.n; f.style.setProperty("--mc", rgb(img.color));
   const w = Math.abs(img.rect[2] - img.rect[0]) || 1, h = Math.abs(img.rect[3] - img.rect[1]) || 1;
   const box = el("div", "fig-img loading");
   box.style.aspectRatio = `${w} / ${h}`;
   // natural size (1pt = 4/3 px), never wider than the column or taller than 60vh
   box.style.width = `min(100%, ${Math.round(w * 4 / 3)}px, calc(60vh * ${(w / h).toFixed(4)}))`;
-  const alt = "Image from page " + img.page + (img.comment ? ": " + img.comment : "");
+  const alt = (c0 ? "Highlighted area on page " : "Image from page ") + img.page + (img.comment ? ": " + img.comment : "");
   box.setAttribute("role", "img"); box.setAttribute("aria-label", alt);
   Images.crop(d, img).then(({ url }) => {
     const im = el("img"); im.src = url; im.alt = alt;
     box.removeAttribute("role"); box.removeAttribute("aria-label"); box.classList.remove("loading"); box.replaceChildren(im);
-  }, err => { console.error(err); box.replaceWith(el("p", "fig-fail", "Couldn't render this image")); });
+  }, err => { console.error(err); box.replaceWith(el("p", "fig-fail", "Couldn't render this " + what)); });
   const cap = el("figcaption");
   const pg = el("button", "pg", "p. " + img.page); pg.title = "Show page " + img.page + " in the viewer"; pg.onclick = () => annotate(d, img.page);
   cap.append(pg);
+  if (c0 && img.type && img.type !== "Highlight") cap.append(el("span", "fig-kind", img.type));
   if (img.comment) { const p = el("p", "note"); p.append(el("b", null, "Note"), document.createTextNode(img.comment)); cap.append(p); }
-  const c = el("button", "copy1"); c.append(svg(ICON.copy)); c.title = "Copy image"; c.setAttribute("aria-label", "Copy image from page " + img.page);
+  const c = el("button", "copy1"); c.append(svg(ICON.copy)); c.title = "Copy " + what; c.setAttribute("aria-label", "Copy " + what + " from page " + img.page);
   c.onclick = () => copyImage(d, img); cap.append(c);
   f.oncontextmenu = async ev => {
     ev.preventDefault();
@@ -1140,13 +1306,25 @@ function renderBlank(r) {
     const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; const s = btn("", "Try a sample PDF"); s.onclick = addSample; row.append(a, addIdBtn(), s); b.append(row);
   } else b.append(el("h2", null, "Pick a PDF"), el("p", null, "Choose a PDF from the list to read its highlights."));
   const k = el("div", "keys"); const mod = process_platform() === "darwin" ? "⌘" : "Ctrl";
-  for (const [key, what] of [[`${mod} O`, "Add PDFs"], [`${mod} ⇧ O`, "Add by identifier"],[`${mod} F`, "Search all highlights"], [`${mod} T`, "Full sentence / highlights only"], [`${mod} E`, "Export current PDF"], [`${mod} ⇧ N`, "New library"], [`${mod} B`, "Show / hide sidebar"]]) {
+  for (const [key, what] of [[`${mod} O`, "Add PDFs"], [`${mod} ⇧ O`, "Add by identifier"],[`${mod} F`, "Search highlights"], [`${mod} T`, "Full sentence / highlights only"], [`${mod} E`, "Export current PDF"], [`${mod} ⇧ N`, "New library"], [`${mod} B`, "Show / hide sidebar"]]) {
     const kk = el("span"); for (const part of key.split(" ")) { kk.append(el("kbd", null, part), document.createTextNode(" ")); } k.append(kk, el("span", null, what));
   }
   b.append(k); r.append(b);
 }
 
 /* ---------------- rendering: search ---------------- */
+// Which docs a scope covers: "all", "doc" (docId only) or a library id. Pure (tested).
+function searchDocs(db, scope, docId) {
+  return db.docs.filter(d => d.result && (scope === "all" || (scope === "doc" ? d.id === docId : d.libraryId === scope)));
+}
+// A scope whose PDF or library is gone falls back to "all". Pure (tested).
+function validScope(db, scope, docId) {
+  const ok = scope === "all" || (scope === "doc" ? db.docs.some(d => d.id === docId) : db.libraries.some(l => l.id === scope));
+  return ok ? scope : "all";
+}
+function searchScope() { return S.searchLib = validScope(S.db, S.searchLib, S.searchDoc); }
+const clip = (s, n) => s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
+const scopeLabel = sc => sc === "all" ? "all libraries" : sc === "doc" ? `“${clip(doc(S.searchDoc).title, 60)}”` : lib(sc).name;
 function renderSearch(r) {
   r.classList.toggle("only", S.db.settings.mode === "only");
   const head = el("div", "s-head");
@@ -1154,10 +1332,12 @@ function renderSearch(r) {
   const row = el("div", "s-row");
   const q = el("input", "search"); q.id = "sq"; q.placeholder = "Words in a highlight, sentence or note"; q.value = S.searchQuery; q.setAttribute("aria-label", "Search highlights");
   q.oninput = () => { S.searchQuery = q.value; renderResults(); };
-  const scope = el("select", "btn"); scope.id = "sscope"; scope.setAttribute("aria-label", "Library to search");
+  const scope = el("select", "btn"); scope.id = "sscope"; scope.setAttribute("aria-label", "Where to search");
   const o = el("option", null, "All libraries"); o.value = "all"; scope.append(o);
+  const sd = S.searchDoc && doc(S.searchDoc);
+  if (sd) { const x = el("option", null, "This PDF — " + clip(sd.title, 40)); x.value = "doc"; x.title = sd.title; scope.append(x); }
   for (const l of S.db.libraries) { const x = el("option", null, l.name); x.value = l.id; scope.append(x); }
-  scope.value = S.searchLib; scope.onchange = () => { S.searchLib = scope.value; renderResults(); };
+  scope.value = searchScope(); scope.onchange = () => { S.searchLib = scope.value; S.searchPicked = true; renderResults(); };
   const seg = el("div", "seg");
   for (const [m, label] of [["full", "Full sentence"], ["only", "Highlights only"]]) { const b = el("button", null, label); b.setAttribute("aria-pressed", S.db.settings.mode === m); b.onclick = () => { S.db.settings.mode = m; save(); renderReader(); }; seg.append(b); }
   row.append(q, scope, seg); head.append(row);
@@ -1167,12 +1347,14 @@ function renderSearch(r) {
 function renderResults() {
   const body = $("sbody"); if (!body) return; body.replaceChildren();
   const terms = termsOf(S.searchQuery);
-  const docs = S.db.docs.filter(d => d.result && (S.searchLib === "all" || d.libraryId === S.searchLib));
+  const sc = searchScope(), docs = searchDocs(S.db, sc, S.searchDoc);
   if (!terms.length) {
     const total = docs.reduce((n, d) => n + (d.count || 0), 0);
-    const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, `Type to search ${plural(total, "highlight")} across ${plural(docs.length, "PDF")}. Every word must appear in the sentence, the highlight or its note.`)); body.append(b); return;
+    const where = sc === "all" ? `across ${plural(docs.length, "PDF")}` : `in ${scopeLabel(sc)} (${plural(docs.length, "PDF")})`;
+    const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, `Type to search ${plural(total, "highlight")} ${where}. Every word must appear in the sentence, the highlight or its note.`)); body.append(b); return;
   }
   let hits = 0;
+  const sum = el("p", "crumb s-scope"); body.append(sum);   // filled once hits are counted
   for (const d of docs) {
     const matches = d.result.entries.filter(e => Library.entryMatches(e, terms));
     if (!matches.length) continue;
@@ -1189,7 +1371,8 @@ function renderResults() {
     }
     body.append(sec);
   }
-  if (!hits) { const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, "No highlights contain all of those words.")); body.append(b); }
+  sum.textContent = `${plural(hits, "match", "matches")} in ${scopeLabel(sc)}`;
+  if (!hits) { sum.remove(); const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, `No highlights in ${scopeLabel(sc)} contain all of those words.`)); body.append(b); }
 }
 
 function renderAll() { renderSide(); renderList(); renderReader(); }
@@ -1348,7 +1531,7 @@ async function submitAddId() {
   S.busy = null; save();
   if (d) { if (S.view.kind !== "library" || S.view.id !== target) S.view = { kind: "library", id: target }; S.docId = d.id; S.off = new Set(); }
   renderAll();
-  toast(d ? `Added “${d.title}”` : "The downloaded PDF couldn't be read. It may be damaged or password-protected.");
+  toast(d ? `Added “${d.title}”` + (r.edition ? ` (${r.edition})` : "") : "The downloaded PDF couldn't be read. It may be damaged or password-protected.");
 }
 // Several items: one at a time (the main process runs a single fetch), with a status row each.
 // The dialog stays open on any failure, stop or unrecognised item; otherwise it closes with a toast.
@@ -1378,7 +1561,8 @@ async function addIdBatch(D) {
     addIdRow(it, "run", "Reading PDF…");
     let d = null;
     try { d = await addImported(r.info, target, { origin: r.origin, title: r.title }); } catch (err) { console.error(err); await fl.removeStored(r.info.storedPath); }
-    if (d) { added++; lastId = d.id; save(); addIdRow(it, "ok", "Added"); }
+    // books: which edition was found (T-009)
+    if (d) { added++; lastId = d.id; save(); addIdRow(it, "ok", r.edition ? `Added · ${clip(d.title, 48)} (${r.edition})` : "Added"); }
     else { failed++; addIdRow(it, "err", "Couldn't read the PDF (damaged or password-protected)"); }
   }
   D.batch = null;
@@ -1437,16 +1621,43 @@ addEventListener("paste", e => {
   fl.parseIds(t).then(xs => { if (looksLikeIds(xs)) openAddId(t.trim()); });
 });
 
+// Ctrl/⌘+F arrives as the "search" menu command (src/main.js accelerator). A press typed in a field,
+// or while the viewer, a dialog or the tour owns keys, is swallowed here and the command ignored.
+// Ctrl/⌘+A belongs to the list when focus is in it, or nothing is focused and the last click was there
+let lastClickInList = false;
+addEventListener("pointerdown", e => { lastClickInList = !!e.target.closest?.("#list"); }, true);
+const listKeys = e => !!e.target.closest?.("#list") || (e.target === document.body && lastClickInList);
+let findBlocked = 0;
+addEventListener("keydown", e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "f") return;
+  if (addDlg || Tour.isOpen() || Annot.isOpen() || e.target.closest?.("input, select, textarea, [contenteditable]")) { e.preventDefault(); findBlocked = performance.now(); }
+}, true);
+// Ctrl/⌘+F with a PDF in the reader searches just that PDF; otherwise the last scope
+function findCmd() { if (performance.now() - findBlocked > 500) go({ kind: "search", scope: readerDocId() ? "doc" : undefined }); }
+
 addEventListener("keydown", e => {
   if (addDlg) return;   // the add-from-link dialog handles its own keys
   if (e.target.matches("input, select, textarea")) return;
   if (e.target.matches(".resizer")) return resizerKey(e, e.target);
   if (Annot.key(e)) return;
+  if (PROMPT || MENU || Tour.isOpen()) return;
   const docs = S.view.kind === "search" ? [] : visibleDocs();
   const i = docs.findIndex(d => d.id === S.docId);
-  if ((e.key === "ArrowDown" || e.key === "j") && docs.length) { e.preventDefault(); openDoc(docs[Math.min(docs.length - 1, i + 1)].id); }
-  if ((e.key === "ArrowUp" || e.key === "k") && docs.length) { e.preventDefault(); openDoc(docs[Math.max(0, i - 1)].id); }
-  if (e.key === "Delete" && S.docId && S.view.kind !== "search") removeDoc(doc(S.docId));
+  // Ctrl/⌘+A in the list selects every visible PDF; Esc clears; Shift+↑/↓ extends from the anchor
+  if ((process_platform() === "darwin" ? e.metaKey : e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a" && docs.length && listKeys(e)) {
+    e.preventDefault(); setSel(docs.map(d => d.id)); setTimeout(() => getSelection()?.removeAllRanges(), 0); return;   // Edit › Select All also fires
+  }
+  if (e.key === "Escape" && SEL.ids.size) { e.preventDefault(); return setSel([]); }
+  const step = j => {
+    const t = docs[Math.max(0, Math.min(docs.length - 1, j))].id;
+    if (e.shiftKey) { const a = SEL.anchor && docs.some(d => d.id === SEL.anchor) ? SEL.anchor : S.docId; SEL.anchor = a; SEL.ids = new Set(Select.range(docs.map(d => d.id), a, t)); }
+    else { SEL.ids = new Set(); SEL.anchor = t; }
+    openDoc(t);
+  };
+  if ((e.key === "ArrowDown" || e.key === "j") && docs.length) { e.preventDefault(); step(i + 1); }
+  if ((e.key === "ArrowUp" || e.key === "k") && docs.length) { e.preventDefault(); step(i - 1); }
+  if (e.key === "Delete" && multi() && S.view.kind !== "search") removeDocs(selDocs());
+  else if (e.key === "Delete" && S.docId && S.view.kind !== "search") removeDoc(doc(S.docId));
 });
 
 fl.onMenu(ch => {
@@ -1457,7 +1668,7 @@ fl.onMenu(ch => {
   if (ch === "export-doc") { if (d) exportDoc(d); else toast("Open a PDF first"); }
   if (ch === "export-library") exportLibrary(S.view.kind === "library" ? S.view.id : (d ? d.libraryId : "inbox"));
   if (ch === "rescan-all") rescanAll();
-  if (ch === "search") go({ kind: "search" });
+  if (ch === "search") findCmd();
   if (ch === "toggle-mode") { S.db.settings.mode = S.db.settings.mode === "full" ? "only" : "full"; save(); renderReader(); }
   if (ch.startsWith("pane:")) togglePane(ch.slice(5));
   if (ch === "layout-reset") resetLayout();

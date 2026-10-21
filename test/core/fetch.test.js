@@ -230,3 +230,27 @@ test("PMID: the ID converter's PMCID goes through the PMC fallbacks; its DOI is 
   assert.equal(await reason(F.resolver(o).resolvePdf({ kind: "pmid", value: "9" })), "offline");
   assert.equal(off.length, 3);
 });
+
+test("ISBN: the edition's own scan comes first and its edition is reported (T-009)", async () => {
+  const S = "https://openlibrary.org/search.json?isbn=9780141439518&fields=key,title,ia,ebook_access";
+  const id = { kind: "isbn", value: "9780141439518" };
+  const routes = {
+    "https://openlibrary.org/isbn/9780141439518.json": { json: { title: "Pride and Prejudice", subtitle: "A Novel", ocaid: "pride1813", edition_name: "Penguin Classics", publish_date: "2003" } },
+    [S]: { json: { docs: [{ title: "Pride and Prejudice", ebook_access: "public", ia: ["other1900", "pride1813"] }] } },
+    "https://archive.org/download/pride1813/pride1813.pdf": { pdf: true },
+    "https://archive.org/download/other1900/other1900.pdf": { pdf: true }
+  };
+  let r = await F.resolver(fake(routes)).resolvePdf(id);
+  assert.equal(r.url, "https://archive.org/download/pride1813/pride1813.pdf");
+  assert.equal(r.title, "Pride and Prejudice: A Novel");
+  assert.equal(r.edition, "Penguin Classics, 2003");
+  // the edition's scan is lending-only: another edition's scan is used, and says so
+  r = await F.resolver(fake({ ...routes, "https://archive.org/download/pride1813/pride1813.pdf": { fail: "paywalled" } })).resolvePdf(id);
+  assert.equal(r.url, "https://archive.org/download/other1900/other1900.pdf");
+  assert.equal(r.edition, "scan of another edition");
+  // no edition record: the work's scans as before
+  const { ["https://openlibrary.org/isbn/9780141439518.json"]: _, ...noEd } = routes;
+  r = await F.resolver(fake(noEd)).resolvePdf(id);
+  assert.equal(r.url, "https://archive.org/download/other1900/other1900.pdf");
+  assert.equal(r.title, "Pride and Prejudice");
+});

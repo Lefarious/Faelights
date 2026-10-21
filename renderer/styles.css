@@ -336,6 +336,7 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 .amenu-item .ai-ico { width: 16px; height: 16px; flex: none; display: grid; place-items: center; color: var(--muted); }
 .amenu-item .ico { width: 16px; height: 16px; }
 .amenu-item[role="menuitemcheckbox"] .ai-ico { color: var(--accent); }
+.amenu-item .ai-sw { width: 12px; height: 12px; flex: none; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .18); margin-right: -2px; }
 .amenu-item .ai-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .amenu-item .ai-hint { color: var(--muted); font-size: 12px; margin-left: 16px; font-variant-numeric: tabular-nums; }
 .amenu-item .ai-sub { width: 14px; height: 14px; color: var(--muted); margin-right: -4px; }
@@ -433,3 +434,34 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 @keyframes tour-in { from { opacity: 0; transform: translateY(4px); } }
 @media (prefers-color-scheme: dark) { .tour-back { background: rgb(0 0 0 / .55); } }
 @media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-pop { animation: none; } }
+
+/* continue reading (T-020) */
+.r-actions .btn.continue { font-variant-numeric: tabular-nums; }
+
+/* tag colours (T-024) */
+.tagdot.tc { background: var(--tc); }
+.tags-inline span.tc { color: var(--ink); padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--tc) 18%, transparent); }
+.tags-inline span.tc::before { color: var(--tc); opacity: 1; font-weight: 600; }
+.tagedit .tg.tc { background: color-mix(in srgb, var(--tc) 20%, var(--sel)); }
+.tagedit .tg.tc::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--tc); flex: none; }
+
+/* read state (T-026) */
+/* read rows stay readable: lighter title weight, muted ink, and a quiet "Read" pill */
+.doc-row.is-read .doc .t { font-weight: 500; color: color-mix(in srgb, var(--ink) 70%, var(--muted)); }
+.pill.read { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); }
+
+/* search scopes (T-022/T-023) */
+#sscope { max-width: 280px; text-overflow: ellipsis; }
+.s-scope { margin: 0 0 14px; }
+
+/* T-021 multi-select */
+.sel-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--accent) 10%, var(--pane)); }
+.sel-bar[hidden] { display: none; }
+.sel-bar .sel-n { flex: 1; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sel-bar .btn { padding: 4px 11px; }
+.doc-row.is-selected .doc, .doc-row.is-selected:hover .doc:not([aria-current="true"]) { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 3px 0 0 var(--accent); border-bottom-color: transparent; }
+.doc-row.is-selected .doc[aria-current="true"] { background: color-mix(in srgb, var(--accent) 22%, var(--sel)); }
+.tag-ask { width: min(360px, 100%); }
+/* T-028 clips: a highlight over no text, shown as a crop of the area it covers */
+.fig.clip .fig-img { border: 2px solid rgb(var(--mc) / .8); border-left-width: 4px; box-shadow: 0 0 0 3px rgb(var(--mc) / .18); }
+.fig-kind { font-size: 12px; color: var(--muted); padding-top: 2px; }
