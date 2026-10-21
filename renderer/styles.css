@@ -433,3 +433,8 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 @keyframes tour-in { from { opacity: 0; transform: translateY(4px); } }
 @media (prefers-color-scheme: dark) { .tour-back { background: rgb(0 0 0 / .55); } }
 @media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-pop { animation: none; } }
+
+/* read state (T-026) */
+/* read rows stay readable: lighter title weight, muted ink, and a quiet "Read" pill */
+.doc-row.is-read .doc .t { font-weight: 500; color: color-mix(in srgb, var(--ink) 70%, var(--muted)); }
+.pill.read { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); }
