@@ -248,7 +248,7 @@ async function tagMenu(tag, at, opts) {
 }
 
 /* ---------------- action menu ---------------- */
-// Themed in-app popover menu (the native fl.popup is no longer used). Items:
+// Themed in-app popover menu. Items:
 //   { id, label, icon, hint, danger, disabled, checked, submenu: [items] } | { type: "separator" } | { type: "heading", label }
 // at: an element (menu opens below it) or { x, y } (opens at the pointer).
 // opts: { trigger: element focus returns to, keyboard: focus the first item, label: aria-label }.
@@ -399,7 +399,7 @@ async function docMenu(d, at, opts) {
   const cur = d.id === S.docId && S.view.kind !== "search";
   const libs = S.db.libraries.map(l => ({ id: "move:" + l.id, label: l.name, checked: l.id === d.libraryId }));
   const items = [
-    { id: "annotate", label: "Annotate", icon: "pen" },
+    { id: "annotate", label: "View", icon: "pen" },
     { id: "open", label: "Open PDF", icon: "open" },
     { id: "reveal", label: process_platform() === "darwin" ? "Show in Finder" : "Show in folder", icon: "folder" },
     { id: "rescan", label: "Rescan highlights", icon: "refresh" },
