@@ -1425,7 +1425,7 @@ async function submitAddId() {
   S.busy = null; save();
   if (d) { if (S.view.kind !== "library" || S.view.id !== target) S.view = { kind: "library", id: target }; S.docId = d.id; S.off = new Set(); }
   renderAll();
-  toast(d ? `Added “${d.title}”` : "The downloaded PDF couldn't be read. It may be damaged or password-protected.");
+  toast(d ? `Added “${d.title}”` + (r.edition ? ` (${r.edition})` : "") : "The downloaded PDF couldn't be read. It may be damaged or password-protected.");
 }
 // Several items: one at a time (the main process runs a single fetch), with a status row each.
 // The dialog stays open on any failure, stop or unrecognised item; otherwise it closes with a toast.
@@ -1455,7 +1455,8 @@ async function addIdBatch(D) {
     addIdRow(it, "run", "Reading PDF…");
     let d = null;
     try { d = await addImported(r.info, target, { origin: r.origin, title: r.title }); } catch (err) { console.error(err); await fl.removeStored(r.info.storedPath); }
-    if (d) { added++; lastId = d.id; save(); addIdRow(it, "ok", "Added"); }
+    // books: which edition was found (T-009)
+    if (d) { added++; lastId = d.id; save(); addIdRow(it, "ok", r.edition ? `Added · ${clip(d.title, 48)} (${r.edition})` : "Added"); }
     else { failed++; addIdRow(it, "err", "Couldn't read the PDF (damaged or password-protected)"); }
   }
   D.batch = null;

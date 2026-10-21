@@ -105,14 +105,22 @@ function resolver(get, progress = () => {}) {
       throw big || new FetchFail("paywalled");
     }
     if (id.kind === "isbn") {   // only public-domain scans on Open Library / Internet Archive are free to download
+      const str = v => typeof v === "string" && v.trim() ? v.trim().slice(0, 500) : null;
+      // the ISBN's own edition: its scan (ocaid) is that exact edition; the work's other scans may be other editions
+      const ed = await fetchJson(`https://openlibrary.org/isbn/${id.value}.json`).catch(e => { if (hardFail(e)) throw e; return {}; });
       const docs = (await fetchJson(`https://openlibrary.org/search.json?isbn=${id.value}&fields=key,title,ia,ebook_access`)).docs || [];
       const book = docs.find(d => d.ebook_access === "public" && Array.isArray(d.ia) && d.ia.length);
+      const own = str(ed.ocaid), edTitle = str(ed.title) && [str(ed.title), str(ed.subtitle)].filter(Boolean).join(": ");
+      const scans = [...new Set([own, ...(book ? book.ia : [])])].filter(x => typeof x === "string" && /^[\w.-]+$/.test(x)).slice(0, 6);
       // a work lists every scan, some lending-only: try a few until one serves its PDF
-      for (const ia of (book ? book.ia : []).filter(x => /^[\w.-]+$/.test(x)).slice(0, 5)) {
+      for (const ia of scans) {
         try {
           progress({ stage: "download" });
           const r = await get(`https://archive.org/download/${ia}/${ia}.pdf`, "application/pdf", MAX_PDF);
-          if (isPdf(r.buf)) return { ...r, title: typeof book.title === "string" ? book.title.slice(0, 500) : null };
+          if (!isPdf(r.buf)) continue;
+          // edition: what the add dialog shows next to the title, so a scan of another edition is noticed
+          if (ia === own) return { ...r, title: edTitle || str(book && book.title), edition: [str(ed.edition_name), str(ed.publish_date)].filter(Boolean).join(", ") || null };
+          return { ...r, title: str(book && book.title) || edTitle, edition: "scan of another edition" };
         } catch (e) { if (hardFail(e) || e.reason === "too-large") throw e; }
       }
       throw new FetchFail("no-free-copy");
