@@ -4,7 +4,7 @@ _Last updated: 2026-10-21 · **Sprint 7 closed** (merged to local main c9791cc, 
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
-- Todo ids: `T-NNN`, next free: T-041 (T-016 is the MCP server on `feature/T-016-mcp-server`) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Todo ids: `T-NNN`, next free: T-042 (T-016, the MCP server, merged in Sprint 7) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
@@ -278,6 +278,7 @@ All open proposals are listed with todo ids under **To do** above: T-003 … T-0
 
 - [ ] **T-039** [enhancement · S] MCP `unreadable_marks` should skip marks that are now clips (or add rect/topic); CLI help still says captured images aren't exported, mention clips. (from T-028)
 - [ ] **T-040** [polish · XS · exempt] Bulk "Export selected" and a "N PDFs" drag image for multi-select; a tag icon for Add tag. (from T-021)
+- [ ] **T-041** [feature · L, likely several sprints] iOS and Android app (asked by user 2026-10-21). Faelights is desktop-only today (Electron). Reuse `core/` (plain JS) and pdf.js in a Capacitor shell; replace the Electron/Node parts (file access and library folder, clipboard, export dialogs, main-process IPC) with mobile equivalents; one-pane phone layout. Needs decisions first: Capacitor vs. a native rewrite, how the library syncs with the desktop (D-009 offline-first, no server today), app-store signing (Apple developer account). Suggest a spike: read-only reader on Android first.
 
 ## Decisions
 - 2026-10-21 — Sprint 7 takes T-016 (MCP server) so T-037 covers MCP too: 7 slots, over the 3–5 setting, by user choice. Version bump stays on 1.3.x → v1.3.2 (user).
