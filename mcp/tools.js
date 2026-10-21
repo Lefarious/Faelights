@@ -1,9 +1,9 @@
 /* Faelights — MCP tool handlers (T-016)
    Plain async functions over core/ that return JSON-able objects; server.js wires them to the protocol.
    Reads use the library the desktop app keeps (<userData>/library, Library.at) and re-read a PDF only when its saved
-   scan is missing, outdated or older than the file. The four write tools (add_pdf, add_by_identifier, tag_pdf, star_pdf) refuse while
-   the app is open (its session marker) or another process holds the lock, instead of writing something the app
-   would overwrite. Failures are ToolError {code, message}. */
+   scan is missing, outdated or older than the file. The write tools (add_pdf, add_by_identifier, tag_pdf, star_pdf, mark_read,
+   set_tag_colour) refuse while the app is open (its session marker) or another process holds the lock, instead of
+   writing something the app would overwrite. Failures are ToolError {code, message}. */
 "use strict";
 
 const fs = require("fs");
@@ -49,7 +49,7 @@ function tools(dataDir) {
   const libName = (db, id) => (Library.findLibrary(db, id) || {}).name || "?";
   const summary = (db, d) => ({
     id: d.id, title: d.title, library: libName(db, d.libraryId), library_id: d.libraryId, tags: d.tags || [], starred: !!d.starred,
-    pages: d.pages ?? null, highlights: d.count ?? null, file: d.sourcePath || d.fileName,
+    read: !!d.read, last_page: d.lastPage || null, pages: d.pages ?? null, highlights: d.count ?? null, file: d.sourcePath || d.fileName,
     added: d.addedAt ? new Date(d.addedAt).toISOString() : null, source_missing: !!d.sourceMissing
   });
 
@@ -113,12 +113,19 @@ function tools(dataDir) {
     return { libraries: db.libraries.map(l => ({ id: l.id, name: l.name, system: !!l.system, pdfs: Library.docsIn(db, l.id).length })) };
   }
 
-  async function list_pdfs({ library, tag, starred } = {}) {
+  async function list_pdfs({ library, tag, starred, read } = {}) {
     const db = await load();
     const lid = library ? libraryOf(db, library).id : null;
     const t = tag ? Library.cleanTag(tag) : null;
-    const docs = db.docs.filter(d => (!lid || d.libraryId === lid) && (!t || (d.tags || []).includes(t)) && (starred === undefined || !!d.starred === starred));
+    const docs = db.docs.filter(d => (!lid || d.libraryId === lid) && (!t || (d.tags || []).includes(t)) &&
+      (starred === undefined || !!d.starred === starred) && (read === undefined || !!d.read === read));
     return { pdfs: docs.map(d => summary(db, d)) };
+  }
+
+  async function list_tags() {
+    const db = await store.loadDb();
+    const tags = [...Library.tagCounts(db)].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    return { tags: tags.map(([tag, pdfs]) => ({ tag, pdfs, colour: Library.tagColour(db, tag) || null })) };
   }
 
   async function get_extracts({ pdf_id, mode = "full", colours, topic }) {
@@ -245,7 +252,7 @@ function tools(dataDir) {
       const { title, meta, result } = await readBytes(fs.readFileSync(info.storedPath));
       textWarn(result);
       const d = { id: info.id, libraryId: target.id, title: title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
-        sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false,
+        sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false, read: false, lastPage: 0,
         scannedMtime: info.mtime, meta, ...scanned(result) };
       await write(db => { db.docs.push(d); });
       return { action: "added", pdf: summary(before, d), warnings };
@@ -285,7 +292,7 @@ function tools(dataDir) {
       const warnings = [];
       try { checkText({ title: info.fileName }, result, warnings); } catch (e) { warnings.push(e.message); }
       const d = { id: info.id, libraryId: target.id, title: title || r.title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
-        sourcePath: null, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false,
+        sourcePath: null, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false, read: false, lastPage: 0,
         scannedMtime: info.mtime, meta, ...scanned(result), origin: { kind: id.kind, value: id.value, url: r.url } };
       let details = null;
       if (lookup) {
@@ -312,6 +319,31 @@ function tools(dataDir) {
     return { pdf_id: d.id, title: d.title, starred: !!d.starred, changed: was !== !!d.starred };
   }
 
+  async function mark_read({ pdf_id, read }) {
+    const [d, was] = await write(db => { const d = docOf(db, pdf_id); const was = !!d.read; Library.setRead(d, read); return [d, was]; });
+    return { pdf_id: d.id, title: d.title, read: !!d.read, changed: was !== !!d.read };
+  }
+
+  // colour: "#rgb" / "#rrggbb", or null to remove it. Only tags some PDF has (or one still coloured, to clear it).
+  async function set_tag_colour({ tag, colour }) {
+    let c = "";
+    if (colour) {
+      const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(colour.trim());
+      if (!m) throw new ToolError("invalid_input", `"${colour}" isn't a colour. Use #rgb or #rrggbb, e.g. #3a7 or #33aa77.`);
+      const h = m[1].toLowerCase();
+      c = "#" + (h.length === 3 ? [...h].map(x => x + x).join("") : h);
+    }
+    const t = Library.cleanTag(tag);
+    const was = await write(db => {
+      const tags = [...Library.tagCounts(db).keys()];
+      if (!tags.includes(t) && !Library.tagColour(db, t)) throw new ToolError("unknown_tag", `No PDF has the tag "${t}". Tags: ${tags.join(", ") || "none yet"}.`);
+      const was = Library.tagColour(db, t);
+      Library.setTagColour(db, t, c);
+      return was;
+    });
+    return { tag: t, colour: c || null, changed: was !== c };
+  }
+
   /* ---- resource: faelights://pdf/{id} ---- */
   async function pdf_markdown(id) {
     const { db, d, result } = await readable(id);
@@ -322,8 +354,8 @@ function tools(dataDir) {
     return db.docs.map(d => ({ id: d.id, title: d.title, library: libName(db, d.libraryId) }));
   }
 
-  return { store, list_libraries, list_pdfs, get_extracts, search, export_pdf, export_library, add_pdf, add_by_identifier, tag_pdf, star_pdf,
-    pdf_markdown, pdf_resources };
+  return { store, list_libraries, list_pdfs, list_tags, get_extracts, search, export_pdf, export_library, add_pdf, add_by_identifier, tag_pdf, star_pdf,
+    mark_read, set_tag_colour, pdf_markdown, pdf_resources };
 }
 
 module.exports = { tools, ToolError, FORMATS };

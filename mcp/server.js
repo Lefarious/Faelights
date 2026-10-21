@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* Faelights — MCP server over stdio (T-016)
    Exposes the desktop app's library to MCP clients (Claude Code, Claude Desktop): read highlights grouped by topic,
-   search, export, and three write tools. Handlers live in tools.js; this file declares the zod schemas and the
+   search, export, and the write tools (WRITE_TOOLS). Handlers live in tools.js; this file declares the zod schemas and the
    faelights://pdf/{id} resource. Data folder: --data-dir, else FAELIGHTS_DATA_DIR, else the app's own (userData).
    stdout carries only protocol messages: anything logged goes to stderr. */
 "use strict";
@@ -15,7 +15,8 @@ const { z } = require("zod");
 const { tools, ToolError } = require("./tools.js");
 const { version } = require("../package.json");
 
-const WRITE_NOTE = "This is one of the only four tools that change your Faelights library (add_pdf, add_by_identifier, tag_pdf, star_pdf). " +
+const WRITE_TOOLS = ["add_pdf", "add_by_identifier", "tag_pdf", "star_pdf", "mark_read", "set_tag_colour"];
+const WRITE_NOTE = `This is one of the only ${WRITE_TOOLS.length} tools that change your Faelights library (${WRITE_TOOLS.join(", ")}). ` +
   "It refuses with library_in_use while the Faelights desktop app is open, because the app would overwrite the change.";
 
 const pdfId = z.string().min(1).describe("The PDF's id, from list_pdfs or search");
@@ -56,7 +57,7 @@ function createServer(dataDir) {
   const server = new McpServer({ name: "faelights", version }, {
     instructions: "Faelights pulls highlights out of annotated PDFs, grouped by the PDF's topics (headings). " +
       "Start with list_pdfs or search to find a PDF id, then get_extracts or export_pdf. " +
-      "Only add_pdf, add_by_identifier, tag_pdf and star_pdf change the library, and they fail with library_in_use while the desktop app is open. " +
+      `Only ${WRITE_TOOLS.join(", ")} change the library, and they fail with library_in_use while the desktop app is open. ` +
       "add_by_identifier is the only tool that uses the internet."
   });
   const read = { readOnlyHint: true, openWorldHint: false };
@@ -67,14 +68,21 @@ function createServer(dataDir) {
   }, wrap(() => t.list_libraries()));
 
   server.registerTool("list_pdfs", {
-    title: "List PDFs", description: "PDFs in the library with their ids, titles, tags, star and highlight counts. Filter by library, tag or starred.",
+    title: "List PDFs", description: "PDFs in the library with their ids, titles, tags, star, read state, last page viewed and highlight counts. " +
+      "Filter by library, tag, starred or read.",
     inputSchema: {
       library: library.optional(),
       tag: z.string().min(1).optional().describe("Only PDFs with this tag"),
-      starred: z.boolean().optional().describe("true: only starred; false: only unstarred")
+      starred: z.boolean().optional().describe("true: only starred; false: only unstarred"),
+      read: z.boolean().optional().describe("true: only read; false: only unread")
     },
     annotations: read
   }, wrap(a => t.list_pdfs(a)));
+
+  server.registerTool("list_tags", {
+    title: "List tags", description: "Every tag, how many PDFs have it, and its colour in the app (#rrggbb, or null).",
+    inputSchema: {}, annotations: read
+  }, wrap(() => t.list_tags()));
 
   server.registerTool("get_extracts", {
     title: "Get extracts", description: "A PDF's highlights grouped by topic (its headings or outline), with page numbers, colours and comments. " +
@@ -153,6 +161,22 @@ function createServer(dataDir) {
     inputSchema: { pdf_id: pdfId, starred: z.boolean() },
     annotations: { ...writeHints, idempotentHint: true }
   }, wrap(a => t.star_pdf(a)));
+
+  server.registerTool("mark_read", {
+    title: "Mark a PDF read", description: "Mark a PDF as read or unread. " + WRITE_NOTE,
+    inputSchema: { pdf_id: pdfId, read: z.boolean() },
+    annotations: { ...writeHints, idempotentHint: true }
+  }, wrap(a => t.mark_read(a)));
+
+  server.registerTool("set_tag_colour", {
+    title: "Set a tag's colour", description: "Give a tag a colour, as the app's tag menu does (a leading # on the tag is dropped), or remove it with null. " +
+      "The tag must be on at least one PDF (see list_tags); an unknown tag fails with unknown_tag. " + WRITE_NOTE,
+    inputSchema: {
+      tag: z.string().min(1),
+      colour: z.string().regex(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "hex colour like #3a7 or #33aa77").nullable().describe("#rgb or #rrggbb; null removes the colour")
+    },
+    annotations: { ...writeHints, idempotentHint: true }
+  }, wrap(a => t.set_tag_colour(a)));
 
   server.registerResource("pdf", new ResourceTemplate("faelights://pdf/{id}", {
     list: async () => ({ resources: (await t.pdf_resources()).map(p => ({ uri: `faelights://pdf/${p.id}`, name: p.title, description: `In ${p.library}`, mimeType: "text/markdown" })) })
