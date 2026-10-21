@@ -178,6 +178,8 @@ const Annot = (() => {
   const rectQuad = r => [r[0], r[3], r[2], r[3], r[0], r[1], r[2], r[1]];
 
   /* ---------- session ---------- */
+  // 1-based page to open at: an explicit page wins, else where the reader left off (lastPage, 0/undefined → 1)
+  const startPage = (d, page) => Number.isInteger(page) && page > 0 ? page : Number.isInteger(d.lastPage) && d.lastPage > 0 ? d.lastPage : 1;
   async function open(d, page) {
     if (A && A.d.id === d.id) { if (page) goToPage(page - 1); return; }
     if (A) close();
@@ -187,7 +189,7 @@ const Annot = (() => {
     const a = A = {
       d, bytes, pdf: null, libP: null, readOnly: "", ver: 0, scale: 1, fit: true,
       slots: [], undo: [], redo: [], tool: "select", sel: null, queue: Promise.resolve(), writing: Promise.resolve(),
-      changed: false, wasAnnotated: !!d.annotated, status: "", startPage: (page || 1) - 1, scrollTop: 0
+      changed: false, wasAnnotated: !!d.annotated, status: "", startPage: startPage(d, page) - 1, scrollTop: 0
     };
     buildShell(a);
     renderReader();
@@ -225,7 +227,7 @@ const Annot = (() => {
   // Resolves once pending writes have landed; { discard } skips the rescan (doc being removed or reverted).
   function close(opts = {}) {
     const a = A; if (!a) return Promise.resolve();
-    A = null; hidePop();
+    trackPage(); hidePop(); A = null;   // settle lastPage on the page being left
     if (a.ro) a.ro.disconnect();
     if (a.io) a.io.disconnect();
     for (const s of a.slots) if (s.task) s.task.cancel();
@@ -422,10 +424,11 @@ const Annot = (() => {
     a.ui.pin.value = i + 1;
   }
   function trackPage() {
-    const a = A; if (!a || !a.slots.length) return;
+    const a = A; if (!a || !a.slots.length || !a.slots[0].el) return;   // pages not built yet (still loading / failed)
     const mid = a.scroller.scrollTop + a.scroller.clientHeight * 0.35;
     const s = a.slots.find(s => s.el.offsetTop + s.el.offsetHeight > mid) || a.slots[a.slots.length - 1];
     if (document.activeElement !== a.ui.pin) a.ui.pin.value = s.i + 1;
+    if (Library.setLastPage(a.d, s.i + 1)) save();   // continue reading (debounced save, only on change)
   }
   function zoomStep(dir) {
     const a = A; if (!a || !a.slots.length) return;
@@ -785,5 +788,5 @@ const Annot = (() => {
   // pointer-down anywhere outside a popover closes it
   addEventListener("pointerdown", e => { if (!e.target.closest?.(".pv-pop")) hidePop(); }, true);
 
-  return { open, close, mount, key, isOpen: () => !!A, docId: () => A && A.d.id };
+  return { open, close, mount, key, startPage, isOpen: () => !!A, docId: () => A && A.d.id };
 })();

@@ -953,6 +953,8 @@ function renderReader() {
   const acts = el("div", "r-actions");
   const ob = btn("icon", null, "open", "Open PDF in your PDF app"); ob.onclick = async () => { const e = await fl.openPdf(d); if (e !== true) toast("Couldn't open the PDF"); };
   const mb = btn("icon", null, "more", "More actions"); mb.onclick = () => docMenu(d);
+  // continue reading (T-020): back to the page the viewer was last on
+  if (d.lastPage > 1) { const kb = btn("continue", "Continue · p. " + d.lastPage, "view", "Continue reading at page " + d.lastPage); kb.onclick = () => annotate(d, d.lastPage); acts.append(kb); }
   acts.append(ob, mb); tt.append(acts); head.append(tt);
 
   const meta = el("div", "r-meta");
