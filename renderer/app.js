@@ -53,7 +53,8 @@ const S = {
   docId: null,
   docQuery: "",
   searchQuery: "",
-  searchLib: "all",
+  searchLib: "all",        // search scope: "all", "doc" (searchDoc) or a library id
+  searchDoc: null,         // the PDF the reader showed when search opened ("This PDF")
   off: new Set(),          // colour keys hidden in the reader
   busy: null,              // {label, done, total}
   renaming: null,          // library id being renamed
@@ -764,7 +765,11 @@ function themeSwitch() {
   return seg;
 }
 
+// The PDF the reader is showing, if any
+function readerDocId() { return S.view.kind !== "search" && S.docId && visibleDocs().some(d => d.id === S.docId) ? S.docId : null; }
 function go(view) {
+  // entering search pins "This PDF" to the reader's PDF; view.scope (optional) sets the scope
+  if (view.kind === "search") { if (S.view.kind !== "search") S.searchDoc = readerDocId(); if (view.scope) S.searchLib = view.scope; }
   S.view = view; S.renaming = null;
   if (view.kind !== "search") {
     const docs = visibleDocs();
@@ -1194,6 +1199,17 @@ function renderBlank(r) {
 }
 
 /* ---------------- rendering: search ---------------- */
+// Which docs a scope covers: "all", "doc" (docId only) or a library id. Pure (tested).
+function searchDocs(db, scope, docId) {
+  return db.docs.filter(d => d.result && (scope === "all" || (scope === "doc" ? d.id === docId : d.libraryId === scope)));
+}
+// A scope whose PDF or library is gone falls back to "all". Pure (tested).
+function validScope(db, scope, docId) {
+  const ok = scope === "all" || (scope === "doc" ? db.docs.some(d => d.id === docId) : db.libraries.some(l => l.id === scope));
+  return ok ? scope : "all";
+}
+function searchScope() { return S.searchLib = validScope(S.db, S.searchLib, S.searchDoc); }
+const clip = (s, n) => s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
 function renderSearch(r) {
   r.classList.toggle("only", S.db.settings.mode === "only");
   const head = el("div", "s-head");
@@ -1201,10 +1217,12 @@ function renderSearch(r) {
   const row = el("div", "s-row");
   const q = el("input", "search"); q.id = "sq"; q.placeholder = "Words in a highlight, sentence or note"; q.value = S.searchQuery; q.setAttribute("aria-label", "Search highlights");
   q.oninput = () => { S.searchQuery = q.value; renderResults(); };
-  const scope = el("select", "btn"); scope.id = "sscope"; scope.setAttribute("aria-label", "Library to search");
+  const scope = el("select", "btn"); scope.id = "sscope"; scope.setAttribute("aria-label", "Where to search");
   const o = el("option", null, "All libraries"); o.value = "all"; scope.append(o);
+  const sd = S.searchDoc && doc(S.searchDoc);
+  if (sd) { const x = el("option", null, "This PDF — " + clip(sd.title, 40)); x.value = "doc"; x.title = sd.title; scope.append(x); }
   for (const l of S.db.libraries) { const x = el("option", null, l.name); x.value = l.id; scope.append(x); }
-  scope.value = S.searchLib; scope.onchange = () => { S.searchLib = scope.value; renderResults(); };
+  scope.value = searchScope(); scope.onchange = () => { S.searchLib = scope.value; renderResults(); };
   const seg = el("div", "seg");
   for (const [m, label] of [["full", "Full sentence"], ["only", "Highlights only"]]) { const b = el("button", null, label); b.setAttribute("aria-pressed", S.db.settings.mode === m); b.onclick = () => { S.db.settings.mode = m; save(); renderReader(); }; seg.append(b); }
   row.append(q, scope, seg); head.append(row);
@@ -1214,10 +1232,11 @@ function renderSearch(r) {
 function renderResults() {
   const body = $("sbody"); if (!body) return; body.replaceChildren();
   const terms = termsOf(S.searchQuery);
-  const docs = S.db.docs.filter(d => d.result && (S.searchLib === "all" || d.libraryId === S.searchLib));
+  const sc = searchScope(), docs = searchDocs(S.db, sc, S.searchDoc);
   if (!terms.length) {
     const total = docs.reduce((n, d) => n + (d.count || 0), 0);
-    const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, `Type to search ${plural(total, "highlight")} across ${plural(docs.length, "PDF")}. Every word must appear in the sentence, the highlight or its note.`)); body.append(b); return;
+    const where = sc === "doc" ? `in 1 PDF, “${clip(doc(S.searchDoc).title, 60)}”` : `across ${plural(docs.length, "PDF")}`;
+    const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, `Type to search ${plural(total, "highlight")} ${where}. Every word must appear in the sentence, the highlight or its note.`)); body.append(b); return;
   }
   let hits = 0;
   for (const d of docs) {
@@ -1484,6 +1503,16 @@ addEventListener("paste", e => {
   fl.parseIds(t).then(xs => { if (looksLikeIds(xs)) openAddId(t.trim()); });
 });
 
+// Ctrl/⌘+F arrives as the "search" menu command (src/main.js accelerator). A press typed in a field,
+// or while the viewer, a dialog or the tour owns keys, is swallowed here and the command ignored.
+let findBlocked = 0;
+addEventListener("keydown", e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "f") return;
+  if (addDlg || Tour.isOpen() || Annot.isOpen() || e.target.closest?.("input, select, textarea, [contenteditable]")) { e.preventDefault(); findBlocked = performance.now(); }
+}, true);
+// Ctrl/⌘+F with a PDF in the reader searches just that PDF; otherwise the last scope
+function findCmd() { if (performance.now() - findBlocked > 500) go({ kind: "search", scope: readerDocId() ? "doc" : undefined }); }
+
 addEventListener("keydown", e => {
   if (addDlg) return;   // the add-from-link dialog handles its own keys
   if (e.target.matches("input, select, textarea")) return;
@@ -1504,7 +1533,7 @@ fl.onMenu(ch => {
   if (ch === "export-doc") { if (d) exportDoc(d); else toast("Open a PDF first"); }
   if (ch === "export-library") exportLibrary(S.view.kind === "library" ? S.view.id : (d ? d.libraryId : "inbox"));
   if (ch === "rescan-all") rescanAll();
-  if (ch === "search") go({ kind: "search" });
+  if (ch === "search") findCmd();
   if (ch === "toggle-mode") { S.db.settings.mode = S.db.settings.mode === "full" ? "only" : "full"; save(); renderReader(); }
   if (ch.startsWith("pane:")) togglePane(ch.slice(5));
   if (ch === "layout-reset") resetLayout();

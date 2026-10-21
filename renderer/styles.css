@@ -448,3 +448,6 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 /* read rows stay readable: lighter title weight, muted ink, and a quiet "Read" pill */
 .doc-row.is-read .doc .t { font-weight: 500; color: color-mix(in srgb, var(--ink) 70%, var(--muted)); }
 .pill.read { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); }
+
+/* search scopes (T-022/T-023) */
+#sscope { max-width: 280px; text-overflow: ellipsis; }
