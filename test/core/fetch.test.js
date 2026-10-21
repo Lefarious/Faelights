@@ -66,14 +66,23 @@ test("a refused connection to a site is 'unreachable'; an aborted signal is 'can
   assert.equal(await reason(F.nodeGet({ signal: ctl.signal })(base + "/pdf", F.ACCEPT_ANY, F.MAX_PDF)), "cancelled");
 });
 
-// Node's fetch replaced by one that fails DNS for every host, as it does for a mistyped link (and for everything offline)
-test("a mistyped link is 'unreachable' and tries on; a DNS failure on doi.org is 'offline' and stops", async () => {
+// Node's fetch replaced by one that fails DNS for every host not in `up`: a mistyped link while online, or everything offline
+test("a mistyped link is 'unreachable' and tries on; offline (doi.org down too) it is 'offline'; a DNS failure on doi.org stops", async () => {
   const real = globalThis.fetch, seen = [];
-  globalThis.fetch = async url => { seen.push(url); throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error(`getaddrinfo ENOTFOUND ${new URL(url).hostname}`), { code: "ENOTFOUND" }) }); };
+  let up = [];
+  globalThis.fetch = async url => {
+    seen.push(url); const host = new URL(url).hostname;
+    if (up.includes(host)) return new Response("<html></html>", { status: 200, headers: { "content-type": "text/html" } });
+    throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error(`getaddrinfo ENOTFOUND ${host}`), { code: "ENOTFOUND" }) });
+  };
   try {
     const { parseIdentifier } = require("../../core/identify.js");
     const res = () => F.resolver(F.nodeGet());
+    up = ["doi.org"];   // online: only the mistyped host is missing
     assert.equal(await reason(res().resolvePdf(parseIdentifier("https://www.natrue.com/articles/x"))), "unreachable");
+    up = []; seen.length = 0;   // Wi-Fi with no internet: nothing resolves
+    assert.equal(await reason(res().resolvePdf(parseIdentifier("https://www.natrue.com/articles/x"))), "offline");
+    assert.deepEqual(seen, ["https://www.natrue.com/articles/x", "https://doi.org/"]);
     seen.length = 0;
     assert.equal(await reason(res().resolvePdf(parseIdentifier("10.1038/nature14539"))), "offline");
     assert.deepEqual(seen, ["https://doi.org/10.1038/nature14539"]);   // no CrossRef try after it
