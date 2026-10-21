@@ -118,3 +118,77 @@ test("lookupMeta: CrossRef for a DOI, arXiv for an arXiv id, 'invalid' with neit
   assert.deepEqual(await F.lookupMeta(get, {}, null), { ok: false, reason: "invalid" });
   assert.deepEqual(await F.lookupMeta(fake({}), { doi: "10.1/none" }, null), { ok: false, reason: "not-found" });
 });
+
+// PMC: NCBI's open-access bucket first, then Europe PMC, then PMC's own page (now a JavaScript bot check)
+const OA = "https://pmc-oa-opendata.s3.amazonaws.com/";
+const BOT = { html: "<html><title>Preparing to download ...</title><script>/* proof of work */</script></html>" };
+const pmcRoutes = (v, extra = {}) => ({
+  [`${OA}?list-type=2&prefix=metadata%2F${v}.`]: { html: "<ListBucketResult></ListBucketResult>" },   // not in the OA subset
+  [`https://europepmc.org/articles/${v}?pdf=render`]: { fail: "paywalled" },   // Cloudflare's 403
+  [`https://pmc.ncbi.nlm.nih.gov/articles/${v}/`]: { html: `<meta name="citation_pdf_url" content="https://pmc.ncbi.nlm.nih.gov/articles/${v}/pdf/x.pdf">` },
+  [`https://pmc.ncbi.nlm.nih.gov/articles/${v}/pdf/x.pdf`]: BOT,
+  ...extra
+});
+const pmcid = v => ({ kind: "pmcid", value: v, url: `https://pmc.ncbi.nlm.nih.gov/articles/${v}/` });
+
+test("PMCID: the newest version in NCBI's open-access bucket, with its title", async () => {
+  const seen = [];
+  const get = fake(pmcRoutes("PMC1", {
+    [`${OA}?list-type=2&prefix=metadata%2FPMC1.`]: { html: "<Contents><Key>metadata/PMC1.1.json</Key></Contents><Contents><Key>metadata/PMC1.2.json</Key></Contents>" },
+    [`${OA}PMC1.2/PMC1.2.json`]: { json: { title: "GenBank", pdf_url: "s3://pmc-oa-opendata/PMC1.2/PMC1.2.pdf?md5=abc" } },
+    [`${OA}PMC1.2/PMC1.2.pdf`]: { pdf: true }
+  }), seen);
+  const r = await F.resolver(get).resolvePdf(pmcid("PMC1"));
+  assert.equal(r.url, `${OA}PMC1.2/PMC1.2.pdf`);
+  assert.equal(r.title, "GenBank");
+  assert.equal(seen.length, 3);   // PMC's bot-walled page never asked
+});
+
+test("PMCID: PMC's bot-check page instead of the PDF falls back to Europe PMC", async () => {
+  const get = fake(pmcRoutes("PMC2", { "https://europepmc.org/articles/PMC2?pdf=render": { pdf: true } }));
+  const r = await F.resolver(get).resolvePdf(pmcid("PMC2"));
+  assert.equal(r.url, "https://europepmc.org/articles/PMC2?pdf=render");
+  // and PMC itself is still used when it does hand over the PDF
+  const pmc = fake(pmcRoutes("PMC3", { "https://pmc.ncbi.nlm.nih.gov/articles/PMC3/pdf/x.pdf": { pdf: true } }));
+  assert.equal((await F.resolver(pmc).resolvePdf(pmcid("PMC3"))).url, "https://pmc.ncbi.nlm.nih.gov/articles/PMC3/pdf/x.pdf");
+});
+
+test("PMCID: nothing gives a PDF → 'no-free-copy' (not a paywall); an unknown PMCID → 'not-found'", async () => {
+  const seen = [];
+  assert.equal(await reason(F.resolver(fake(pmcRoutes("PMC4"), seen)).resolvePdf(pmcid("PMC4"))), "no-free-copy");
+  assert.equal(seen.length, 4);   // bucket listing, Europe PMC, PMC page, PMC's bot check
+  const gone = pmcRoutes("PMC5", { "https://pmc.ncbi.nlm.nih.gov/articles/PMC5/": { fail: "not-found" } });
+  assert.equal(await reason(F.resolver(fake(gone)).resolvePdf(pmcid("PMC5"))), "not-found");
+});
+
+test("PMCID: offline stops at once, with no further sources tried", async () => {
+  const seen = [];
+  const get = fake(pmcRoutes("PMC6", { [`${OA}?list-type=2&prefix=metadata%2FPMC6.`]: { fail: "offline" } }), seen);
+  assert.equal(await reason(F.resolver(get).resolvePdf(pmcid("PMC6"))), "offline");
+  assert.equal(seen.length, 1);
+});
+
+test("PMID: the ID converter's PMCID goes through the PMC fallbacks; its DOI is the last resort", async () => {
+  const conv = n => `https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=${n}&format=json&tool=faelights`;
+  const seen = [];
+  const get = fake(pmcRoutes("PMC0007", {
+    [conv("7")]: { json: { records: [{ pmcid: "PMC0007", doi: "10.1000/p7" }] } },
+    "https://europepmc.org/articles/PMC0007?pdf=render": { pdf: true }
+  }), seen);
+  assert.equal((await F.resolver(get).resolvePdf({ kind: "pmid", value: "7" })).url, "https://europepmc.org/articles/PMC0007?pdf=render");
+  assert.ok(!seen.some(u => u.includes("doi.org")));
+  // every PMC source fails → the DOI route, which ends as it always has
+  const all = fake(pmcRoutes("PMC0008", {
+    [conv("8")]: { json: { records: [{ pmcid: "PMC0008", doi: "10.1000/p8" }] } },
+    "https://doi.org/10.1000/p8": { html: "<html>sign in</html>" },
+    "https://api.crossref.org/works/10.1000%2Fp8": { json: { message: {} } }
+  }));
+  assert.equal(await reason(F.resolver(all).resolvePdf({ kind: "pmid", value: "8" })), "paywalled");
+  // offline on the way stops there too
+  const off = [], o = fake(pmcRoutes("PMC0009", {
+    [conv("9")]: { json: { records: [{ pmcid: "PMC0009", doi: "10.1000/p9" }] } },
+    "https://europepmc.org/articles/PMC0009?pdf=render": { fail: "offline" }
+  }), off);
+  assert.equal(await reason(F.resolver(o).resolvePdf({ kind: "pmid", value: "9" })), "offline");
+  assert.equal(off.length, 3);
+});
