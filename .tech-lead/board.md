@@ -305,6 +305,7 @@ All open proposals are listed with todo ids under **To do** above: T-003 … T-0
 - [ ] **T-044** [polish · XS · exempt] Markdown export: a note ending in a `- ` list right before an extract's bullet can read as one list; put a separator between them. (from T-025)
 
 ## Decisions
+- 2026-10-21 — Sprint 8 release: stay on 1.3.x → v1.3.3 (user). Sprint 8 PR into main opened on user request.
 - 2026-10-21 — Sprint 8: shelves are one level deep; note headings are Markdown `#` lines (user). User asked to merge all open PRs into the integration branch (scaffold, T-019, T-035), before the macOS CI job finished (it passed afterwards).
 - 2026-10-21 — T-035 source-title joins Sprint 8 as its 5th slot (user).
 - 2026-10-21 — Sprint 7 takes T-016 (MCP server) so T-037 covers MCP too: 7 slots, over the 3–5 setting, by user choice. Version bump stays on 1.3.x → v1.3.2 (user).
