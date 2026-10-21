@@ -55,6 +55,7 @@ const S = {
   searchQuery: "",
   searchLib: "all",        // search scope: "all", "doc" (searchDoc) or a library id
   searchDoc: null,         // the PDF the reader showed when search opened ("This PDF")
+  searchPicked: false,     // the user chose a scope this session (select or "Search this library")
   off: new Set(),          // colour keys hidden in the reader
   busy: null,              // {label, done, total}
   renaming: null,          // library id being renamed
@@ -218,9 +219,10 @@ async function deleteLibrary(id) {
 // at / opts: see openMenu()
 async function libraryMenu(id, at, opts) {
   const l = lib(id), cur = S.view.kind === "library" && S.view.id === id;
-  const items = [{ id: "rename", label: "Rename", icon: "pen" }, { id: "export", label: "Export to folder…", icon: "export", hint: cur ? keyHint("E", true) : "" }];
+  const items = [{ id: "search", label: "Search this library", icon: "search" }, { id: "rename", label: "Rename", icon: "pen" }, { id: "export", label: "Export to folder…", icon: "export", hint: cur ? keyHint("E", true) : "" }];
   if (!l.system) items.push({ type: "separator" }, { id: "delete", label: "Delete library…", icon: "trash", danger: true });
   const r = await openMenu(at || document.activeElement, items, { label: l.name, ...opts });
+  if (r === "search") { S.searchPicked = true; go({ kind: "search", scope: id }); }
   if (r === "rename") { S.renaming = id; renderSide(); }
   if (r === "export") exportLibrary(id);
   if (r === "delete") deleteLibrary(id);
@@ -765,11 +767,20 @@ function themeSwitch() {
   return seg;
 }
 
+// Scope on entering search: an explicit one wins; else, from a library view, that library unless
+// the user already picked a scope this session (sidebar, menu, or Ctrl+F with no PDF open); else
+// null = keep the last scope. Pure (tested).
+function entryScope(from, scope, picked) { return scope || (!picked && from.kind === "library" ? from.id : null); }
 // The PDF the reader is showing, if any
 function readerDocId() { return S.view.kind !== "search" && S.docId && visibleDocs().some(d => d.id === S.docId) ? S.docId : null; }
 function go(view) {
   // entering search pins "This PDF" to the reader's PDF; view.scope (optional) sets the scope
-  if (view.kind === "search") { if (S.view.kind !== "search") S.searchDoc = readerDocId(); if (view.scope) S.searchLib = view.scope; }
+  if (view.kind === "search") {
+    const entering = S.view.kind !== "search";
+    if (entering) S.searchDoc = readerDocId();
+    const sc = entering ? entryScope(S.view, view.scope, S.searchPicked) : view.scope;
+    if (sc) S.searchLib = sc;
+  }
   S.view = view; S.renaming = null;
   if (view.kind !== "search") {
     const docs = visibleDocs();
@@ -1210,6 +1221,7 @@ function validScope(db, scope, docId) {
 }
 function searchScope() { return S.searchLib = validScope(S.db, S.searchLib, S.searchDoc); }
 const clip = (s, n) => s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
+const scopeLabel = sc => sc === "all" ? "all libraries" : sc === "doc" ? `“${clip(doc(S.searchDoc).title, 60)}”` : lib(sc).name;
 function renderSearch(r) {
   r.classList.toggle("only", S.db.settings.mode === "only");
   const head = el("div", "s-head");
@@ -1222,7 +1234,7 @@ function renderSearch(r) {
   const sd = S.searchDoc && doc(S.searchDoc);
   if (sd) { const x = el("option", null, "This PDF — " + clip(sd.title, 40)); x.value = "doc"; x.title = sd.title; scope.append(x); }
   for (const l of S.db.libraries) { const x = el("option", null, l.name); x.value = l.id; scope.append(x); }
-  scope.value = searchScope(); scope.onchange = () => { S.searchLib = scope.value; renderResults(); };
+  scope.value = searchScope(); scope.onchange = () => { S.searchLib = scope.value; S.searchPicked = true; renderResults(); };
   const seg = el("div", "seg");
   for (const [m, label] of [["full", "Full sentence"], ["only", "Highlights only"]]) { const b = el("button", null, label); b.setAttribute("aria-pressed", S.db.settings.mode === m); b.onclick = () => { S.db.settings.mode = m; save(); renderReader(); }; seg.append(b); }
   row.append(q, scope, seg); head.append(row);
@@ -1235,10 +1247,11 @@ function renderResults() {
   const sc = searchScope(), docs = searchDocs(S.db, sc, S.searchDoc);
   if (!terms.length) {
     const total = docs.reduce((n, d) => n + (d.count || 0), 0);
-    const where = sc === "doc" ? `in 1 PDF, “${clip(doc(S.searchDoc).title, 60)}”` : `across ${plural(docs.length, "PDF")}`;
+    const where = sc === "all" ? `across ${plural(docs.length, "PDF")}` : `in ${scopeLabel(sc)} (${plural(docs.length, "PDF")})`;
     const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, `Type to search ${plural(total, "highlight")} ${where}. Every word must appear in the sentence, the highlight or its note.`)); body.append(b); return;
   }
   let hits = 0;
+  const sum = el("p", "crumb s-scope"); body.append(sum);   // filled once hits are counted
   for (const d of docs) {
     const matches = d.result.entries.filter(e => Library.entryMatches(e, terms));
     if (!matches.length) continue;
@@ -1255,7 +1268,8 @@ function renderResults() {
     }
     body.append(sec);
   }
-  if (!hits) { const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, "No highlights contain all of those words.")); body.append(b); }
+  sum.textContent = `${plural(hits, "match", "matches")} in ${scopeLabel(sc)}`;
+  if (!hits) { sum.remove(); const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, `No highlights in ${scopeLabel(sc)} contain all of those words.`)); body.append(b); }
 }
 
 function renderAll() { renderSide(); renderList(); renderReader(); }
