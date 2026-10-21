@@ -4,7 +4,7 @@ _Last updated: 2026-10-21 · **Sprint 5 open** (bugs; integration `feature/s5-in
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
-- Todo ids: `T-NNN`, next free: T-035 (T-016 is the MCP server on `feature/T-016-mcp-server`) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Todo ids: `T-NNN`, next free: T-037 (T-016 is the MCP server on `feature/T-016-mcp-server`) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
@@ -76,11 +76,11 @@ Polish (reported by user):
 | image-view | "With images" reader toggle, centred crops interleaved by `at`; images in colour filter | renderer/app.js (reader), styles.css (reader block) | image-extract, images.js scaffold | M | 1 | merged 40bb2c7 |
 | T-014 onboarding-tour | First-run guided tour, 3 chapters (app/reader/viewer), seen flags in settings.tour, Help › Show Tour | new renderer/tour.js, renderer/app.js (data-tour hooks, maybeTour/startTour, menu `tour`), renderer/annotator.js (2 hooks), renderer/index.html, renderer/styles.css (own block), src/main.js (Help menu), test/tour.test.js | — | M | 1 | merged 43721ca (F-022) |
 | image-export | Export formats: Markdown+images folder, Obsidian, HTML (self-contained), plain; doc + library | renderer/app.js (export), src/main.js (export:bundle), src/preload.js | image-extract, images.js scaffold | M | 1 | merged 40bb2c7 |
-| T-017 long-paste-add-link (bug · exempt) | Pasting a long clipboard item into "Add by link" fails. Reproduce, find the length/format that breaks it, fix. Accept: a long paste (multi-line, several ids, very long URL) is parsed or rejected with a clear message, never errors; test in identify.test.js | renderer/app.js (add dialog), core/identify.js, test/identify.test.js | — | S | 1 | in progress (agent) · Sprint 5 |
+| T-017 long-paste-add-link (bug · exempt) | Pasting a long clipboard item into "Add by link" fails. Reproduce, find the length/format that breaks it, fix. Accept: a long paste (multi-line, several ids, very long URL) is parsed or rejected with a clear message, never errors; test in identify.test.js | renderer/app.js (add dialog), core/identify.js, test/identify.test.js | — | S | 1 | merged to s5-integration 8a3f3a1 |
 | T-018 colour-filter-without-images (bug · exempt) | Colour filter is hidden unless "With images" is on (it shows only when >1 colour, and images add colours). Accept: the filter shows whenever the extract has highlights, images on or off | renderer/app.js (renderReader colour block) | — | XS | 1 | merged to s5-integration 627e376 |
 | T-019 extract-sentence-split (bug · exempt) | Extracts sometimes don't separate, even across " . ". Accept: a fixture with the failing case splits into separate extracts; existing snapshots unchanged or updated knowingly (ANALYZER_VERSION bump if results change) | core/extract.js, test/core/ | — | S | 1 | merged to s5-integration c3bbab0 |
-| T-002 offline-vs-unreachable (bug · exempt) | (proposal, pulled into Sprint 5) Tell "no connection" apart from "couldn't reach that site" | core/fetch.js, renderer/app.js (add dialog messages) | — | S | 1 | queued behind T-017 + T-008 · Sprint 5 |
-| T-008 pmc-fallback (bug · exempt) | (proposal, pulled into Sprint 5) PMC bot-check page: fall back to Europe PMC / Unpaywall for PMCID/PMID | core/fetch.js, test/ | — | S | 2 | in progress (agent) · Sprint 5 |
+| T-002 offline-vs-unreachable (bug · exempt) | (proposal, pulled into Sprint 5) Tell "no connection" apart from "couldn't reach that site" | core/fetch.js, renderer/app.js (add dialog messages) | — | S | 1 | in progress (agent, cut from s5-integration b53a36f) · Sprint 5 |
+| T-008 pmc-fallback (bug · exempt) | (proposal, pulled into Sprint 5) PMC bot-check page: fall back to Europe PMC / Unpaywall for PMCID/PMID | core/fetch.js, test/ | — | S | 2 | merged to s5-integration b53a36f |
 | T-020 continue-reading (enhancement) | Viewer remembers the last page per PDF; "Continue reading" opens it there. Accept: close at p. 12, reopen → p. 12; new PDFs open at p. 1 | renderer/annotator.js, renderer/app.js (viewer open), core/library.js (`d.lastPage`) | library-doc-fields scaffold | S | 1 | planned · Sprint 6 |
 | T-022 search-current-pdf (enhancement) | Search scoped to the open PDF's extracts (sentence/highlight/note). Accept: a word in two PDFs matches only the open one | renderer/app.js (search panel) | — | S | 1 | planned · Sprint 6 |
 | T-023 search-current-library (enhancement) | Search scoped to the selected library. Accept: matches limited to that library's PDFs | renderer/app.js (search panel), core/library.js | T-022 (same panel) | S | 1 | planned · Sprint 6 |
@@ -120,12 +120,17 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 - Merge flow: branches merge into `feature/s5-integration` (worktree `../fl-s5`); user tries the build (gate 1) → main; push = gate 2
 - Dispatch: T-018 built directly (XS). Agents in worktrees: T-019 (core/extract.js), T-017 (core/identify.js parser + app.js add dialog), T-008 (core/fetch.js). T-002 queued: it shares `fetchFailureReason` in core/identify.js with T-017's file and the fetch path with T-008; it starts once both are back.
 - T-019 leftovers (not fixed, noted): "vitamin C. The" still merges (single capital + full stop reads as an initial); "Smith et al. Nature 2020" now splits.
+- T-017: cause was `parseIdentifier`'s 2048-char cap (links with long tracking tails = "Not recognised", paste did nothing), invisible chars (zero-width, soft hyphen), and `id:parseMany` silently keeping only 200. Cap now 16384, linear-time tidy, invisible chars stripped, >200 items / >100k chars refused with a message. The 200 limit is written in both app.js (`ADD_MAX`) and main.js: keep in sync.
+- T-008: Europe PMC is Cloudflare-walled too, so the fix fetches from NCBI's PMC Open Access bucket (`pmc-oa-opendata.s3.amazonaws.com`) first, then Europe PMC, then PMC. All failing → `no-free-copy` (was `paywalled`). Unpaywall skipped (no API contact email in the repo). Only open-access PMC papers are fully fixed. Live: CLI `add PMC3531190` OK, its PMID → same file. New host to note in atlas/compass.
+- T-002 started after T-017 and T-008 merged (worktree `../fl-T-002`, harness worktree isolation failed on a path-case check), so it may also edit core/fetch.js.
 - Cause of T-002 found while reading: `ERR_NAME_NOT_RESOLVED` / `ENOTFOUND` are in `OFFLINE_CODES`, so a mistyped domain reads as "offline".
 - Merge log (into feature/s5-integration):
   | order | id | merge sha | conflicts | tests after |
   |---|---|---|---|---|
   | 1 | T-018 colour-filter-without-images | 627e376 | none | 142/142 |
   | 2 | T-019 extract-sentence-split | c3bbab0 | none (ANALYZER_VERSION 3 → 4: saved docs re-analyse; atlas mentions v3, fix at sync) | 145/145 |
+  | 3 | T-017 long-paste-add-link | 8a3f3a1 | none (app.js auto-merged); also src/main.js `id:parseMany` 200 → 201 so the dialog can refuse >200 | 147/147 |
+  | 4 | T-008 pmc-fallback | b53a36f | none | 152/152 |
 
 ### Sprint 4 — closed (2026-10-10)
 - Scope: T-014 onboarding-tour (feature · M). A single feature, so it was built directly with no sub-agents.
@@ -214,7 +219,10 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 | 2026-10-09 | c5c0dbe (sprint close) | 23/23 | none |
 
 ## Proposed (recommendations awaiting user approval)
-All open proposals are listed with todo ids under **To do** above: T-002 … T-006, T-008 … T-011. New proposals get the next free id.
+All open proposals are listed with todo ids under **To do** above: T-003 … T-006, T-009 … T-011. New proposals get the next free id.
+
+- [ ] **T-035** [enhancement · S] When an added paper comes with a better title from its source (e.g. the PMC bucket's "GenBank"), prefer it over the PDF's embedded title (CLI showed "OP-NARE120883 36..42"). Check title priority in cli/faelights.js and src/main.js. (from T-008)
+- [ ] **T-036** [polish · XS · exempt] Strip `utm_*` and similar tracking parameters from doi.org links before resolving, so `10.1038/x?utm=…` doesn't fail. (from T-017)
 
 ## Decisions
 - 2026-10-21 — Sprint plan 5–10 from the Trello board: Sprint 5 = all bugs, sizable items in later sprints, 3–5 slots per sprint (user). Authors-on-separate-lines bug ignored (user). Accounts and sharing parked pending a backend decision.
