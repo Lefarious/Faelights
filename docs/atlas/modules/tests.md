@@ -1,5 +1,5 @@
 # Module: tests
-> Path: test/ · Last synced commit: 20a8e58 · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024, F-025
+> Path: test/ · Last synced commit: 9ff7a30 · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024, F-025
 
 ## Purpose
 Automated checks run with Node's built-in `node:test` and `node:assert`, with no extra dependencies. They cover everything that loads in plain Node: core/ (extraction incl. image boxes, topics, reading order, export formatting, the library store with its lock, identifier parsing, CrossRef/arXiv mapping, paper resolving and the Node transport against a local server), the guided tour's step data (`renderer/tour.js`), export path safety (`src/exportPaths.js`) and the `faelights` CLI as a child process on a temp library. They do not launch Electron or exercise the UI, and nothing touches the network.
@@ -41,6 +41,14 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Role:** `Order.withImages` / `groupItems` / `filterImages` / `imagesOf` / `ckey`: ties go before the entry, between/before/after, image-only groups, same groups as `groupsOf` without images, colour filtering
 - **Imports (internal):** `core/order.js`
 
+### `test/continue-reading.test.js`
+- **Role:** `Annot.startPage`: an explicit page wins, else `d.lastPage`, else page 1 for 0 / undefined / invalid
+- **Imports (internal):** loads `renderer/annotator.js` in a Node `vm` with stub `PDFLib` / `addEventListener`
+
+### `test/search-scope.test.js`
+- **Role:** search scopes in `renderer/app.js`: `searchDocs` / `validScope` (This PDF matches only the open PDF; a removed PDF or library falls back to all), `entryScope` (library view → that library unless picked; explicit scope wins), "Search this library" hits
+- **Imports (internal):** copies the functions out of `renderer/app.js`'s source text (no DOM)
+
 ### `test/export.test.js`
 - **Role:** `exportPaths` validation (traversal, absolute/UNC/drive, reserved names and characters, duplicates, size); `ExportFmt` image placement, md link encoding, Obsidian embeds, plain lines, copy placeholder, HTML escaping and `data:`-only images; md/obsidian/plain output without images identical to the pre-F-016 `docText`
 - **Imports (internal):** `src/exportPaths.js`, `core/export.js`
@@ -58,7 +66,7 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Imports (internal):** `core/extract.js`, `core/export.js`
 
 ### `test/core/library.test.js`
-- **Role:** `core/library.js`: `userDataDir` per platform and `FAELIGHTS_DATA_DIR`, empty library with Inbox, atomic saves, lock waiting / stale lock clearing, `update()` read-modify-write within and across processes, refusing to overwrite an unreadable file, tags / stars / libraries
+- **Role:** `core/library.js`: `userDataDir` per platform and `FAELIGHTS_DATA_DIR`, empty library with Inbox, atomic saves, lock waiting / stale lock clearing, `update()` read-modify-write within and across processes, refusing to overwrite an unreadable file, tags / stars / libraries, read flag, `lastPage`, tag colours, `normalize` filling them on older files
 - **Imports (internal):** `core/library.js`; spawns `node` children for the cross-process cases
 
 ### `test/core/fetch.test.js`

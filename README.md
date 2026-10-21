@@ -8,9 +8,11 @@ Faelights is a desktop app that pulls the highlights out of annotated PDFs. Each
 - **Switches between two views:** *Full sentence* shows the whole sentence with the highlighted words marked in their original colour, and *Highlights only* shows just the marked words.
 - **Groups extracts by topic.** It uses the PDF's bookmarks, or falls back to headings detected by font size.
 - **Organises PDFs into libraries.** Drag a PDF onto a library to move it, and right-click a library to rename, export or delete it. Deleting a library moves its PDFs to Inbox.
-- **Supports tags, stars and filtering** by title or tag.
+- **Supports tags, stars and filtering** by title or tag. Give a tag a colour from its menu in the sidebar.
+- **Tracks what you've read.** Mark a PDF as read from its ⋯ menu or the reader, and filter the list to unread or read PDFs.
+- **Picks up where you left off.** The viewer remembers the last page of each PDF; *Continue* in the reader opens it there.
 - **Light, dark or system theme.** Pick an icon at the bottom of the sidebar (screen = match system, sun = light, moon = dark), or use *View → Theme*. Your choice is remembered.
-- **Searches highlights across every PDF.** Every word you type must appear in the sentence, the highlight or its note. Click a result to jump to it.
+- **Searches highlights** across every PDF, one library or just the open PDF. Every word you type must appear in the sentence, the highlight or its note. Click a result to jump to it. Ctrl/⌘ F in the reader searches that PDF; *Search this library* is in a library's menu.
 - **Keeps PDFs in sync.** Faelights remembers where each PDF lives. If you annotate it again, it shows *Changed* and rescans automatically when you open it. If the file moves, use *Find original file*.
 - **Exports:**
   - Copy to the clipboard, or export as Markdown, Obsidian (`==highlight==`) or plain text.
@@ -23,7 +25,7 @@ Your library is stored on your computer in a `library` folder inside the app's d
 | Keys | Action |
 |---|---|
 | Ctrl/⌘ O | Add PDFs |
-| Ctrl/⌘ F | Search all highlights |
+| Ctrl/⌘ F | Search highlights (the open PDF, when one is open) |
 | Ctrl/⌘ T | Full sentence / highlights only |
 | Ctrl/⌘ E | Export current PDF |
 | Ctrl/⌘ ⇧ E | Export library to folder |
@@ -62,7 +64,7 @@ npm run dist:mac     # macOS .dmg (must be built on a Mac)
 npm run dist:linux   # Linux AppImage
 ```
 
-Build the Windows installer on Windows. Building it on Linux needs Wine. The workflow in `.github/workflows/build.yml` builds all three platforms on GitHub. Push a tag like `v1.3.0`: the run attaches the installers to a draft GitHub Release, which you review and publish by hand. The files are also kept as the run's artifacts.
+Build the Windows installer on Windows. Building it on Linux needs Wine. The workflow in `.github/workflows/build.yml` builds all three platforms on GitHub. Push a tag like `v1.4.0`: the run attaches the installers to a draft GitHub Release, which you review and publish by hand. The files are also kept as the run's artifacts.
 
 ## Limits
 
