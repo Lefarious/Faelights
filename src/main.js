@@ -270,7 +270,8 @@ ipcMain.handle("meta:lookup", async (_e, q = {}) => {
   finally { clearTimeout(timer); }
 });
 ipcMain.handle("id:parse", (_e, text) => { const id = parseIdentifier(text); return id && { ...id, label: describe(id) }; });
-ipcMain.handle("id:parseMany", (_e, text) => parseIdentifiers(text).slice(0, 200).map(({ text, id }) => ({ text, id: id && { ...id, label: describe(id) } })));
+// one past the 200 the dialog accepts, so it can tell a list that was too long from one that fit
+ipcMain.handle("id:parseMany", (_e, text) => parseIdentifiers(text).slice(0, 201).map(({ text, id }) => ({ text, id: id && { ...id, label: describe(id) } })));
 ipcMain.handle("app:openExternal", (_e, url) => {
   let u; try { u = new URL(String(url)); } catch (_) { return false; }
   if (u.protocol !== "http:" && u.protocol !== "https:") return false;
