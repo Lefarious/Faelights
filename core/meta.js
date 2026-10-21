@@ -13,6 +13,17 @@ const Meta = (() => {
     if (!t || /^untitled$/i.test(t) || t.length < 3) return "";
     return t;
   }
+  // The title a doc gets (T-035), the same in the app, the CLI and the MCP server: one the user typed, else the source's
+  // (what the resolver found: citation_title, PMC, Open Library), else the PDF's own, else the CrossRef / arXiv record's,
+  // else the one it already has, else the file name. Pure.
+  function pickTitle({ edited, source, embedded, found, current, fileName } = {}) {
+    const c = t => cleanTitle(typeof t === "string" ? t.replace(/\s+/g, " ") : "");
+    if (typeof edited === "string" && edited.trim()) return edited.trim();
+    return c(source) || c(embedded) || c(found) || (current || "").trim() || (fileName || "").replace(/\.pdf$/i, "");
+  }
+  // pickTitle for a doc: d.sourceTitle (kept from adding), d.meta (the last scan), d.lookup (T-001 details)
+  const docTitle = d => pickTitle({ edited: d.titleEdited && d.title, source: d.sourceTitle, embedded: d.meta && d.meta.title,
+    found: d.lookup && d.lookup.meta && d.lookup.meta.title, current: d.title, fileName: d.fileName });
   const DOI_RE = /\b(10\.\d{4,9}\/[^\s"<>]+[^\s"<>.,;:)\]])/i;
   const ARXIV_RE = /\barXiv:\s?(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?\/\d{7}(?:v\d+)?)/i;
   const pdfDate = s => { try { const d = s && lib().PDFDateString.toDateObject(s); return d ? d.getTime() : null; } catch (_) { return null; } };
@@ -60,7 +71,7 @@ const Meta = (() => {
     return meta;
   }
 
-  return { cleanTitle, readMeta, DOI_RE, ARXIV_RE };
+  return { cleanTitle, pickTitle, docTitle, readMeta, DOI_RE, ARXIV_RE };
 })();
 
 if (typeof module !== "undefined") module.exports = Meta;

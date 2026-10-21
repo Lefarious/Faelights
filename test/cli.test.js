@@ -265,3 +265,21 @@ test("core/meta.js reads metadata in Node and cleans titles", async () => {
   assert.equal(Meta.cleanTitle("untitled"), "");
   assert.equal("see doi:10.1000/xyz123.".match(Meta.DOI_RE)[1], "10.1000/xyz123");
 });
+test("add <link>: the landing page's title beats the PDF's own (T-035)", async () => {
+  const http = require("node:http"), { promisify } = require("node:util"), execFile = promisify(require("node:child_process").execFile);
+  const own = fs.mkdtempSync(path.join(os.tmpdir(), "faelights-cli-src-"));
+  const site = http.createServer((req, res) => {
+    if (req.url === "/paper.pdf") { res.writeHead(200, { "Content-Type": "application/pdf" }); return res.end(fs.readFileSync(SAMPLE)); }
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(`<html><head><meta name="citation_title" content="The Real Title"><meta name="citation_pdf_url" content="/paper.pdf"></head></html>`);
+  });
+  await new Promise(r => site.listen(0, "127.0.0.1", r));
+  try {
+    // async: the server above answers from this process
+    const { stdout } = await execFile(process.execPath, [CLI, "--data-dir", own, "add", `http://127.0.0.1:${site.address().port}/landing`, "--no-lookup", "--json"]);
+    const [r] = JSON.parse(stdout);
+    assert.deepEqual([r.action, r.title], ["added", "The Real Title"]);
+    const d = JSON.parse(fs.readFileSync(path.join(own, "library", "faelights.json"), "utf8")).docs[0];
+    assert.deepEqual([d.sourceTitle, d.meta.title], ["The Real Title", "Notes on Bioluminescence"]);
+  } finally { site.close(); fs.rmSync(own, { recursive: true, force: true }); }
+});

@@ -345,7 +345,7 @@ async function cmdSearch(store, args, o) {
 }
 
 /* ---- adding and scanning ---- */
-// Paper details from CrossRef / arXiv, stored like the app does (d.lookup; title only if the PDF had none)
+// Paper details from CrossRef / arXiv, stored like the app does (d.lookup; its title only by Meta.docTitle's rule)
 async function fetchDetails(d, get) {
   const m = d.meta || {}, origin = d.origin && /^(doi|arxiv)$/.test(d.origin.kind) ? { kind: d.origin.kind, value: d.origin.value } : null;
   if (!m.doi && !m.arxiv && !origin) return { ok: false, reason: "no-id" };
@@ -355,7 +355,7 @@ async function fetchDetails(d, get) {
 }
 function applyDetails(d, r) {
   d.lookup = { source: r.source, id: r.id, at: Date.now(), meta: r.meta };
-  if (!d.titleEdited && !Meta.cleanTitle(d.meta && d.meta.title) && Meta.cleanTitle(r.meta.title)) d.title = Meta.cleanTitle(r.meta.title);
+  d.title = Meta.docTitle(d);
 }
 
 const transport = () => Fetch.nodeGet({ userAgent: `Faelights/${version} (PDF highlights command line)` });
@@ -384,11 +384,14 @@ async function cmdAdd(store, args, o) {
   // A new doc from a PDF already copied into the library folder
   async function addStored(info, extra) {
     try {
-      const { title, meta, result } = await scan(fs.readFileSync(info.storedPath));
-      const d = { id: info.id, libraryId: target.id, title: title || extra.title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
+      const { meta, result } = await scan(fs.readFileSync(info.storedPath));
+      const d = { id: info.id, libraryId: target.id, title: "", fileName: info.fileName,
         sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...tags], starred: false, read: false, lastPage: 0, shelfId: null, notes: [],
         scannedMtime: info.mtime, meta, ...scanned(result) };
       if (extra.origin) d.origin = extra.origin;
+      const source = Meta.pickTitle({ source: extra.title });   // the resolver's title beats the PDF's own (T-035)
+      if (source) d.sourceTitle = source;
+      d.title = Meta.docTitle(d);
       if (extra.origin && !o["no-lookup"]) {   // added by identifier: fill in details, as the app does
         const r = await fetchDetails(d, get);
         if (r.ok) applyDetails(d, r);
@@ -409,7 +412,7 @@ async function cmdAdd(store, args, o) {
           const { meta, result } = await scan(bytes);
           const d = await store.update(db => {
             const d = Library.findDoc(db, existing.id);
-            if (d) { Object.assign(d, { meta, ...scanned(result, mtime) }); for (const t of tags) Library.addTag(d, t); }
+            if (d) { Object.assign(d, { meta, ...scanned(result, mtime) }); d.title = Meta.docTitle(d); for (const t of tags) Library.addTag(d, t); }
             return d;
           });
           if (d) done.push({ action: "rescanned", id: d.id, title: d.title, highlights: d.count, library: libName(before, d.libraryId) });
@@ -465,7 +468,7 @@ async function cmdRescan(store, args, o) {
       const { meta, result } = await scan(read.bytes);
       const d = await store.update(db => {
         const d = Library.findDoc(db, d0.id);
-        if (d) Object.assign(d, { meta, ...scanned(result, read.mtime) });
+        if (d) { Object.assign(d, { meta, ...scanned(result, read.mtime) }); d.title = Meta.docTitle(d); }
         return d;
       });
       if (d) done.push({ id: d.id, title: d.title, highlights: d.count, from: read.from });

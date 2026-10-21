@@ -16,6 +16,7 @@ const Order = require("../core/order.js");
 const ExportFmt = require("../core/export.js");
 const Identify = require("../core/identify.js");
 const Fetch = require("../core/fetch.js");
+const Meta = require("../core/meta.js");
 const exportPaths = require("../src/exportPaths.js");
 const { scan, scanned, ADD_FAIL, sameOrigin, fetchDetails, applyDetails } = require("../cli/faelights.js");
 const { version } = require("../package.json");
@@ -253,6 +254,7 @@ function tools(dataDir) {
       const d = await write(db => {
         const d = docOf(db, existing.id);
         Object.assign(d, { meta, ...scanned(result, mtime) });
+        d.title = Meta.docTitle(d);
         d.tags = d.tags || [];
         for (const t of clean) Library.addTag(d, t);
         return d;
@@ -262,11 +264,12 @@ function tools(dataDir) {
 
     const info = await store.importPdf(file);
     try {
-      const { title, meta, result } = await readBytes(fs.readFileSync(info.storedPath));
+      const { meta, result } = await readBytes(fs.readFileSync(info.storedPath));
       textWarn(result);
-      const d = { id: info.id, libraryId: target.id, title: title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
+      const d = { id: info.id, libraryId: target.id, title: "", fileName: info.fileName,
         sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false, read: false, lastPage: 0, shelfId: null, notes: [],
         scannedMtime: info.mtime, meta, ...scanned(result) };
+      d.title = Meta.docTitle(d);
       await write(db => { db.docs.push(d); });
       return { action: "added", pdf: summary(before, d), warnings };
     } catch (e) { await store.removeStored(info.storedPath); throw e; }
@@ -301,12 +304,15 @@ function tools(dataDir) {
     if (same) { await store.removeStored(info.storedPath); return exists(same); }
 
     try {
-      const { title, meta, result } = await readBytes(fs.readFileSync(info.storedPath));
+      const { meta, result } = await readBytes(fs.readFileSync(info.storedPath));
       const warnings = [];
       try { checkText({ title: info.fileName }, result, warnings); } catch (e) { warnings.push(e.message); }
-      const d = { id: info.id, libraryId: target.id, title: title || r.title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
+      const d = { id: info.id, libraryId: target.id, title: "", fileName: info.fileName,
         sourcePath: null, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false, read: false, lastPage: 0, shelfId: null, notes: [],
         scannedMtime: info.mtime, meta, ...scanned(result), origin: { kind: id.kind, value: id.value, url: r.url } };
+      const source = Meta.pickTitle({ source: r.title });   // the resolver's title beats the PDF's own (T-035)
+      if (source) d.sourceTitle = source;
+      d.title = Meta.docTitle(d);
       let details = null;
       if (lookup) {
         progress({ stage: "details" });
