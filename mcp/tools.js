@@ -2,7 +2,7 @@
    Plain async functions over core/ that return JSON-able objects; server.js wires them to the protocol.
    Reads use the library the desktop app keeps (<userData>/library, Library.at) and re-read a PDF only when its saved
    scan is missing, outdated or older than the file. The write tools (add_pdf, add_by_identifier, tag_pdf, star_pdf, mark_read,
-   set_tag_colour) refuse while the app is open (its session marker) or another process holds the lock, instead of
+   set_tag_colour, create_shelf, rename_shelf, delete_shelf, shelve_pdfs) refuse while the app is open (its session marker) or another process holds the lock, instead of
    writing something the app would overwrite. Failures are ToolError {code, message}. */
 "use strict";
 
@@ -16,6 +16,7 @@ const Order = require("../core/order.js");
 const ExportFmt = require("../core/export.js");
 const Identify = require("../core/identify.js");
 const Fetch = require("../core/fetch.js");
+const Meta = require("../core/meta.js");
 const exportPaths = require("../src/exportPaths.js");
 const { scan, scanned, ADD_FAIL, sameOrigin, fetchDetails, applyDetails } = require("../cli/faelights.js");
 const { version } = require("../package.json");
@@ -46,9 +47,21 @@ function tools(dataDir) {
     if (!d) throw new ToolError("unknown_pdf", `No PDF with id "${id}" in the library. list_pdfs shows the ids.`);
     return d;
   }
+  // A shelf by id, else by name (case-insensitive) within libId if given; a name used in two libraries needs the library or id
+  function shelfOf(db, q, libId) {
+    const exact = Library.findShelf(db, q);
+    if (exact && (!libId || exact.libraryId === libId)) return exact;
+    const hits = (libId ? Library.shelvesIn(db, libId) : db.shelves).filter(s => s.name.toLowerCase() === String(q).toLowerCase());
+    if (hits.length === 1) return hits[0];
+    if (hits.length) throw new ToolError("invalid_input", `"${q}" is a shelf in ${hits.length} libraries (${hits.map(s => `${s.id} in ${libName(db, s.libraryId)}`).join(", ")}). Give its id or the library.`);
+    throw new ToolError("unknown_shelf", `No shelf called "${q}"${libId ? " in " + libName(db, libId) : ""}. list_shelves shows them.`);
+  }
+  const shelfTaken = (db, libId, name, except) => Library.shelvesIn(db, libId).some(s => s !== except && s.name.toLowerCase() === name.toLowerCase());
   const libName = (db, id) => (Library.findLibrary(db, id) || {}).name || "?";
+  const shelfInfo = (db, s) => ({ id: s.id, name: s.name, library: libName(db, s.libraryId), library_id: s.libraryId, pdfs: Library.docsOnShelf(db, s.id).length });
   const summary = (db, d) => ({
-    id: d.id, title: d.title, library: libName(db, d.libraryId), library_id: d.libraryId, tags: d.tags || [], starred: !!d.starred,
+    id: d.id, title: d.title, library: libName(db, d.libraryId), library_id: d.libraryId,
+    shelf: d.shelfId ? (Library.findShelf(db, d.shelfId) || {}).name || null : null, shelf_id: d.shelfId || null, tags: d.tags || [], starred: !!d.starred,
     read: !!d.read, last_page: d.lastPage || null, pages: d.pages ?? null, highlights: d.count ?? null, file: d.sourcePath || d.fileName,
     added: d.addedAt ? new Date(d.addedAt).toISOString() : null, source_missing: !!d.sourceMissing
   });
@@ -113,11 +126,12 @@ function tools(dataDir) {
     return { libraries: db.libraries.map(l => ({ id: l.id, name: l.name, system: !!l.system, pdfs: Library.docsIn(db, l.id).length })) };
   }
 
-  async function list_pdfs({ library, tag, starred, read } = {}) {
+  async function list_pdfs({ library, shelf, tag, starred, read } = {}) {
     const db = await load();
     const lid = library ? libraryOf(db, library).id : null;
+    const sid = shelf ? shelfOf(db, shelf, lid).id : null;
     const t = tag ? Library.cleanTag(tag) : null;
-    const docs = db.docs.filter(d => (!lid || d.libraryId === lid) && (!t || (d.tags || []).includes(t)) &&
+    const docs = db.docs.filter(d => (!lid || d.libraryId === lid) && (!sid || d.shelfId === sid) && (!t || (d.tags || []).includes(t)) &&
       (starred === undefined || !!d.starred === starred) && (read === undefined || !!d.read === read));
     return { pdfs: docs.map(d => summary(db, d)) };
   }
@@ -240,6 +254,7 @@ function tools(dataDir) {
       const d = await write(db => {
         const d = docOf(db, existing.id);
         Object.assign(d, { meta, ...scanned(result, mtime) });
+        d.title = Meta.docTitle(d);
         d.tags = d.tags || [];
         for (const t of clean) Library.addTag(d, t);
         return d;
@@ -249,11 +264,12 @@ function tools(dataDir) {
 
     const info = await store.importPdf(file);
     try {
-      const { title, meta, result } = await readBytes(fs.readFileSync(info.storedPath));
+      const { meta, result } = await readBytes(fs.readFileSync(info.storedPath));
       textWarn(result);
-      const d = { id: info.id, libraryId: target.id, title: title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
+      const d = { id: info.id, libraryId: target.id, title: "", fileName: info.fileName,
         sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false, read: false, lastPage: 0, shelfId: null, notes: [],
         scannedMtime: info.mtime, meta, ...scanned(result) };
+      d.title = Meta.docTitle(d);
       await write(db => { db.docs.push(d); });
       return { action: "added", pdf: summary(before, d), warnings };
     } catch (e) { await store.removeStored(info.storedPath); throw e; }
@@ -288,12 +304,15 @@ function tools(dataDir) {
     if (same) { await store.removeStored(info.storedPath); return exists(same); }
 
     try {
-      const { title, meta, result } = await readBytes(fs.readFileSync(info.storedPath));
+      const { meta, result } = await readBytes(fs.readFileSync(info.storedPath));
       const warnings = [];
       try { checkText({ title: info.fileName }, result, warnings); } catch (e) { warnings.push(e.message); }
-      const d = { id: info.id, libraryId: target.id, title: title || r.title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
+      const d = { id: info.id, libraryId: target.id, title: "", fileName: info.fileName,
         sourcePath: null, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false, read: false, lastPage: 0, shelfId: null, notes: [],
         scannedMtime: info.mtime, meta, ...scanned(result), origin: { kind: id.kind, value: id.value, url: r.url } };
+      const source = Meta.pickTitle({ source: r.title });   // the resolver's title beats the PDF's own (T-035)
+      if (source) d.sourceTitle = source;
+      d.title = Meta.docTitle(d);
       let details = null;
       if (lookup) {
         progress({ stage: "details" });
@@ -344,6 +363,56 @@ function tools(dataDir) {
     return { tag: t, colour: c || null, changed: was !== c };
   }
 
+  /* ---- shelves: one level inside a library (Library -> shelves -> PDFs) ---- */
+  async function list_shelves({ library } = {}) {
+    const db = await store.loadDb();
+    const lid = library ? libraryOf(db, library).id : null;
+    return { shelves: (lid ? Library.shelvesIn(db, lid) : db.shelves).map(s => shelfInfo(db, s)) };
+  }
+
+  // Names are unique within a library (case-insensitive)
+  async function create_shelf({ library, name }) {
+    const n = name.trim();
+    if (!n) throw new ToolError("invalid_input", "The shelf needs a name.");
+    return { shelf: await write(db => {
+      const l = libraryOf(db, library);
+      if (shelfTaken(db, l.id, n)) throw new ToolError("invalid_input", `${l.name} already has a shelf called "${n}".`);
+      return shelfInfo(db, Library.addShelf(db, l.id, n));
+    }) };
+  }
+
+  async function rename_shelf({ shelf, name, library }) {
+    const n = name.trim();
+    if (!n) throw new ToolError("invalid_input", "The shelf needs a name.");
+    return write(db => {
+      const s = shelfOf(db, shelf, library ? libraryOf(db, library).id : null), from = s.name;
+      if (shelfTaken(db, s.libraryId, n, s)) throw new ToolError("invalid_input", `${libName(db, s.libraryId)} already has a shelf called "${n}".`);
+      Library.renameShelf(db, s.id, n);
+      return { shelf: shelfInfo(db, s), from, changed: from !== n };
+    });
+  }
+
+  // Its PDFs stay in the library, off any shelf
+  async function delete_shelf({ shelf, library }) {
+    return write(db => {
+      const s = shelfOf(db, shelf, library ? libraryOf(db, library).id : null);
+      const moved = Library.docsOnShelf(db, s.id).map(d => d.id);
+      Library.removeShelf(db, s.id);
+      return { deleted: { id: s.id, name: s.name, library: libName(db, s.libraryId), library_id: s.libraryId }, unshelved_pdfs: moved };
+    });
+  }
+
+  // shelf: onto it (a shelf in another library moves the PDF there too); null: off its shelf, staying in its library.
+  // An unknown PDF or shelf aborts the whole call.
+  async function shelve_pdfs({ pdf_ids, shelf, library }) {
+    return write(db => {
+      const s = shelf == null ? null : shelfOf(db, shelf, library ? libraryOf(db, library).id : null);
+      const ds = [...new Set(pdf_ids)].map(id => docOf(db, id));
+      const changed = ds.filter(d => Library.moveToShelf(db, d, s ? s.id : null)).map(d => d.id);
+      return { shelf: s ? shelfInfo(db, s) : null, changed, pdfs: ds.map(d => summary(db, d)) };
+    });
+  }
+
   /* ---- resource: faelights://pdf/{id} ---- */
   async function pdf_markdown(id) {
     const { db, d, result } = await readable(id);
@@ -355,7 +424,7 @@ function tools(dataDir) {
   }
 
   return { store, list_libraries, list_pdfs, list_tags, get_extracts, search, export_pdf, export_library, add_pdf, add_by_identifier, tag_pdf, star_pdf,
-    mark_read, set_tag_colour, pdf_markdown, pdf_resources };
+    mark_read, set_tag_colour, list_shelves, create_shelf, rename_shelf, delete_shelf, shelve_pdfs, pdf_markdown, pdf_resources };
 }
 
 module.exports = { tools, ToolError, FORMATS };

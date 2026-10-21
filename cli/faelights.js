@@ -2,7 +2,7 @@
 /* Faelights — command line (T-015)
    A thin shell over core/: read highlights and text from any PDF, and manage the desktop app's library (the same
    <userData>/library folder, through Library.at() and its lock file): add files or papers by identifier, libraries,
-   moving, tags and their colours, stars, read state, rescans, paper details, export. No Electron needed. Every change is one locked
+   shelves, moving, tags and their colours, stars, read state, rescans, paper details, export. No Electron needed. Every change is one locked
    read-modify-write (Library update()), so two commands never interleave. */
 "use strict";
 
@@ -31,8 +31,9 @@ Reading
   export <pdf>                    Highlights of a PDF in your library
   text <pdf | file.pdf>           The PDF's full text, page by page (--pages 1-3,7)
   info <pdf>                      Paper details: title, authors, DOI, pages, tags, read, where it came from
-  list [library]                  Your PDFs (all, or one library; --tag, --starred, --read, --unread to filter)
+  list [library]                  Your PDFs (all, or one library; --shelf, --tag, --starred, --read, --unread to filter)
   libraries                       Your libraries
+  shelves [library]               Your shelves (all, or one library's)
   tags                            Every tag, how many PDFs have it, and its colour
   search <words>...               Highlights containing every word (in the sentence, highlight,
                                   note or topic), across your library or one --library
@@ -49,7 +50,12 @@ Organising
   library new <name>              Create a library
   library rename <library> <name> Rename a library
   library delete <library>        Delete a library; its PDFs move to the Inbox
-  move <pdf> <library>            Move a PDF to another library
+  shelf new <library> <name>      Create a shelf inside a library (one level: library → shelves → PDFs)
+  shelf rename <shelf> <name>     Rename a shelf
+  shelf delete <shelf>            Delete a shelf; its PDFs stay in the library, off any shelf
+  move <pdf> <library>            Move a PDF to another library's root (--shelf <name>: onto that shelf)
+  shelve <pdf> <shelf>            Put a PDF on a shelf (a shelf in another library moves it there too)
+  unshelve <pdf>...               Take PDFs off their shelf (they stay in their library)
   tag <pdf> <tag>...              Add tags
   untag <pdf> <tag>...            Remove tags
   star <pdf> / unstar <pdf>       Star or unstar
@@ -68,7 +74,8 @@ Options
   -f, --format <fmt>      md (default), obsidian, html, plain, or json
   -m, --mode <mode>       full: whole sentences with the highlights marked (default); only: just the marks
   -o, --out <file>        Write to a file instead of the screen
-  -l, --library <name>    Library name or id (add, list)
+  -l, --library <name>    Library name or id (add, list, shelves; narrows a shelf name for shelf, shelve)
+      --shelf <name>      Shelf name or id (list, move)
   -t, --tag <tag>         Tag new PDFs (add) or filter (list); repeatable
       --starred           Only starred PDFs (list)
       --read, --unread    Only read / unread PDFs (list)
@@ -78,8 +85,8 @@ Options
       --force             Remove a PDF annotated in the app
       --no-lookup         Don't fetch paper details after adding by identifier
       --frontmatter       Start md/obsidian exports with YAML frontmatter
-      --json              Machine-readable output for list, libraries, tags, search, info, add, rescan, tour,
-                          read, unread, tag colour
+      --json              Machine-readable output for list, libraries, shelves, tags, search, info, add, rescan,
+                          tour, read, unread, tag colour, shelf new
       --data-dir <dir>    The app's data folder (default: where Faelights keeps it, or FAELIGHTS_DATA_DIR)
   -h, --help              Show this help
   -v, --version           Show the version
@@ -113,7 +120,7 @@ function parse(argv) {
     return parseArgs({
       args: argv, allowPositionals: true, options: {
         format: { type: "string", short: "f" }, mode: { type: "string", short: "m" }, out: { type: "string", short: "o" },
-        library: { type: "string", short: "l" }, tag: { type: "string", short: "t", multiple: true },
+        library: { type: "string", short: "l" }, shelf: { type: "string" }, tag: { type: "string", short: "t", multiple: true },
         starred: { type: "boolean" }, read: { type: "boolean" }, unread: { type: "boolean" }, clear: { type: "boolean" }, pages: { type: "string" }, all: { type: "boolean" }, force: { type: "boolean" },
         "no-lookup": { type: "boolean" }, frontmatter: { type: "boolean" }, json: { type: "boolean" },
         "data-dir": { type: "string" }, help: { type: "boolean", short: "h" }, version: { type: "boolean", short: "v" }
@@ -170,7 +177,19 @@ function findDoc(db, q) {
   if (!hits.length) throw new Fail(`No PDF in your library matches "${q}". Run faelights list to see them.`);
   throw new Fail(`"${q}" matches ${hits.length} PDFs. Use the id:\n` + hits.map(d => `  ${d.id}  ${d.title}`).join("\n"));
 }
+// A shelf by id, else by name (case-insensitive), within libId if given; the same name in two libraries -> error listing ids
+function findShelf(db, q, libId) {
+  const exact = Library.findShelf(db, q);
+  if (exact && (!libId || exact.libraryId === libId)) return exact;
+  const pool = libId ? Library.shelvesIn(db, libId) : db.shelves;
+  const hits = pool.filter(s => s.name.toLowerCase() === String(q).toLowerCase());
+  if (hits.length === 1) return hits[0];
+  if (hits.length) throw new Fail(`"${q}" is a shelf in ${hits.length} libraries. Use its id, or --library:\n` + hits.map(s => `  ${s.id}  ${libName(db, s.libraryId)} › ${s.name}`).join("\n"));
+  const names = pool.map(s => (libId ? "" : libName(db, s.libraryId) + " › ") + s.name);
+  throw new Fail(`No shelf called "${q}"${libId ? " in " + libName(db, libId) : ""}. Shelves: ${names.join(", ") || "none yet"}.`);
+}
 const libName = (db, id) => (Library.findLibrary(db, id) || {}).name || "?";
+const shelfName = (db, id) => id ? (Library.findShelf(db, id) || {}).name || null : null;
 const metaOf = d => d.lookup ? { ...d.meta, ...d.lookup.meta } : (d.meta || {});
 const sameOrigin = (db, id) => { const v = id.value.toLowerCase(); return db.docs.find(d => d.origin && d.origin.kind === id.kind && String(d.origin.value).toLowerCase() === v); };
 
@@ -236,7 +255,7 @@ async function cmdInfo(store, args, o) {
   const m = metaOf(d);
   const info = { id: d.id, title: d.title, authors: m.authors || [], publication: m.publication, date: m.date, volume: m.volume,
     issue: m.issue, pages: m.pages, doi: m.doi, arxiv: m.arxiv, isbn: m.isbn, publisher: m.publisher, url: m.url, abstract: m.abstract,
-    keywords: m.keywords || [], library: libName(db, d.libraryId), tags: d.tags || [], starred: !!d.starred,
+    keywords: m.keywords || [], library: libName(db, d.libraryId), shelf: shelfName(db, d.shelfId), tags: d.tags || [], starred: !!d.starred,
     read: !!d.read, lastPage: d.lastPage || 0, pdfPages: d.pages, highlights: d.count, images: Order.imagesOf(d.result).length, fileName: d.fileName,
     sourcePath: d.sourcePath || null, sourceMissing: !!d.sourceMissing, stale: !!d.stale, annotated: !!d.annotated,
     origin: d.origin || null, addedAt: d.addedAt ? new Date(d.addedAt).toISOString() : null,
@@ -246,7 +265,7 @@ async function cmdInfo(store, args, o) {
     ["Title", info.title], ["Authors", info.authors.join("; ")], ["Publication", info.publication],
     ["Volume", [info.volume, info.issue && "(" + info.issue + ")"].filter(Boolean).join(" ")], ["Pages", info.pages], ["Date", info.date],
     ["DOI", info.doi], ["arXiv", info.arxiv], ["ISBN", info.isbn], ["Publisher", info.publisher], ["URL", info.url],
-    ["Keywords", info.keywords.join(", ")], ["Library", info.library], ["Tags", info.tags.join(", ")], ["Starred", info.starred ? "yes" : ""],
+    ["Keywords", info.keywords.join(", ")], ["Library", info.library], ["Shelf", info.shelf], ["Tags", info.tags.join(", ")], ["Starred", info.starred ? "yes" : ""],
     ["Read", info.read ? "yes" : ""], ["Last page", info.lastPage ? String(info.lastPage) : ""],
     ["PDF", `${plural(info.pdfPages || 0, "page")}, ${plural(info.highlights || 0, "highlight")}` + (info.images ? `, ${plural(info.images, "image")}` : "")],
     ["File", info.sourcePath ? info.sourcePath + (info.sourceMissing ? " (moved or deleted)" : info.stale ? " (changed since scan)" : "") : info.fileName],
@@ -279,18 +298,20 @@ async function cmdTags(store, args, o) {
 async function cmdList(store, args, o) {
   const db = await store.checkSources(await store.loadDb());
   const q = args[0] || o.library;
-  let docs = q ? Library.docsIn(db, findLibrary(db, q).id) : db.docs;
+  const lid = q ? findLibrary(db, q).id : null;
+  let docs = lid ? Library.docsIn(db, lid) : db.docs;
+  if (o.shelf) docs = Library.docsOnShelf(db, findShelf(db, o.shelf, lid).id);
   for (const t of o.tag || []) docs = docs.filter(d => (d.tags || []).includes(Library.cleanTag(t)));
   if (o.starred) docs = docs.filter(d => d.starred);
   if (o.read) docs = docs.filter(d => d.read);
   if (o.unread) docs = docs.filter(d => !d.read);
-  const rows = docs.map(d => ({ id: d.id, title: d.title, library: libName(db, d.libraryId), pages: d.pages, highlights: d.count,
+  const rows = docs.map(d => ({ id: d.id, title: d.title, library: libName(db, d.libraryId), shelf: shelfName(db, d.shelfId), pages: d.pages, highlights: d.count,
     tags: d.tags || [], starred: !!d.starred, read: !!d.read, lastPage: d.lastPage || 0, stale: !!d.stale, sourceMissing: !!d.sourceMissing, sourcePath: d.sourcePath || null }));
   if (o.json) return emit(json(rows));
   if (!rows.length) return emit(db.docs.length ? "No PDFs match.\n" : "No PDFs yet. Add one with: faelights add <file.pdf>\n");
   const w = Math.max(...rows.map(r => r.id.length));
   emit(rows.map(r => `${r.id.padEnd(w)}  ${String(r.highlights ?? 0).padStart(4)} hl  ${r.starred ? "★ " : ""}${r.title}` +
-    `  [${r.library}]${r.tags.length ? "  #" + r.tags.join(" #") : ""}${r.read ? "  (read)" : ""}${r.stale ? "  (changed since scan)" : ""}${r.sourceMissing ? "  (original moved)" : ""}`).join("\n") + "\n");
+    `  [${r.library}${r.shelf ? " › " + r.shelf : ""}]${r.tags.length ? "  #" + r.tags.join(" #") : ""}${r.read ? "  (read)" : ""}${r.stale ? "  (changed since scan)" : ""}${r.sourceMissing ? "  (original moved)" : ""}`).join("\n") + "\n");
 }
 
 async function cmdSearch(store, args, o) {
@@ -324,7 +345,7 @@ async function cmdSearch(store, args, o) {
 }
 
 /* ---- adding and scanning ---- */
-// Paper details from CrossRef / arXiv, stored like the app does (d.lookup; title only if the PDF had none)
+// Paper details from CrossRef / arXiv, stored like the app does (d.lookup; its title only by Meta.docTitle's rule)
 async function fetchDetails(d, get) {
   const m = d.meta || {}, origin = d.origin && /^(doi|arxiv)$/.test(d.origin.kind) ? { kind: d.origin.kind, value: d.origin.value } : null;
   if (!m.doi && !m.arxiv && !origin) return { ok: false, reason: "no-id" };
@@ -334,7 +355,7 @@ async function fetchDetails(d, get) {
 }
 function applyDetails(d, r) {
   d.lookup = { source: r.source, id: r.id, at: Date.now(), meta: r.meta };
-  if (!d.titleEdited && !Meta.cleanTitle(d.meta && d.meta.title) && Meta.cleanTitle(r.meta.title)) d.title = Meta.cleanTitle(r.meta.title);
+  d.title = Meta.docTitle(d);
 }
 
 const transport = () => Fetch.nodeGet({ userAgent: `Faelights/${version} (PDF highlights command line)` });
@@ -363,11 +384,14 @@ async function cmdAdd(store, args, o) {
   // A new doc from a PDF already copied into the library folder
   async function addStored(info, extra) {
     try {
-      const { title, meta, result } = await scan(fs.readFileSync(info.storedPath));
-      const d = { id: info.id, libraryId: target.id, title: title || extra.title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
+      const { meta, result } = await scan(fs.readFileSync(info.storedPath));
+      const d = { id: info.id, libraryId: target.id, title: "", fileName: info.fileName,
         sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...tags], starred: false, read: false, lastPage: 0, shelfId: null, notes: [],
         scannedMtime: info.mtime, meta, ...scanned(result) };
       if (extra.origin) d.origin = extra.origin;
+      const source = Meta.pickTitle({ source: extra.title });   // the resolver's title beats the PDF's own (T-035)
+      if (source) d.sourceTitle = source;
+      d.title = Meta.docTitle(d);
       if (extra.origin && !o["no-lookup"]) {   // added by identifier: fill in details, as the app does
         const r = await fetchDetails(d, get);
         if (r.ok) applyDetails(d, r);
@@ -388,7 +412,7 @@ async function cmdAdd(store, args, o) {
           const { meta, result } = await scan(bytes);
           const d = await store.update(db => {
             const d = Library.findDoc(db, existing.id);
-            if (d) { Object.assign(d, { meta, ...scanned(result, mtime) }); for (const t of tags) Library.addTag(d, t); }
+            if (d) { Object.assign(d, { meta, ...scanned(result, mtime) }); d.title = Meta.docTitle(d); for (const t of tags) Library.addTag(d, t); }
             return d;
           });
           if (d) done.push({ action: "rescanned", id: d.id, title: d.title, highlights: d.count, library: libName(before, d.libraryId) });
@@ -444,7 +468,7 @@ async function cmdRescan(store, args, o) {
       const { meta, result } = await scan(read.bytes);
       const d = await store.update(db => {
         const d = Library.findDoc(db, d0.id);
-        if (d) Object.assign(d, { meta, ...scanned(result, read.mtime) });
+        if (d) { Object.assign(d, { meta, ...scanned(result, read.mtime) }); d.title = Meta.docTitle(d); }
         return d;
       });
       if (d) done.push({ id: d.id, title: d.title, highlights: d.count, from: read.from });
@@ -509,15 +533,89 @@ async function cmdLibrary(store, args, o) {
   changed();
 }
 
+// To the library's root, or with --shelf onto one of its shelves
 async function cmdMove(store, args, o) {
-  if (args.length !== 2) throw usage("move <pdf> <library>");
-  const [d, l, moved] = await store.update(db => {
+  if (args.length !== 2) throw usage("move <pdf> <library> [--shelf <name>]");
+  const [d, where, moved] = await store.update(db => {
     const d = findDoc(db, args[0]), l = findLibrary(db, args[1]);
-    return [d, l, Library.moveDoc(d, l.id)];
+    const s = o.shelf ? findShelf(db, o.shelf, l.id) : null;
+    const moved = s ? Library.moveToShelf(db, d, s.id) : Library.moveDoc(d, l.id) || Library.moveToShelf(db, d, null);
+    return [d, l.name + (s ? " › " + s.name : ""), moved];
   });
-  if (!moved) return console.log(`${d.title} is already in ${l.name}`);
-  console.log(`Moved ${d.title} → ${l.name}`);
+  if (!moved) return console.log(`${d.title} is already in ${where}`);
+  console.log(`Moved ${d.title} → ${where}`);
   changed();
+}
+
+/* ---- shelves: one level inside a library ---- */
+async function cmdShelves(store, args, o) {
+  if (args.length > 1) throw usage("shelves [library]");
+  const db = await store.loadDb();
+  const q = args[0] || o.library, lid = q ? findLibrary(db, q).id : null;
+  const rows = (lid ? Library.shelvesIn(db, lid) : db.shelves).map(s => ({ id: s.id, name: s.name, library: libName(db, s.libraryId), libraryId: s.libraryId,
+    pdfs: Library.docsOnShelf(db, s.id).length }));
+  if (o.json) return emit(json(rows));
+  if (!rows.length) return emit(`No shelves${lid ? " in " + libName(db, lid) : ""} yet. Make one with: faelights shelf new <library> <name>\n`);
+  const w = Math.max(...rows.map(r => r.id.length));
+  emit(rows.map(r => `${r.id.padEnd(w)}  ${r.library} › ${r.name} (${plural(r.pdfs, "PDF")})`).join("\n") + "\n");
+}
+
+// Shelf names are unique within their library (case-insensitive)
+const shelfTaken = (db, libId, name, except) => Library.shelvesIn(db, libId).some(s => s !== except && s.name.toLowerCase() === name.toLowerCase());
+async function cmdShelf(store, args, o) {
+  const [sub, ...rest] = args;
+  if (!sub || sub === "list") return cmdShelves(store, rest, o);
+  const pick = db => findShelf(db, rest[0], o.library ? findLibrary(db, o.library).id : null);
+  if (sub === "new") {
+    if (rest.length !== 2 || !rest[1].trim()) throw usage("shelf new <library> <name>");
+    const name = rest[1].trim();
+    const [s, l] = await store.update(db => {
+      const l = findLibrary(db, rest[0]);
+      if (shelfTaken(db, l.id, name)) throw new Fail(`${l.name} already has a shelf called "${name}".`);
+      return [Library.addShelf(db, l.id, name), l];
+    });
+    if (o.json) emit(json({ id: s.id, name: s.name, library: l.name, libraryId: l.id }));
+    else console.log(`Created shelf ${l.name} › ${s.name}  [${s.id}]`);
+  } else if (sub === "rename") {
+    if (rest.length !== 2 || !rest[1].trim()) throw usage("shelf rename <shelf> <new name> [--library <name>]");
+    const name = rest[1].trim();
+    const [from, s] = await store.update(db => {
+      const s = pick(db);
+      if (shelfTaken(db, s.libraryId, name, s)) throw new Fail(`${libName(db, s.libraryId)} already has a shelf called "${name}".`);
+      const from = s.name;
+      Library.renameShelf(db, s.id, name);
+      return [from, s];
+    });
+    console.log(`Renamed shelf ${from} → ${s.name}`);
+  } else if (sub === "delete") {
+    if (rest.length !== 1) throw usage("shelf delete <shelf> [--library <name>]");
+    const [s, l, n] = await store.update(db => {
+      const s = pick(db), n = Library.docsOnShelf(db, s.id).length;
+      Library.removeShelf(db, s.id);
+      return [s, libName(db, s.libraryId), n];
+    });
+    console.log(`Deleted shelf ${l} › ${s.name}` + (n ? `; ${plural(n, "PDF")} taken off it (still in ${l})` : ""));
+  } else throw new Fail(`Unknown shelf command "${sub}". Use new, rename, delete or list.`, 2);
+  changed();
+}
+
+// shelve <pdf> <shelf>: onto a shelf (--library narrows the shelf name); unshelve <pdf>...: back to the library's root
+async function cmdShelve(store, args, o) {
+  if (args.length !== 2) throw usage("shelve <pdf> <shelf> [--library <name>]");
+  const [d, where, moved] = await store.update(db => {
+    const d = findDoc(db, args[0]), s = findShelf(db, args[1], o.library ? findLibrary(db, o.library).id : null);
+    return [d, libName(db, s.libraryId) + " › " + s.name, Library.moveToShelf(db, d, s.id)];
+  });
+  if (!moved) return console.log(`${d.title} is already on ${where}`);
+  console.log(`Shelved ${d.title} → ${where}`);
+  changed();
+}
+async function cmdUnshelve(store, args, o) {
+  if (!args.length) throw usage("unshelve <pdf>...");
+  const done = await store.update(db => [...new Set(args.map(a => findDoc(db, a)))]
+    .map(d => ({ d, from: shelfName(db, d.shelfId), lib: libName(db, d.libraryId), moved: Library.moveToShelf(db, d, null) })));
+  for (const { d, from, lib, moved } of done) console.log(moved ? `Took ${d.title} off ${from} (still in ${lib})` : `${d.title} isn't on a shelf`);
+  if (done.some(x => x.moved)) changed();
 }
 
 async function cmdTag(store, args, o, remove) {
@@ -646,7 +744,7 @@ async function main(argv) {
   const store = Library.at(o["data-dir"] || Library.userDataDir());
   const run = {
     export: cmdExport, text: cmdText, info: cmdInfo, list: cmdList, ls: cmdList, libraries: cmdLibraries, tags: cmdTags,
-    add: cmdAdd, rescan: cmdRescan, lookup: cmdLookup, library: cmdLibrary, move: cmdMove, remove: cmdRemove, rm: cmdRemove,
+    add: cmdAdd, rescan: cmdRescan, lookup: cmdLookup, library: cmdLibrary, shelves: cmdShelves, shelf: cmdShelf, shelve: cmdShelve, unshelve: cmdUnshelve, move: cmdMove, remove: cmdRemove, rm: cmdRemove,
     tag: (s, a, o) => cmdTag(s, a, o, false), untag: (s, a, o) => cmdTag(s, a, o, true),
     star: (s, a, o) => cmdStar(s, a, o, true), unstar: (s, a, o) => cmdStar(s, a, o, false),
     read: (s, a, o) => cmdRead(s, a, o, true), unread: (s, a, o) => cmdRead(s, a, o, false),

@@ -15,7 +15,7 @@ const { z } = require("zod");
 const { tools, ToolError } = require("./tools.js");
 const { version } = require("../package.json");
 
-const WRITE_TOOLS = ["add_pdf", "add_by_identifier", "tag_pdf", "star_pdf", "mark_read", "set_tag_colour"];
+const WRITE_TOOLS = ["add_pdf", "add_by_identifier", "tag_pdf", "star_pdf", "mark_read", "set_tag_colour", "create_shelf", "rename_shelf", "delete_shelf", "shelve_pdfs"];
 const WRITE_NOTE = `This is one of the only ${WRITE_TOOLS.length} tools that change your Faelights library (${WRITE_TOOLS.join(", ")}). ` +
   "It refuses with library_in_use while the Faelights desktop app is open, because the app would overwrite the change.";
 
@@ -25,6 +25,7 @@ const format = z.enum(["markdown", "obsidian", "plain"]).default("markdown")
 const mode = z.enum(["full", "highlights"]).optional()
   .describe("full: whole sentences with the highlights marked; highlights: just the highlighted words. Default: the app's setting");
 const library = z.string().min(1).describe("Library name or id (see list_libraries)");
+const shelf = z.string().min(1).describe("Shelf name or id (see list_shelves); a name used in two libraries needs library too");
 
 // Map the handler's {code, message} failures to tool errors; anything else is logged and reported as internal
 const wrap = fn => async (args, extra) => {
@@ -57,6 +58,7 @@ function createServer(dataDir) {
   const server = new McpServer({ name: "faelights", version }, {
     instructions: "Faelights pulls highlights out of annotated PDFs, grouped by the PDF's topics (headings). " +
       "Start with list_pdfs or search to find a PDF id, then get_extracts or export_pdf. " +
+      "Libraries can hold shelves, one level deep (library → shelves → PDFs); a PDF is on at most one shelf of its library. " +
       `Only ${WRITE_TOOLS.join(", ")} change the library, and they fail with library_in_use while the desktop app is open. ` +
       "add_by_identifier is the only tool that uses the internet."
   });
@@ -68,10 +70,11 @@ function createServer(dataDir) {
   }, wrap(() => t.list_libraries()));
 
   server.registerTool("list_pdfs", {
-    title: "List PDFs", description: "PDFs in the library with their ids, titles, tags, star, read state, last page viewed and highlight counts. " +
-      "Filter by library, tag, starred or read.",
+    title: "List PDFs", description: "PDFs in the library with their ids, titles, library, shelf, tags, star, read state, last page viewed and highlight counts. " +
+      "Filter by library, shelf, tag, starred or read.",
     inputSchema: {
       library: library.optional(),
+      shelf: shelf.optional(),
       tag: z.string().min(1).optional().describe("Only PDFs with this tag"),
       starred: z.boolean().optional().describe("true: only starred; false: only unstarred"),
       read: z.boolean().optional().describe("true: only read; false: only unread")
@@ -177,6 +180,42 @@ function createServer(dataDir) {
     },
     annotations: { ...writeHints, idempotentHint: true }
   }, wrap(a => t.set_tag_colour(a)));
+
+  server.registerTool("list_shelves", {
+    title: "List shelves", description: "The shelves inside libraries (all, or one library's), with how many PDFs each holds. " +
+      "Shelves are one level deep: library → shelves → PDFs.",
+    inputSchema: { library: library.optional() }, annotations: read
+  }, wrap(a => t.list_shelves(a)));
+
+  server.registerTool("create_shelf", {
+    title: "Create a shelf", description: "Make a shelf inside a library. Shelf names are unique within their library. " + WRITE_NOTE,
+    inputSchema: { library, name: z.string().min(1).describe("The new shelf's name") },
+    annotations: writeHints
+  }, wrap(a => t.create_shelf(a)));
+
+  server.registerTool("rename_shelf", {
+    title: "Rename a shelf", description: "Give a shelf a new name (unique within its library). " + WRITE_NOTE,
+    inputSchema: { shelf, name: z.string().min(1).describe("The new name"), library: library.optional().describe("The shelf's library, if its name is ambiguous") },
+    annotations: { ...writeHints, idempotentHint: true }
+  }, wrap(a => t.rename_shelf(a)));
+
+  server.registerTool("delete_shelf", {
+    title: "Delete a shelf", description: "Delete a shelf. Its PDFs are not removed: they stay in the library, off any shelf (listed in unshelved_pdfs). " +
+      "Ask the user before deleting a shelf. " + WRITE_NOTE,
+    inputSchema: { shelf, library: library.optional().describe("The shelf's library, if its name is ambiguous") },
+    annotations: { ...writeHints, destructiveHint: true }
+  }, wrap(a => t.delete_shelf(a)));
+
+  server.registerTool("shelve_pdfs", {
+    title: "Move PDFs onto or off a shelf", description: "Put PDFs on a shelf (a shelf in another library moves them into that library too), " +
+      "or take them off their shelf with shelf null (they stay in their library). An unknown PDF or shelf changes nothing. " + WRITE_NOTE,
+    inputSchema: {
+      pdf_ids: z.array(z.string().min(1)).min(1).describe("The PDFs' ids, from list_pdfs or search"),
+      shelf: shelf.nullable().describe("Shelf name or id (see list_shelves); null takes the PDFs off their shelf"),
+      library: library.optional().describe("The shelf's library, if its name is ambiguous")
+    },
+    annotations: { ...writeHints, idempotentHint: true }
+  }, wrap(a => t.shelve_pdfs(a)));
 
   server.registerResource("pdf", new ResourceTemplate("faelights://pdf/{id}", {
     list: async () => ({ resources: (await t.pdf_resources()).map(p => ({ uri: `faelights://pdf/${p.id}`, name: p.title, description: `In ${p.library}`, mimeType: "text/markdown" })) })
