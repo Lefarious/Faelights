@@ -1,7 +1,7 @@
 "use strict";
-// Search scopes (renderer/app.js searchDocs / validScope): which PDFs "All libraries",
+// Search scopes (renderer/app.js searchDocs / validScope / entryScope): which PDFs "All libraries",
 // "This PDF" and a library cover, and the fall back to all when a scope's target is gone.
-// app.js is a browser script, so the two pure helpers are lifted out of its source.
+// app.js is a browser script, so its pure helpers are lifted out of its source.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -14,7 +14,7 @@ const lift = name => {
   assert.ok(m, "missing " + name);
   return new Function(`${m[0]}; return ${name};`)();
 };
-const searchDocs = lift("searchDocs"), validScope = lift("validScope");
+const searchDocs = lift("searchDocs"), validScope = lift("validScope"), entryScope = lift("entryScope");
 
 const entry = (n, text) => ({ n, page: 1, sentence: text, spans: [{ text, comment: "" }] });
 const db = {
@@ -53,4 +53,20 @@ test("a scope whose PDF or library is gone falls back to all", () => {
   assert.equal(validScope(db, "doc", null), "all");
   assert.equal(validScope(db, "l1", null), "l1");
   assert.equal(validScope(db, "gone", null), "all");
+});
+
+test("entering search from a library view scopes to it until the user picks a scope", () => {
+  const thesis = { kind: "library", id: "l1" };
+  assert.equal(entryScope(thesis, undefined, false), "l1");
+  assert.equal(entryScope(thesis, undefined, true), null);            // keep the scope they picked
+  assert.equal(entryScope(thesis, "doc", false), "doc");              // Ctrl+F with a PDF open
+  assert.equal(entryScope({ kind: "starred" }, undefined, false), null);
+  assert.equal(entryScope({ kind: "all" }, "inbox", true), "inbox");  // "Search this library"
+});
+
+test("Search this library shows only its PDFs' hits", () => {
+  const sc = entryScope({ kind: "all" }, "l1", true);
+  assert.deepEqual(hits(sc, null, "mitochondria"), ["b"]);
+  assert.deepEqual(hits(sc, null, "protein"), ["c"]);
+  assert.deepEqual(hits("inbox", null, "protein"), []);
 });

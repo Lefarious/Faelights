@@ -436,3 +436,4 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 
 /* search scopes (T-022/T-023) */
 #sscope { max-width: 280px; text-overflow: ellipsis; }
+.s-scope { margin: 0 0 14px; }
