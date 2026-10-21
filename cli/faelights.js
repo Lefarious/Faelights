@@ -365,7 +365,7 @@ async function cmdAdd(store, args, o) {
     try {
       const { title, meta, result } = await scan(fs.readFileSync(info.storedPath));
       const d = { id: info.id, libraryId: target.id, title: title || extra.title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
-        sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...tags], starred: false, read: false, lastPage: 0,
+        sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...tags], starred: false, read: false, lastPage: 0, shelfId: null, notes: [],
         scannedMtime: info.mtime, meta, ...scanned(result) };
       if (extra.origin) d.origin = extra.origin;
       if (extra.origin && !o["no-lookup"]) {   // added by identifier: fill in details, as the app does

@@ -252,7 +252,7 @@ function tools(dataDir) {
       const { title, meta, result } = await readBytes(fs.readFileSync(info.storedPath));
       textWarn(result);
       const d = { id: info.id, libraryId: target.id, title: title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
-        sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false, read: false, lastPage: 0,
+        sourcePath: info.sourcePath, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false, read: false, lastPage: 0, shelfId: null, notes: [],
         scannedMtime: info.mtime, meta, ...scanned(result) };
       await write(db => { db.docs.push(d); });
       return { action: "added", pdf: summary(before, d), warnings };
@@ -292,7 +292,7 @@ function tools(dataDir) {
       const warnings = [];
       try { checkText({ title: info.fileName }, result, warnings); } catch (e) { warnings.push(e.message); }
       const d = { id: info.id, libraryId: target.id, title: title || r.title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
-        sourcePath: null, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false, read: false, lastPage: 0,
+        sourcePath: null, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false, read: false, lastPage: 0, shelfId: null, notes: [],
         scannedMtime: info.mtime, meta, ...scanned(result), origin: { kind: id.kind, value: id.value, url: r.url } };
       let details = null;
       if (lookup) {
