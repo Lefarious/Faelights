@@ -1,5 +1,5 @@
 /* Faelights — finding and downloading papers (headless core, Node only)
-   From a parsed identifier (identify.js) to PDF bytes: arXiv, DOI (+ CrossRef's full-text links), PMID / PMCID,
+   From a parsed identifier (identify.js) to PDF bytes: arXiv, DOI (+ CrossRef's full-text links), PMID / PMCID (+ NCBI's open-access bucket),
    ADS bibcodes, ISBN (public scans only) and plain links; plus paper details from CrossRef / arXiv (metadata.js).
    The HTTP transport is passed in, so the desktop app keeps Electron's net stack (system proxy, session cookies)
    and scripts use nodeGet() below. A transport is get(url, accept, maxBytes, opts) → {url, type, html, buf}
@@ -40,6 +40,35 @@ function resolver(get, progress = () => {}) {
   async function fetchJson(url) {
     const r = await get(url, "application/json", MAX_HTML);
     try { return JSON.parse(r.buf.toString("utf8")) || {}; } catch (_) { throw new FetchFail("network"); }
+  }
+
+  /* PMC's article PDFs now sit behind a JavaScript proof-of-work page no plain HTTP client passes (europepmc.org is
+     behind a similar Cloudflare check), so the open-access copy comes first: NCBI's PMC Open Access bucket on AWS, no
+     bot wall. Then Europe PMC's mirror and PMC itself, in case either lets us through. A source that answers with a
+     page instead of %PDF (the bot check) just moves on to the next. */
+  async function pmcPdf(id) {
+    const v = id.value, OA = "https://pmc-oa-opendata.s3.amazonaws.com/";
+    let big = null, gone = false;
+    const attempt = async (f, pmc) => {
+      try { return await f(); }
+      catch (e) { if (hardFail(e)) throw e; if (e.reason === "too-large") big = e; if (pmc && e.reason === "not-found") gone = true; return null; }
+    };
+    const oa = await attempt(async () => {   // list the article's versions, read the newest one's record, fetch its PDF
+      const ls = (await get(`${OA}?list-type=2&prefix=metadata%2F${v}.`, "application/xml", MAX_HTML)).buf.toString("utf8");
+      const n = Math.max(0, ...[...ls.matchAll(new RegExp(`<Key>metadata/${v}\\.(\\d+)\\.json</Key>`, "g"))].map(m => +m[1]));
+      if (!n) return null;   // not in the open-access subset
+      const rec = await fetchJson(`${OA}${v}.${n}/${v}.${n}.json`);
+      const key = /^s3:\/\/pmc-oa-opendata\/([\w./-]+\.pdf)(\?|$)/.exec(rec.pdf_url || "");
+      if (!key) return null;
+      progress({ stage: "download" });
+      const r = await get(OA + key[1], "application/pdf", MAX_PDF);
+      return isPdf(r.buf) ? { ...r, title: typeof rec.title === "string" ? rec.title.slice(0, 500) : null } : null;
+    });
+    const r = oa || await attempt(() => pdfFrom(`https://europepmc.org/articles/${v}?pdf=render`, 0))
+      || await attempt(() => pdfFrom(id.url), true);
+    if (r) return r;
+    // PMC copies are free to read, so this isn't a paywall: a browser gets past the bot check
+    throw big || new FetchFail(gone ? "not-found" : "no-free-copy");
   }
 
   async function resolvePdf(id) {
@@ -88,6 +117,7 @@ function resolver(get, progress = () => {}) {
       }
       throw new FetchFail("no-free-copy");
     }
+    if (id.kind === "pmcid") return pmcPdf(id);
     if (id.kind !== "doi") return pdfFrom(id.url);
     try { return await pdfFrom("https://doi.org/" + id.value.split("/").map(encodeURIComponent).join("/").replace(/%2F/g, "/")); }
     catch (err) {
