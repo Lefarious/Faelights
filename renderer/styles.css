@@ -433,3 +433,6 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 @keyframes tour-in { from { opacity: 0; transform: translateY(4px); } }
 @media (prefers-color-scheme: dark) { .tour-back { background: rgb(0 0 0 / .55); } }
 @media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-pop { animation: none; } }
+
+/* search scopes (T-022/T-023) */
+#sscope { max-width: 280px; text-overflow: ellipsis; }
