@@ -297,3 +297,26 @@ test("add_by_identifier downloads a paper by link, skips duplicates and reports 
     try { await rejects(call(c, "add_by_identifier", { identifier: base + "/other.pdf" }), "library_in_use"); } finally { app.kill(); }
   } finally { await c.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+test("add_by_identifier: the landing page's title beats the PDF's own, and a rescan keeps it (T-035)", async () => {
+  const dir = tmp("srctitle");
+  // a landing page naming the paper (citation_title) and linking the sample PDF, which embeds another title
+  const site = http.createServer((req, res) => {
+    if (req.url === "/paper.pdf") { res.writeHead(200, { "Content-Type": "application/pdf" }); return res.end(fs.readFileSync(SAMPLE)); }
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(`<html><head><meta name="citation_title" content="  The Real   Title "><meta name="citation_pdf_url" content="/paper.pdf"></head></html>`);
+  });
+  await new Promise(r => site.listen(0, "127.0.0.1", r));
+  const c = await connect(dir);
+  try {
+    const r = await call(c, "add_by_identifier", { identifier: `http://127.0.0.1:${site.address().port}/landing`, lookup: false });
+    assert.equal(r.pdf.title, "The Real Title");
+    const dbFile = path.join(dir, "library", "faelights.json"), load = () => JSON.parse(fs.readFileSync(dbFile, "utf8"));
+    const d = load().docs.find(x => x.id === r.pdf.id);
+    assert.deepEqual([d.sourceTitle, d.meta.title], ["The Real Title", "Notes on Bioluminescence"]);
+    await c.close();
+    assert.equal(cli(dir, "rescan", d.id)[0].title, "The Real Title");
+    // a title the user typed survives a rescan
+    const db = load(); Object.assign(db.docs[0], { title: "Mine", titleEdited: true }); fs.writeFileSync(dbFile, JSON.stringify(db));
+    assert.equal(cli(dir, "rescan", d.id)[0].title, "Mine");
+  } finally { await c.close(); site.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
