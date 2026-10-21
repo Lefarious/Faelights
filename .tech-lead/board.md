@@ -1,13 +1,34 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-21 · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
+_Last updated: 2026-10-21 · **Sprint 5 closed** (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; push awaits user gate 2) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
-- Capacity: 3 parallel features per sprint · minor bugs/polish (XS/S) are exempt and don't count
-- Todo ids: `T-NNN`, next free: T-016 · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
+- Todo ids: `T-NNN`, next free: T-037 (T-016 is the MCP server on `feature/T-016-mcp-server`) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
+
+## Sprint plan 5–10 (planned 2026-10-21 from the Trello board, user rules)
+
+User rules: Sprint 5 is all the bugs; small backlog items first, sizable (L) ones in later sprints; 3–5 slots per sprint. Source: Trello board "FaeLights" (https://trello.com/b/rgZKs8JI/faelights), Backlog + Bugs lists. Full cards are in the **Backlog** table below.
+
+| sprint | theme | todos | slots |
+|---|---|---|---|
+| 5 | All bugs | T-017 long-paste-add-link, T-018 colour-filter-without-images, T-019 extract-sentence-split, T-002 offline-vs-unreachable, T-008 pmc-fallback | 0 (5 exempt bugs) |
+| 6 | Small library improvements | T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read | 5 |
+| 7 | Medium items | T-021 multi-select, T-027 section-numbering, T-028 loose-marks-as-clips | 3 |
+| 8 | Notes and shelves | T-025 markdown-notes (L), T-029 shelves (L) | 4 |
+| 9 | Big bets I (design decision first) | T-030 ocr (L), T-031 ai-merge (L) | 4 |
+| 10 | Big bets II | T-032 svg-diagrams (L) (+ T-033/T-034 if a backend is approved) | 2 (last window, under min) |
+
+- Not scheduled: T-033 accounts, T-034 library-sharing — parked: they need a server, which goes against the offline-first decision D-009. Needs a user decision on a backend.
+- Open proposals (T-003, T-004, T-005, T-006, T-009, T-010, T-011) stay under **To do**; any of them joins the open sprint once approved (T-005, T-009, T-011 are exempt). T-002 and T-008 are bugs, so they were pulled into Sprint 5.
+- Dispatch order: T-018, T-019 and T-017 are in different files and can build in parallel; T-002 and T-008 both touch `core/fetch.js` and queue behind each other (and behind T-017 if it touches the add dialog's error text).
+- Scaffold before Sprint 6: `core/library.js` is touched by T-020, T-023, T-024, T-026, T-025 and T-029. A small `refactor/library-doc-fields` branch that adds the new fields (`d.read`, `d.lastPage`, `db.tagColours`, `db.shelves`, `d.notes`) with defaults in `normalize` lets Sprint 6 build in parallel instead of queueing one at a time.
+- Within Sprint 6, T-022 and T-023 both change the search panel in `app.js`: build together or queue T-023 behind T-022.
+- Sprint 9 items need a decision before building: T-030 OCR engine (tesseract.js offline vs. other), T-031 AI provider and whether a key/network is acceptable (D-009), T-032 how to capture vector diagrams (pdf.js operator list → SVG vs. crop). Ask the user at the start of each.
+- Trello cards already done in code (to move to Done on Trello): "Build desktop installers" (CI releases v1.2.1, v1.3.0), "Generate logo and add it to the app" (F-003, F-008), "Capture highlights over images" (F-015; the text-less highlight leftover is T-028), "Sort library view by number of extracts" ("Most marks" sort). Trello bug "Authors in metadata shown on separate lines": ignored by user 2026-10-21, not planned.
 
 ## To do
 
@@ -55,17 +76,68 @@ Polish (reported by user):
 | image-view | "With images" reader toggle, centred crops interleaved by `at`; images in colour filter | renderer/app.js (reader), styles.css (reader block) | image-extract, images.js scaffold | M | 1 | merged 40bb2c7 |
 | T-014 onboarding-tour | First-run guided tour, 3 chapters (app/reader/viewer), seen flags in settings.tour, Help › Show Tour | new renderer/tour.js, renderer/app.js (data-tour hooks, maybeTour/startTour, menu `tour`), renderer/annotator.js (2 hooks), renderer/index.html, renderer/styles.css (own block), src/main.js (Help menu), test/tour.test.js | — | M | 1 | merged 43721ca (F-022) |
 | image-export | Export formats: Markdown+images folder, Obsidian, HTML (self-contained), plain; doc + library | renderer/app.js (export), src/main.js (export:bundle), src/preload.js | image-extract, images.js scaffold | M | 1 | merged 40bb2c7 |
+| T-017 long-paste-add-link (bug · exempt) | Pasting a long clipboard item into "Add by link" fails. Reproduce, find the length/format that breaks it, fix. Accept: a long paste (multi-line, several ids, very long URL) is parsed or rejected with a clear message, never errors; test in identify.test.js | renderer/app.js (add dialog), core/identify.js, test/identify.test.js | — | S | 1 | merged 20a8e58 (Sprint 5, F-025) |
+| T-018 colour-filter-without-images (bug · exempt) | Colour filter is hidden unless "With images" is on (it shows only when >1 colour, and images add colours). Accept: the filter shows whenever the extract has highlights, images on or off | renderer/app.js (renderReader colour block) | — | XS | 1 | merged 20a8e58 (Sprint 5, F-025) |
+| T-019 extract-sentence-split (bug · exempt) | Extracts sometimes don't separate, even across " . ". Accept: a fixture with the failing case splits into separate extracts; existing snapshots unchanged or updated knowingly (ANALYZER_VERSION bump if results change) | core/extract.js, test/core/ | — | S | 1 | merged 20a8e58 (Sprint 5, F-025) |
+| T-002 offline-vs-unreachable (bug · exempt) | (proposal, pulled into Sprint 5) Tell "no connection" apart from "couldn't reach that site" | core/fetch.js, renderer/app.js (add dialog messages) | — | S | 1 | merged 20a8e58 (Sprint 5, F-025) |
+| T-008 pmc-fallback (bug · exempt) | (proposal, pulled into Sprint 5) PMC bot-check page: fall back to Europe PMC / Unpaywall for PMCID/PMID | core/fetch.js, test/ | — | S | 2 | merged 20a8e58 (Sprint 5, F-025) |
+| T-020 continue-reading (enhancement) | Viewer remembers the last page per PDF; "Continue reading" opens it there. Accept: close at p. 12, reopen → p. 12; new PDFs open at p. 1 | renderer/annotator.js, renderer/app.js (viewer open), core/library.js (`d.lastPage`) | library-doc-fields scaffold | S | 1 | planned · Sprint 6 |
+| T-022 search-current-pdf (enhancement) | Search scoped to the open PDF's extracts (sentence/highlight/note). Accept: a word in two PDFs matches only the open one | renderer/app.js (search panel) | — | S | 1 | planned · Sprint 6 |
+| T-023 search-current-library (enhancement) | Search scoped to the selected library. Accept: matches limited to that library's PDFs | renderer/app.js (search panel), core/library.js | T-022 (same panel) | S | 1 | planned · Sprint 6 |
+| T-024 tag-colours (enhancement) | Assign a colour to each tag; shown on tag chips in the library and on PDFs. Accept: colour persists across restart; CLI/MCP unaffected | renderer/app.js (tags), core/library.js (`db.tagColours`), renderer/styles.css | library-doc-fields scaffold | S | 2 | planned · Sprint 6 |
+| T-026 mark-as-read (enhancement) | Toggle read/unread per PDF; read PDFs look distinct in the list and can be filtered. Accept: toggle from item menu, persists | renderer/app.js (doc list, item menu), core/library.js (`d.read`) | library-doc-fields scaffold | S | 2 | planned · Sprint 6 |
+| T-021 multi-select (enhancement) | Select one or several PDFs (click, Ctrl/Shift-click) and apply move/tag/star/remove to all. Accept: Shift-select 3, move to a library, all 3 move | renderer/app.js (doc list, item actions), renderer/styles.css | — | M | 1 | planned · Sprint 7 |
+| T-027 section-numbering (feature) | Keep the document's heading structure and numbering (e.g. "12.1.12 Section A") in exports. Accept: a numbered-heading fixture exports with the same numbers and nesting | core/topics.js, core/export.js, test/ | — | M | 1 | planned · Sprint 7 |
+| T-028 loose-marks-as-clips (enhancement) | Highlights over images/scans with no text (today `result.loose`, page numbers only) become image clips in the extract and exports. Accept: a text-less highlight shows as a cropped image | core/extract.js, renderer/app.js (reader), renderer/images.js | — | M | 2 | planned · Sprint 7 |
+| T-025 markdown-notes (enhancement) | Own Markdown notes and section headings between extracts, kept in place and included in exports. Accept: add a note after extract 3, export → note sits after it | renderer/app.js (reader), core/export.js, core/order.js, core/library.js (`d.notes`) | — | L | 1 | planned · Sprint 8 |
+| T-029 shelves (feature) | Shelves (sub-libraries) inside a library; move PDFs between shelves; CLI/MCP aware. Accept: create shelf, move 2 PDFs, they show under it after restart | core/library.js, renderer/app.js (sidebar, doc list), cli/, mcp/server.js | T-021 | L | 2 | planned · Sprint 8 |
+| T-030 ocr (feature) | OCR for scanned pages and image crops so their text is extracted. Needs engine decision (offline). | core/extract.js, renderer/app.js (reader), package.json | T-028 | L | 1 | planned · Sprint 9 |
+| T-031 ai-merge (feature) | AI merge/polish of fragmented highlights into cleaner notes, from highlighted text only. Needs provider + network decision (D-009) | renderer/app.js (reader), core/export.js, src/main.js, package.json | T-025 | L | 1 | planned · Sprint 9 |
+| T-032 svg-diagrams (feature) | Export embedded diagrams as lossless SVG for Notion/Obsidian. Needs capture-method decision | renderer/images.js, core/export.js, renderer/annotator.js | T-028 | L | 2 | planned · Sprint 10 |
+| T-033 accounts (feature) | User accounts and account management. Needs a backend decision | — | backend decision | L | 3 | parked |
+| T-034 library-sharing (feature) | Share libraries with other users | — | T-033 | L | 3 | parked |
 
 ## Sprints
 
 | sprint | status | scope | result |
 |---|---|---|---|
+| 10 | planned | T-032 svg-diagrams (+ T-033/T-034 if approved) | — |
+| 9 | planned | T-030 ocr, T-031 ai-merge | — |
+| 8 | planned | T-025 markdown-notes, T-029 shelves | — |
+| 7 | planned | T-021 multi-select, T-027 section-numbering, T-028 loose-marks-as-clips | — |
+| 6 | planned | T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read | — |
+| 5 | **closed** 2026-10-21 (tag `sprint-5-end`, main 20a8e58) | bugs: T-017, T-018, T-019, T-002, T-008 (all exempt) | 156/156 |
 | 4 | **closed** 2026-10-10 (tag `sprint-4-end`, main 43721ca) | T-014 onboarding-tour | 81/81 |
 | 3 | **closed** 2026-10-09 (tag `sprint-3-end`, main 736ffd2) | T-012 copy-image, T-001 meta-enrich (+ T-013 exempt, just before) | 69/69 |
 | 2 | **closed** 2026-10-09 (tag `sprint-2-end`, main 40bb2c7) | add-ids, image-box, image-extract, image-view, image-export | 63/63 |
 | 1 | **closed** 2026-10-09 (tag `sprint-1-end`, c5c0dbe) | item-actions, add-by-identifier, test-harness | 23/23 |
 
 Newest first. "Between sprints" entries are small fixes merged outside a sprint.
+
+### Sprint 5 — closed (2026-10-21)
+- Scope: all bugs (each exempt, 0 slots): T-018, T-019, T-017, T-008, T-002.
+- Backup: `backup/sprint-5-pre-20261021` · Tag: `sprint-5-start` (7ead2d6) · Baseline: `npm test` 142/142 green
+- Merge flow: branches merge into `feature/s5-integration` (worktree `../fl-s5`); user tries the build (gate 1) → main; push = gate 2
+- Dispatch: T-018 built directly (XS). Agents in worktrees: T-019 (core/extract.js), T-017 (core/identify.js parser + app.js add dialog), T-008 (core/fetch.js). T-002 queued: it shares `fetchFailureReason` in core/identify.js with T-017's file and the fetch path with T-008; it starts once both are back.
+- T-019 leftovers: "vitamin C. The" fixed on user request (64bc2b7): a lone capital + full stop ends a sentence when a common opener follows (The, This, We, However…); "J. Smith", "J. A. Smith" stay whole. Still open: "Smith et al. Nature 2020" splits; "Group A. Patients" merges (opener list).
+- T-017: cause was `parseIdentifier`'s 2048-char cap (links with long tracking tails = "Not recognised", paste did nothing), invisible chars (zero-width, soft hyphen), and `id:parseMany` silently keeping only 200. Cap now 16384, linear-time tidy, invisible chars stripped, >200 items / >100k chars refused with a message. The 200 limit is written in both app.js (`ADD_MAX`) and main.js: keep in sync.
+- T-008: Europe PMC is Cloudflare-walled too, so the fix fetches from NCBI's PMC Open Access bucket (`pmc-oa-opendata.s3.amazonaws.com`) first, then Europe PMC, then PMC. All failing → `no-free-copy` (was `paywalled`). Unpaywall skipped (no API contact email in the repo). Only open-access PMC papers are fully fixed. Live: CLI `add PMC3531190` OK, its PMID → same file. New host to note in atlas/compass.
+- T-002 started after T-017 and T-008 merged (worktree `../fl-T-002`, harness worktree isolation failed on a path-case check), so it may also edit core/fetch.js.
+- T-002: new reason `unreachable` ("Couldn't find that site…", Open in browser). `fetchFailureReason(err, url)`: no-connection codes → offline; DNS/refused → offline for the app's own service hosts (doi.org, crossref, arxiv, ncbi, PMC bucket, europepmc, openlibrary, archive.org, adsabs), else unreachable; no url → offline (old behaviour). DOI path now also tries CrossRef links when the publisher host is unreachable. Wi-Fi-without-internet limit fixed on user request (1ee74af): before reporting `unreachable`, `resolvePdf` checks that doi.org answers; if it is offline too → `offline`. Costs one extra request only on that failure.
+- 2026-10-21: all 5 merged on feature/s5-integration @ dafb4c9, 156/156 green. Gate-1 launch blocked by the installed app holding the single-instance lock; user reviewed the report, asked for the two leftovers to be fixed (follow-ups 6, 7), then said merge.
+- 2026-10-21: user OK → merged into local main 20a8e58; 156/156; tag `sprint-5-end`. Atlas synced (fbf5430), compass F-025, D-018, D-019. Push awaits gate 2.
+- Test rounds: 142 (baseline) → 142 → 145 → 147 → 152 → 156 → 156 → 156 (integration) → 156 (main 20a8e58); new failures introduced: 0
+- Cause of T-002 found while reading: `ERR_NAME_NOT_RESOLVED` / `ENOTFOUND` are in `OFFLINE_CODES`, so a mistyped domain reads as "offline".
+- Merge log (into feature/s5-integration):
+  | order | id | merge sha | conflicts | tests after |
+  |---|---|---|---|---|
+  | 1 | T-018 colour-filter-without-images | 627e376 | none | 142/142 |
+  | 2 | T-019 extract-sentence-split | c3bbab0 | none (ANALYZER_VERSION 3 → 4: saved docs re-analyse; atlas mentions v3, fix at sync) | 145/145 |
+  | 3 | T-017 long-paste-add-link | 8a3f3a1 | none (app.js auto-merged); also src/main.js `id:parseMany` 200 → 201 so the dialog can refuse >200 | 147/147 |
+  | 4 | T-008 pmc-fallback | b53a36f | none | 152/152 |
+  | 5 | T-002 offline-vs-unreachable | dafb4c9 | none (cut from s5-integration b53a36f) | 156/156 |
+  | 6 | T-019 follow-up (lone capital + sentence opener splits) | aa263b5 | none | 156/156 |
+  | 7 | T-002 follow-up (doi.org check before 'unreachable') | c0cc984 | none | 156/156 |
 
 ### Sprint 4 — closed (2026-10-10)
 - Scope: T-014 onboarding-tour (feature · M). A single feature, so it was built directly with no sub-agents.
@@ -154,9 +226,13 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 | 2026-10-09 | c5c0dbe (sprint close) | 23/23 | none |
 
 ## Proposed (recommendations awaiting user approval)
-All open proposals are listed with todo ids under **To do** above: T-002 … T-006, T-008 … T-011. New proposals get the next free id.
+All open proposals are listed with todo ids under **To do** above: T-003 … T-006, T-009 … T-011. New proposals get the next free id.
+
+- [ ] **T-035** [enhancement · S] When an added paper comes with a better title from its source (e.g. the PMC bucket's "GenBank"), prefer it over the PDF's embedded title (CLI showed "OP-NARE120883 36..42"). Check title priority in cli/faelights.js and src/main.js. (from T-008)
+- [ ] **T-036** [polish · XS · exempt] Strip `utm_*` and similar tracking parameters from doi.org links before resolving, so `10.1038/x?utm=…` doesn't fail. (from T-017)
 
 ## Decisions
+- 2026-10-21 — Sprint plan 5–10 from the Trello board: Sprint 5 = all bugs, sizable items in later sprints, 3–5 slots per sprint (user). Authors-on-separate-lines bug ignored (user). Accounts and sharing parked pending a backend decision.
 - 2026-10-09 — Item actions: themed in-app menu + ⋯ trigger (not hover bar / command palette).
 - 2026-10-09 — Network access allowed on explicit user request (add by DOI/link) and for metadata enrichment; supersedes the compass "no network calls" non-goal (log as new D-entry at close).
 - 2026-10-09 — Add a test harness this sprint.

@@ -1,5 +1,5 @@
 # Module: cli
-> Path: cli/faelights.js · Last synced commit: 796478d · Related features: F-024
+> Path: cli/faelights.js · Last synced commit: 20a8e58 · Related features: F-024, F-025
 
 ## Purpose
 The `faelights` command line: a thin shell over core/ that reads highlights and text from any PDF and manages the desktop app's library on disk (the same `<userData>/library` folder) without Electron. It doesn't render anything (no image crops), doesn't talk to a running app, and has no state of its own.
