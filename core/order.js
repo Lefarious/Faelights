@@ -4,7 +4,7 @@
 "use strict";
 
 const Order = (() => {
-  // Same bucketing as app.js `ckey`, so S.off keys match for extracts and images
+  // Colour bucket: the reader's S.off keys (app.js uses this one), shared by extracts and images
   const ckey = c => c.map(v => Math.round(v / 24) * 24).join(",");
 
   // result.images, or [] for results scanned before images existed
@@ -28,7 +28,7 @@ const Order = (() => {
     return out;
   }
 
-  // Combined list → topic groups, same keys as app.js `groupsOf` (consecutive items with the same topic).
+  // Combined list → topic groups (consecutive items with the same topic); export.js `groupsOf` is this.
   // A group may hold only images. → [{key, topic, items, entries: n, images: n}]
   function groupItems(items) {
     const gs = [];

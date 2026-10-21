@@ -69,7 +69,7 @@ function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => fl.saveD
 const doc = id => S.db.docs.find(d => d.id === id);
 const lib = id => S.db.libraries.find(l => l.id === id);
 const rgb = c => `${c[0]} ${c[1]} ${c[2]}`;
-const ckey = c => c.map(v => Math.round(v / 24) * 24).join(",");
+const ckey = Order.ckey;
 const plural = (n, a, b) => n + " " + (n === 1 ? a : (b || a + "s"));
 // extracts that come before the first topic (title page, abstract) are grouped under this label
 const PRE_TOPIC = "Abstract";
@@ -573,7 +573,7 @@ async function relink(d) {
 
 /* ---------------- export ---------------- */
 // Text builders live in core/export.js (pure, unit-tested); these names stay for the rest of app.js
-const wrapHl = ExportFmt.wrapHl, entryLines = ExportFmt.entryLines, groupsOf = ExportFmt.groupsOf;
+const wrapHl = ExportFmt.wrapHl, entryLines = ExportFmt.entryLines;
 const exportOpts = d => ({ mode: S.db.settings.mode, libraryName: (lib(d.libraryId) || {}).name || "", preTopic: PRE_TOPIC });
 // images (optional): image boxes to interleave — with `path` they link to a file, without it they become "[Image, p. N]"
 function docText(d, fmt, frontmatter, entries, images) {

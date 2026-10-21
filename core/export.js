@@ -27,23 +27,12 @@ const ExportFmt = (() => {
     return lines;
   }
 
-  // Consecutive items (entries and/or images) sharing a topic form one group
-  const topicKey = t => t ? t.at + "|" + t.title : "none";
-  function groupsOf(items) {
-    const gs = [];
-    for (const it of items) {
-      const key = topicKey(it.topic);
-      let g = gs[gs.length - 1];
-      if (!g || g.key !== key) { g = { key, topic: it.topic, items: [] }; gs.push(g); }
-      g.items.push(it);
-    }
-    return gs;
-  }
-
   /* ---- images ----
      Ordering is shared with the reader (Order.withImages in order.js): an image goes before entry e when img.at <= e.at.
      Export items are the entries themselves plus images tagged kind: "image". */
   const Ord = typeof Order !== "undefined" ? Order : require("./order.js");
+  // Consecutive items (entries and/or images) sharing a topic form one group (exportItems: entries + images tagged kind: "image")
+  const groupsOf = Ord.groupItems;
   const isImage = it => !!it && it.kind === "image";
   function exportItems(entries, images) {
     if (!images || !images.length) return entries;
