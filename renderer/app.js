@@ -488,12 +488,9 @@ function docText(d, fmt, frontmatter, entries, images) {
   return ExportFmt.docText(d, { ...exportOpts(d), fmt, frontmatter, entries, images });
 }
 const docHtml = (d, images) => ExportFmt.docHtml(d, { ...exportOpts(d), images });
-const safeName = s => s.replace(/[\\/:*?"<>|#^[\]]/g, "").replace(/\s+/g, " ").trim().slice(0, 120) || "Untitled";
+const safeName = ExportFmt.safeName;
 // safeName that Windows also accepts as a file/folder name (exports with assets are path-checked in main.js)
-const exportFileBase = s => {
-  const n = safeName(s).replace(/[\u0000-\u001f]/g, "").replace(/[. ]+$/, "") || "Untitled";
-  return /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(n) ? "_" + n : n;
-};
+const exportFileBase = ExportFmt.fileBase;
 const exportImageList = d => (d.result && d.result.images) || [];
 const exportWithImages = d => !!S.db.settings.images && exportImageList(d).length > 0;
 // Render a doc's image boxes for export. html → embedded data URLs; others → PNG assets under `dir`.

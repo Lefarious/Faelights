@@ -169,8 +169,14 @@ figcaption{color:var(--muted);font-size:.85rem;margin-top:.4rem}`;
 
   const FORMATS = [["md", "Markdown"], ["obsidian", "Obsidian"], ["html", "HTML"], ["plain", "Plain text"]];
   const extOf = fmt => fmt === "plain" ? ".txt" : fmt === "html" ? ".html" : ".md";
+  // A title as a file name; fileBase is also accepted by Windows (no control chars, trailing dot/space or reserved name)
+  const safeName = s => s.replace(/[\\/:*?"<>|#^[\]]/g, "").replace(/\s+/g, " ").trim().slice(0, 120) || "Untitled";
+  const fileBase = s => {
+    const n = safeName(s).replace(/[\u0000-\u001f]/g, "").replace(/[. ]+$/, "") || "Untitled";
+    return /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(n) ? "_" + n : n;
+  };
 
-  return { PRE_TOPIC, FORMATS, extOf, wrapHl, entryLines, groupsOf, exportItems, isImage, imageFile, mdLink, imageLines, docText, esc, docHtml };
+  return { PRE_TOPIC, FORMATS, extOf, safeName, fileBase, wrapHl, entryLines, groupsOf, exportItems, isImage, imageFile, mdLink, imageLines, docText, esc, docHtml };
 })();
 
 if (typeof module !== "undefined") module.exports = ExportFmt;

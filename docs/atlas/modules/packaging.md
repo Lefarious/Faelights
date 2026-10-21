@@ -1,5 +1,5 @@
 # Module: packaging
-> Path: package.json, .github/workflows/build.yml · Last synced commit: 796478d · Related features: F-001, F-003, F-007, F-008, F-012, F-018, F-021, F-023, F-024
+> Path: package.json, .github/workflows/build.yml · Last synced commit: 2620815 · Related features: F-001, F-003, F-007, F-008, F-012, F-018, F-021, F-023, F-024
 
 ## Purpose
 This module covers dependency declarations, npm scripts, the electron-builder configuration and the CI release workflow. It decides which files ship inside the installed app.
@@ -12,7 +12,7 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 - CI builds all three when a `v*` tag is pushed (or on manual dispatch) and uploads `.exe/.zip/.dmg/.AppImage` as run artifacts. It does not publish them.
 
 ## Dependencies
-- **Runtime:** `pdfjs-dist` pinned to `3.11.174`, `pdf-lib` pinned to `1.17.1`, `@fontsource/figtree`, `@fontsource/newsreader`, `@fontsource/young-serif`
+- **Runtime:** `pdfjs-dist` pinned to `3.11.174`, `pdf-lib` pinned to `1.17.1`, `@fontsource/figtree`, `@fontsource/newsreader`, `@fontsource/young-serif`, `@modelcontextprotocol/sdk ^1.32` and `zod ^4` (MCP server only; not in `build.files`)
 - **Dev:** `electron ^31`, `electron-builder ^24.13.3`
 - **Used by:** every other module at package time
 
@@ -27,7 +27,7 @@ This module covers dependency declarations, npm scripts, the electron-builder co
 
 ### `package.json`
 - **Role:** manifest and electron-builder config (`build` key)
-- **Key config:** `main: src/main.js`; `bin: {faelights: cli/faelights.js}`; scripts `start`, `cli`, `test`, `dist:*`; `build.files` ships `src/**`, `core/**`, `renderer/**` (not `cli/`), only `pdf.min.js` and `pdf.worker.min.js` from pdfjs-dist, `pdf-lib/dist/pdf-lib.min.js`, and `@fontsource/**`. `npmRebuild: false` (no native modules are shipped; pdfjs-dist's optional `canvas` would otherwise be recompiled for Electron and fail). It registers a `.pdf` file association (role Viewer). Targets: win nsis+zip (`signAndEditExecutable: false`, so `build.afterPack` → `scripts/set-exe-icon.js` writes the icon instead), mac dmg, linux AppImage. Output goes to `dist/`.
+- **Key config:** `main: src/main.js`; `bin: {faelights: cli/faelights.js, faelights-mcp: mcp/server.js}`; scripts `start`, `cli`, `mcp`, `test`, `dist:*`; `build.files` ships `src/**`, `core/**`, `renderer/**` (not `cli/` or `mcp/`), only `pdf.min.js` and `pdf.worker.min.js` from pdfjs-dist, `pdf-lib/dist/pdf-lib.min.js`, and `@fontsource/**`. `npmRebuild: false` (no native modules are shipped; pdfjs-dist's optional `canvas` would otherwise be recompiled for Electron and fail). It registers a `.pdf` file association (role Viewer). Targets: win nsis+zip (`signAndEditExecutable: false`, so `build.afterPack` → `scripts/set-exe-icon.js` writes the icon instead), mac dmg, linux AppImage. Output goes to `dist/`.
 - **Note:** `renderer/**` already ships `splash.html` and `assets/brand/*`, so no config change is needed for them.
 - **Change impact:** a new runtime file under `node_modules` that the renderer references must be added to `build.files`, otherwise it works in `npm start` but is missing from installers.
 

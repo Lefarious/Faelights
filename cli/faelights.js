@@ -612,4 +612,5 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main, Fail };
+// scan … applyDetails: shared with the MCP server's add_pdf / add_by_identifier, so its docs match `faelights add`
+module.exports = { main, Fail, scan, scanned, ADD_FAIL, sameOrigin, fetchDetails, applyDetails };

@@ -108,6 +108,8 @@ else {
     else pendingOpen.push(p);
   });
   app.whenReady().then(() => {
+    // tells the MCP server the library is open here, so it won't write changes this app would overwrite
+    try { store().openSession(); } catch (err) { console.error("session marker failed", err); }
     pendingOpen.push(...pdfArgs(process.argv.slice(1)));
     nativeTheme.themeSource = loadTheme();
     buildAppMenu();
@@ -116,6 +118,7 @@ else {
     app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   });
   app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+  app.on("will-quit", () => store().closeSession());
 }
 
 function buildAppMenu() {
