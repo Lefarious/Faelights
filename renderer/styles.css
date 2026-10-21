@@ -453,3 +453,12 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 /* search scopes (T-022/T-023) */
 #sscope { max-width: 280px; text-overflow: ellipsis; }
 .s-scope { margin: 0 0 14px; }
+
+/* T-021 multi-select */
+.sel-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--accent) 10%, var(--pane)); }
+.sel-bar[hidden] { display: none; }
+.sel-bar .sel-n { flex: 1; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sel-bar .btn { padding: 4px 11px; }
+.doc-row.is-selected .doc, .doc-row.is-selected:hover .doc:not([aria-current="true"]) { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 3px 0 0 var(--accent); border-bottom-color: transparent; }
+.doc-row.is-selected .doc[aria-current="true"] { background: color-mix(in srgb, var(--accent) 22%, var(--sel)); }
+.tag-ask { width: min(360px, 100%); }
