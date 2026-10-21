@@ -433,3 +433,22 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 @keyframes tour-in { from { opacity: 0; transform: translateY(4px); } }
 @media (prefers-color-scheme: dark) { .tour-back { background: rgb(0 0 0 / .55); } }
 @media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-pop { animation: none; } }
+
+/* continue reading (T-020) */
+.r-actions .btn.continue { font-variant-numeric: tabular-nums; }
+
+/* tag colours (T-024) */
+.tagdot.tc { background: var(--tc); }
+.tags-inline span.tc { color: var(--ink); padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--tc) 18%, transparent); }
+.tags-inline span.tc::before { color: var(--tc); opacity: 1; font-weight: 600; }
+.tagedit .tg.tc { background: color-mix(in srgb, var(--tc) 20%, var(--sel)); }
+.tagedit .tg.tc::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--tc); flex: none; }
+
+/* read state (T-026) */
+/* read rows stay readable: lighter title weight, muted ink, and a quiet "Read" pill */
+.doc-row.is-read .doc .t { font-weight: 500; color: color-mix(in srgb, var(--ink) 70%, var(--muted)); }
+.pill.read { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); }
+
+/* search scopes (T-022/T-023) */
+#sscope { max-width: 280px; text-overflow: ellipsis; }
+.s-scope { margin: 0 0 14px; }

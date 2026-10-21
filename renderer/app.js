@@ -34,7 +34,8 @@ const ICON = {
   download: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>',
   undo: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
-  chevron: '<path d="m9 18 6-6-6-6"/>'
+  chevron: '<path d="m9 18 6-6-6-6"/>',
+  read: '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>'
 };
 // Brand artwork with light/dark variants (renderer/assets/brand/<name>-light|dark.svg)
 function brandImg(name, cls) {
@@ -52,7 +53,9 @@ const S = {
   docId: null,
   docQuery: "",
   searchQuery: "",
-  searchLib: "all",
+  searchLib: "all",        // search scope: "all", "doc" (searchDoc) or a library id
+  searchDoc: null,         // the PDF the reader showed when search opened ("This PDF")
+  searchPicked: false,     // the user chose a scope this session (select or "Search this library")
   off: new Set(),          // colour keys hidden in the reader
   busy: null,              // {label, done, total}
   renaming: null,          // library id being renamed
@@ -141,7 +144,7 @@ const summary = Order.summary;
 // opts.title: the landing page's title, used when the PDF has none of its own.
 async function addImported(info, target, opts = {}) {
   const d = { id: info.id, libraryId: target, title: "", fileName: info.fileName, sourcePath: opts.sample ? null : info.sourcePath,
-    storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [], starred: false, scannedMtime: info.mtime };
+    storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [], starred: false, read: false, lastPage: 0, scannedMtime: info.mtime };
   if (opts.origin) d.origin = opts.origin;
   const { bytes } = await fl.readPdf({ ...d, sourcePath: null });
   const { title, meta, result } = await analyzeBytes(bytes, (pg, n) => { if (S.busy) { S.busy.page = `page ${pg} of ${n}`; renderProgress(); } });
@@ -216,12 +219,32 @@ async function deleteLibrary(id) {
 // at / opts: see openMenu()
 async function libraryMenu(id, at, opts) {
   const l = lib(id), cur = S.view.kind === "library" && S.view.id === id;
-  const items = [{ id: "rename", label: "Rename", icon: "pen" }, { id: "export", label: "Export to folder…", icon: "export", hint: cur ? keyHint("E", true) : "" }];
+  const items = [{ id: "search", label: "Search this library", icon: "search" }, { id: "rename", label: "Rename", icon: "pen" }, { id: "export", label: "Export to folder…", icon: "export", hint: cur ? keyHint("E", true) : "" }];
   if (!l.system) items.push({ type: "separator" }, { id: "delete", label: "Delete library…", icon: "trash", danger: true });
   const r = await openMenu(at || document.activeElement, items, { label: l.name, ...opts });
+  if (r === "search") { S.searchPicked = true; go({ kind: "search", scope: id }); }
   if (r === "rename") { S.renaming = id; renderSide(); }
   if (r === "export") exportLibrary(id);
   if (r === "delete") deleteLibrary(id);
+}
+
+/* ---------------- tag colours ---------------- */
+// Mid-tone hues: readable as dots and tints on both the light and dark themes
+const TAG_COLOURS = [["Red", "#d64550"], ["Orange", "#e07b39"], ["Yellow", "#c9a227"], ["Green", "#3a9d5d"], ["Teal", "#2a9d9f"], ["Blue", "#3b7dd8"], ["Purple", "#8a5cd6"], ["Pink", "#d0559b"]];
+// Paints a tag's dot / chip with its colour (--tc); uncoloured tags are left as they are
+function tint(node, tag) {
+  const c = Library.tagColour(S.db, tag);
+  if (c) { node.classList.add("tc"); node.style.setProperty("--tc", c); }
+  return node;
+}
+// at / opts: see openMenu()
+async function tagMenu(tag, at, opts) {
+  const cur = Library.tagColour(S.db, tag);
+  const items = [{ type: "heading", label: "Colour" }, ...TAG_COLOURS.map(([n, c]) => ({ id: c, label: n, checked: cur === c })),
+    { type: "separator" }, { id: "none", label: "No colour", checked: !cur }];
+  const r = await openMenu(at || document.activeElement, items, { label: "Tag " + tag, ...opts });
+  if (!r) return;
+  Library.setTagColour(S.db, tag, r === "none" ? "" : r); save(); renderAll();
 }
 
 /* ---------------- action menu ---------------- */
@@ -384,6 +407,7 @@ async function docMenu(d, at, opts) {
     { type: "separator" },
     { id: "star", label: d.starred ? "Remove star" : "Star", icon: "star" },
     { id: "mine", label: d.mine ? "Remove from My publications" : "Mark as my publication", icon: "pub" },
+    { id: "read", label: d.read ? "Mark as unread" : "Mark as read", icon: "read" },
     { label: "Move to", icon: "move", submenu: libs },
     { type: "separator" },
     { id: "export", label: "Export as Markdown…", icon: "export", hint: cur ? keyHint("E") : "" },
@@ -404,6 +428,7 @@ async function docMenu(d, at, opts) {
   if (r === "relink") relink(d);
   if (r === "star") { Library.setStar(d); save(); renderAll(); }
   if (r === "mine") setMine(d, !d.mine);
+  if (r === "read") setRead(d);
   if (r.startsWith("move:")) moveDoc(d, r.slice(5));
   if (r === "export") exportDoc(d);
   if (r === "copy") copyText(docText(d, S.db.settings.fmt, false), "All extracts");
@@ -415,6 +440,13 @@ function setMine(d, on) {
   d.mine = on; save(); renderAll();
   toast(on ? "Added to My publications" : "Removed from My publications");
 }
+// Read state (d.read); on omitted toggles. Says so when the list's read filter now hides the PDF.
+function setRead(d, on) {
+  Library.setRead(d, on); save(); renderAll();
+  const f = readFilter();
+  toast((d.read ? "Marked as read" : "Marked as unread") + (f !== "all" && (f === "read") !== d.read ? " · hidden by the filter" : ""));
+}
+const readFilter = () => S.db.settings.read || "all";
 function process_platform() { return navigator.userAgent.includes("Mac") ? "darwin" : "other"; }
 function moveDoc(d, libId) {
   if (!Library.moveDoc(d, libId)) return;
@@ -709,7 +741,8 @@ function renderSide() {
     sc.append(Object.assign(el("h3"), { textContent: "Tags" }));
     const tl = el("ul", "nav");
     for (const [t, n] of [...tags].sort((a, b) => a[0].localeCompare(b[0])))
-      tl.append(navItem({ icon: el("i", "tagdot"), name: t, count: n, current: S.view.kind === "tag" && S.view.tag === t, onClick: () => go({ kind: "tag", tag: t }) }));
+      tl.append(navItem({ icon: tint(el("i", "tagdot"), t), name: t, count: n, current: S.view.kind === "tag" && S.view.tag === t, onClick: () => go({ kind: "tag", tag: t }),
+        onMenu: (at, o) => tagMenu(t, at, o) }));
     sc.append(tl);
   }
   side.append(sc);
@@ -734,7 +767,20 @@ function themeSwitch() {
   return seg;
 }
 
+// Scope on entering search: an explicit one wins; else, from a library view, that library unless
+// the user already picked a scope this session (sidebar, menu, or Ctrl+F with no PDF open); else
+// null = keep the last scope. Pure (tested).
+function entryScope(from, scope, picked) { return scope || (!picked && from.kind === "library" ? from.id : null); }
+// The PDF the reader is showing, if any
+function readerDocId() { return S.view.kind !== "search" && S.docId && visibleDocs().some(d => d.id === S.docId) ? S.docId : null; }
 function go(view) {
+  // entering search pins "This PDF" to the reader's PDF; view.scope (optional) sets the scope
+  if (view.kind === "search") {
+    const entering = S.view.kind !== "search";
+    if (entering) S.searchDoc = readerDocId();
+    const sc = entering ? entryScope(S.view, view.scope, S.searchPicked) : view.scope;
+    if (sc) S.searchLib = sc;
+  }
   S.view = view; S.renaming = null;
   if (view.kind !== "search") {
     const docs = visibleDocs();
@@ -761,6 +807,8 @@ function visibleDocs() {
   if (v.kind === "tag") docs = docs.filter(d => (d.tags || []).includes(v.tag));
   const q = S.docQuery.trim().toLowerCase();
   if (q) docs = docs.filter(d => (d.title + " " + d.fileName + " " + (d.tags || []).join(" ")).toLowerCase().includes(q));
+  const rf = readFilter();
+  if (rf !== "all") docs = docs.filter(d => !!d.read === (rf === "read"));
   const sort = S.db.settings.sort;
   docs = [...docs].sort(sort === "title" ? (a, b) => a.title.localeCompare(b.title)
     : sort === "count" ? (a, b) => (b.count || 0) - (a.count || 0)
@@ -792,7 +840,10 @@ function renderList() {
   const sort = el("select"); sort.id = "sort"; sort.setAttribute("aria-label", "Sort PDFs");
   for (const [v, t] of [["added", "Newest"], ["title", "Title"], ["count", "Most marks"]]) { const o = el("option", null, t); o.value = v; sort.append(o); }
   sort.value = S.db.settings.sort; sort.onchange = () => { S.db.settings.sort = sort.value; save(); renderDocs(); };
-  tools.append(q, sort); head.append(tools);
+  const rd = el("select"); rd.id = "readf"; rd.setAttribute("aria-label", "Show read or unread PDFs");
+  for (const [v, t] of [["all", "All"], ["unread", "Unread"], ["read", "Read"]]) { const o = el("option", null, t); o.value = v; rd.append(o); }
+  rd.value = readFilter(); rd.onchange = () => { S.db.settings.read = rd.value; save(); renderAll(); };
+  tools.append(q, rd, sort); head.append(tools);
   list.append(head);
   if (S.busy) {
     const p = el("div", "progress"); p.id = "progress"; p.append(el("span")); const m = el("div", "meter"); m.append(el("i")); p.append(m); list.append(p); renderProgress();
@@ -806,6 +857,12 @@ function renderDocs() {
   if (!docs.length) {
     const e = el("div", "list-empty");
     if (S.docQuery) e.append(el("b", null, "No matches"), el("span", null, "No PDF titles or tags here contain that text."));
+    else if (readFilter() !== "all") {
+      // the read filter hides everything here
+      const un = readFilter() === "unread";
+      e.append(el("b", null, un ? "No unread PDFs" : "No read PDFs"), el("span", null, un ? "Everything here is marked as read." : "Mark a PDF as read from its ⋯ menu or the reader."));
+      const a = btn("", "Show all PDFs"); a.onclick = () => { S.db.settings.read = "all"; save(); renderAll(); }; e.append(a);
+    }
     else if (S.view.kind === "library") {
       e.append(el("b", null, "Nothing here yet"), el("span", null, "Drag PDFs onto this window, or add them from your computer. Highlights are read straight away."));
       const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; e.append(a, addIdBtn()); e.dataset.tour = "start";
@@ -817,7 +874,7 @@ function renderDocs() {
   }
   for (const d of docs) {
     // wrapper holds the card button and its ⋯ sibling (buttons can't nest)
-    const row = el("div", "doc-row" + (d.id === S.docId ? " is-current" : ""));
+    const row = el("div", "doc-row" + (d.id === S.docId ? " is-current" : "") + (d.read ? " is-read" : ""));
     const b = el("button", "doc"); b.setAttribute("aria-current", d.id === S.docId); b.draggable = true;
     const t = el("div", "t"); t.append(el("span", null, d.title)); if (d.starred) { const s = svg(ICON.star); s.classList.add("star"); s.style.width = "13px"; s.setAttribute("fill", "currentColor"); t.append(s); }
     const m = el("div", "m");
@@ -827,8 +884,9 @@ function renderDocs() {
     if (d.sourceMissing) m.append(el("span", "pill warn", "Original moved"));
     else if (d.stale) m.append(el("span", "pill", "Changed"));
     if (d.annotated) m.append(el("span", "pill", "Annotated"));
+    if (d.read) m.append(el("span", "pill read", "Read"));
     b.append(t, m);
-    if (d.tags && d.tags.length) { const tg = el("div", "tags-inline"); for (const x of d.tags) tg.append(el("span", null, x)); b.append(tg); }
+    if (d.tags && d.tags.length) { const tg = el("div", "tags-inline"); for (const x of d.tags) tg.append(tint(el("span", null, x), x)); b.append(tg); }
     b.onclick = () => openDoc(d.id);
     b.ondragstart = e => { e.dataTransfer.setData("application/x-faelights-doc", d.id); e.dataTransfer.effectAllowed = "move"; };
     const mb = moreBtn("Actions for " + d.title); mb.onclick = () => docMenu(d, mb);
@@ -953,6 +1011,8 @@ function renderReader() {
   const acts = el("div", "r-actions");
   const ob = btn("icon", null, "open", "Open PDF in your PDF app"); ob.onclick = async () => { const e = await fl.openPdf(d); if (e !== true) toast("Couldn't open the PDF"); };
   const mb = btn("icon", null, "more", "More actions"); mb.onclick = () => docMenu(d);
+  // continue reading (T-020): back to the page the viewer was last on
+  if (d.lastPage > 1) { const kb = btn("continue", "Continue · p. " + d.lastPage, "view", "Continue reading at page " + d.lastPage); kb.onclick = () => annotate(d, d.lastPage); acts.append(kb); }
   acts.append(ob, mb); tt.append(acts); head.append(tt);
 
   const meta = el("div", "r-meta");
@@ -971,9 +1031,12 @@ function renderReader() {
   const mine = el("button", "lib"); mine.append(svg(ICON.pub), document.createTextNode(d.mine ? "My publication" : "Mark as mine"));
   mine.querySelector("svg").style.width = "13px"; mine.setAttribute("aria-pressed", !!d.mine);
   mine.title = d.mine ? "Remove from My publications" : "Mark as my publication"; mine.onclick = () => setMine(d, !d.mine); meta.append(mine);
+  const rb = el("button", "lib"); rb.append(svg(ICON.read), document.createTextNode(d.read ? "Read" : "Mark as read"));
+  rb.querySelector("svg").style.width = "13px"; rb.setAttribute("aria-pressed", !!d.read);
+  rb.title = d.read ? "Mark as unread" : "Mark as read"; rb.onclick = () => setRead(d); meta.append(rb);
   const tools = el("div", "r-tools");
   const tagedit = el("div", "tagedit");
-  for (const t of d.tags) { const g = el("span", "tg", t); const x = el("button", null, "×"); x.title = "Remove tag"; x.setAttribute("aria-label", "Remove tag " + t); x.onclick = () => { Library.removeTag(d, t); save(); renderAll(); }; g.append(x); tagedit.append(g); }
+  for (const t of d.tags) { const g = tint(el("span", "tg", t), t); const x = el("button", null, "×"); x.title = "Remove tag"; x.setAttribute("aria-label", "Remove tag " + t); x.onclick = () => { Library.removeTag(d, t); save(); renderAll(); }; g.append(x); tagedit.append(g); }
   const ti = el("input"); ti.id = "tagin"; ti.placeholder = "+ tag"; ti.setAttribute("aria-label", "Add tag");
   const known = [...new Set(S.db.docs.flatMap(x => x.tags))]; if (known.length) { const dl = el("datalist"); dl.id = "tagsdl"; for (const k of known) { const o = el("option"); o.value = k; dl.append(o); } tagedit.append(dl); ti.setAttribute("list", "tagsdl"); }
   ti.onkeydown = e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); if (Library.addTag(d, ti.value)) { save(); renderAll(); setTimeout(() => $("tagin")?.focus(), 0); } } };
@@ -1140,13 +1203,25 @@ function renderBlank(r) {
     const a = btn("primary", "Add PDFs", "add"); a.onclick = chooseAndAdd; const s = btn("", "Try a sample PDF"); s.onclick = addSample; row.append(a, addIdBtn(), s); b.append(row);
   } else b.append(el("h2", null, "Pick a PDF"), el("p", null, "Choose a PDF from the list to read its highlights."));
   const k = el("div", "keys"); const mod = process_platform() === "darwin" ? "⌘" : "Ctrl";
-  for (const [key, what] of [[`${mod} O`, "Add PDFs"], [`${mod} ⇧ O`, "Add by identifier"],[`${mod} F`, "Search all highlights"], [`${mod} T`, "Full sentence / highlights only"], [`${mod} E`, "Export current PDF"], [`${mod} ⇧ N`, "New library"], [`${mod} B`, "Show / hide sidebar"]]) {
+  for (const [key, what] of [[`${mod} O`, "Add PDFs"], [`${mod} ⇧ O`, "Add by identifier"],[`${mod} F`, "Search highlights"], [`${mod} T`, "Full sentence / highlights only"], [`${mod} E`, "Export current PDF"], [`${mod} ⇧ N`, "New library"], [`${mod} B`, "Show / hide sidebar"]]) {
     const kk = el("span"); for (const part of key.split(" ")) { kk.append(el("kbd", null, part), document.createTextNode(" ")); } k.append(kk, el("span", null, what));
   }
   b.append(k); r.append(b);
 }
 
 /* ---------------- rendering: search ---------------- */
+// Which docs a scope covers: "all", "doc" (docId only) or a library id. Pure (tested).
+function searchDocs(db, scope, docId) {
+  return db.docs.filter(d => d.result && (scope === "all" || (scope === "doc" ? d.id === docId : d.libraryId === scope)));
+}
+// A scope whose PDF or library is gone falls back to "all". Pure (tested).
+function validScope(db, scope, docId) {
+  const ok = scope === "all" || (scope === "doc" ? db.docs.some(d => d.id === docId) : db.libraries.some(l => l.id === scope));
+  return ok ? scope : "all";
+}
+function searchScope() { return S.searchLib = validScope(S.db, S.searchLib, S.searchDoc); }
+const clip = (s, n) => s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
+const scopeLabel = sc => sc === "all" ? "all libraries" : sc === "doc" ? `“${clip(doc(S.searchDoc).title, 60)}”` : lib(sc).name;
 function renderSearch(r) {
   r.classList.toggle("only", S.db.settings.mode === "only");
   const head = el("div", "s-head");
@@ -1154,10 +1229,12 @@ function renderSearch(r) {
   const row = el("div", "s-row");
   const q = el("input", "search"); q.id = "sq"; q.placeholder = "Words in a highlight, sentence or note"; q.value = S.searchQuery; q.setAttribute("aria-label", "Search highlights");
   q.oninput = () => { S.searchQuery = q.value; renderResults(); };
-  const scope = el("select", "btn"); scope.id = "sscope"; scope.setAttribute("aria-label", "Library to search");
+  const scope = el("select", "btn"); scope.id = "sscope"; scope.setAttribute("aria-label", "Where to search");
   const o = el("option", null, "All libraries"); o.value = "all"; scope.append(o);
+  const sd = S.searchDoc && doc(S.searchDoc);
+  if (sd) { const x = el("option", null, "This PDF — " + clip(sd.title, 40)); x.value = "doc"; x.title = sd.title; scope.append(x); }
   for (const l of S.db.libraries) { const x = el("option", null, l.name); x.value = l.id; scope.append(x); }
-  scope.value = S.searchLib; scope.onchange = () => { S.searchLib = scope.value; renderResults(); };
+  scope.value = searchScope(); scope.onchange = () => { S.searchLib = scope.value; S.searchPicked = true; renderResults(); };
   const seg = el("div", "seg");
   for (const [m, label] of [["full", "Full sentence"], ["only", "Highlights only"]]) { const b = el("button", null, label); b.setAttribute("aria-pressed", S.db.settings.mode === m); b.onclick = () => { S.db.settings.mode = m; save(); renderReader(); }; seg.append(b); }
   row.append(q, scope, seg); head.append(row);
@@ -1167,12 +1244,14 @@ function renderSearch(r) {
 function renderResults() {
   const body = $("sbody"); if (!body) return; body.replaceChildren();
   const terms = termsOf(S.searchQuery);
-  const docs = S.db.docs.filter(d => d.result && (S.searchLib === "all" || d.libraryId === S.searchLib));
+  const sc = searchScope(), docs = searchDocs(S.db, sc, S.searchDoc);
   if (!terms.length) {
     const total = docs.reduce((n, d) => n + (d.count || 0), 0);
-    const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, `Type to search ${plural(total, "highlight")} across ${plural(docs.length, "PDF")}. Every word must appear in the sentence, the highlight or its note.`)); body.append(b); return;
+    const where = sc === "all" ? `across ${plural(docs.length, "PDF")}` : `in ${scopeLabel(sc)} (${plural(docs.length, "PDF")})`;
+    const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, `Type to search ${plural(total, "highlight")} ${where}. Every word must appear in the sentence, the highlight or its note.`)); body.append(b); return;
   }
   let hits = 0;
+  const sum = el("p", "crumb s-scope"); body.append(sum);   // filled once hits are counted
   for (const d of docs) {
     const matches = d.result.entries.filter(e => Library.entryMatches(e, terms));
     if (!matches.length) continue;
@@ -1189,7 +1268,8 @@ function renderResults() {
     }
     body.append(sec);
   }
-  if (!hits) { const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, "No highlights contain all of those words.")); body.append(b); }
+  sum.textContent = `${plural(hits, "match", "matches")} in ${scopeLabel(sc)}`;
+  if (!hits) { sum.remove(); const b = el("div", "blank"); b.style.margin = "0"; b.append(el("p", null, `No highlights in ${scopeLabel(sc)} contain all of those words.`)); body.append(b); }
 }
 
 function renderAll() { renderSide(); renderList(); renderReader(); }
@@ -1437,6 +1517,16 @@ addEventListener("paste", e => {
   fl.parseIds(t).then(xs => { if (looksLikeIds(xs)) openAddId(t.trim()); });
 });
 
+// Ctrl/⌘+F arrives as the "search" menu command (src/main.js accelerator). A press typed in a field,
+// or while the viewer, a dialog or the tour owns keys, is swallowed here and the command ignored.
+let findBlocked = 0;
+addEventListener("keydown", e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "f") return;
+  if (addDlg || Tour.isOpen() || Annot.isOpen() || e.target.closest?.("input, select, textarea, [contenteditable]")) { e.preventDefault(); findBlocked = performance.now(); }
+}, true);
+// Ctrl/⌘+F with a PDF in the reader searches just that PDF; otherwise the last scope
+function findCmd() { if (performance.now() - findBlocked > 500) go({ kind: "search", scope: readerDocId() ? "doc" : undefined }); }
+
 addEventListener("keydown", e => {
   if (addDlg) return;   // the add-from-link dialog handles its own keys
   if (e.target.matches("input, select, textarea")) return;
@@ -1457,7 +1547,7 @@ fl.onMenu(ch => {
   if (ch === "export-doc") { if (d) exportDoc(d); else toast("Open a PDF first"); }
   if (ch === "export-library") exportLibrary(S.view.kind === "library" ? S.view.id : (d ? d.libraryId : "inbox"));
   if (ch === "rescan-all") rescanAll();
-  if (ch === "search") go({ kind: "search" });
+  if (ch === "search") findCmd();
   if (ch === "toggle-mode") { S.db.settings.mode = S.db.settings.mode === "full" ? "only" : "full"; save(); renderReader(); }
   if (ch.startsWith("pane:")) togglePane(ch.slice(5));
   if (ch === "layout-reset") resetLayout();
