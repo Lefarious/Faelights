@@ -452,3 +452,7 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 /* search scopes (T-022/T-023) */
 #sscope { max-width: 280px; text-overflow: ellipsis; }
 .s-scope { margin: 0 0 14px; }
+
+/* T-028 clips: a highlight over no text, shown as a crop of the area it covers */
+.fig.clip .fig-img { border: 2px solid rgb(var(--mc) / .8); border-left-width: 4px; box-shadow: 0 0 0 3px rgb(var(--mc) / .18); }
+.fig-kind { font-size: 12px; color: var(--muted); padding-top: 2px; }
