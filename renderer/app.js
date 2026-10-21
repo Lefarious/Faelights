@@ -141,7 +141,7 @@ const summary = Order.summary;
 // opts.title: the landing page's title, used when the PDF has none of its own.
 async function addImported(info, target, opts = {}) {
   const d = { id: info.id, libraryId: target, title: "", fileName: info.fileName, sourcePath: opts.sample ? null : info.sourcePath,
-    storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [], starred: false, scannedMtime: info.mtime };
+    storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [], starred: false, read: false, lastPage: 0, scannedMtime: info.mtime };
   if (opts.origin) d.origin = opts.origin;
   const { bytes } = await fl.readPdf({ ...d, sourcePath: null });
   const { title, meta, result } = await analyzeBytes(bytes, (pg, n) => { if (S.busy) { S.busy.page = `page ${pg} of ${n}`; renderProgress(); } });

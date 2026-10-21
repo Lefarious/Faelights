@@ -17,14 +17,21 @@ const Library = (() => {
     version: 1,
     libraries: [{ id: INBOX, name: "Inbox", createdAt: Date.now(), system: true }],
     docs: [],
+    tagColours: {},
     settings: { mode: "full", fmt: "md", sort: "added" }
   });
 
-  // Fill in what older or hand-edited files may lack: the Inbox, default settings, a docs list
+  // Fill in what older or hand-edited files may lack: the Inbox, default settings, a docs list, tag colours,
+  // and per doc the read flag and the viewer's last page (0 = never opened)
   function normalize(db) {
     if (!db.libraries?.some(l => l.id === INBOX)) db.libraries.unshift(EMPTY_DB().libraries[0]);
     db.settings = { ...EMPTY_DB().settings, ...(db.settings || {}) };
     db.docs = db.docs || [];
+    db.tagColours = db.tagColours || {};
+    for (const d of db.docs) {
+      if (typeof d.read !== "boolean") d.read = false;
+      if (!Number.isInteger(d.lastPage) || d.lastPage < 0) d.lastPage = 0;
+    }
     return db;
   }
 
@@ -81,6 +88,29 @@ const Library = (() => {
     d.starred = on === undefined ? !d.starred : !!on;
     return d.starred;
   }
+
+  // on omitted → toggle. → the new state
+  function setRead(d, on) {
+    d.read = on === undefined ? !d.read : !!on;
+    return d.read;
+  }
+  // The page (1-based) the viewer was last on; anything else resets it to 0. → changed?
+  function setLastPage(d, page) {
+    const p = Number.isInteger(page) && page > 0 ? page : 0;
+    if (d.lastPage === p) return false;
+    d.lastPage = p;
+    return true;
+  }
+  // Tag colours are "#rrggbb", keyed by tag; an empty or invalid colour clears it. → the colour kept, or ""
+  function setTagColour(db, tag, colour) {
+    const t = cleanTag(tag);
+    db.tagColours = db.tagColours || {};
+    const c = /^#[0-9a-f]{6}$/i.test(colour || "") ? colour.toLowerCase() : "";
+    if (!t) return "";
+    if (c) db.tagColours[t] = c; else delete db.tagColours[t];
+    return c;
+  }
+  const tagColour = (db, tag) => (db.tagColours && db.tagColours[tag]) || "";
 
   // Search highlights: every word must appear in the sentence, a highlight, its note or the topic path
   const searchTerms = q => String(q || "").toLowerCase().split(/\s+/).filter(Boolean);
@@ -244,7 +274,7 @@ const Library = (() => {
   }
 
   return { APP_NAME, INBOX, EMPTY_DB, normalize, findDoc, findLibrary, docsIn, addLibrary, renameLibrary, removeLibrary, moveDoc,
-    cleanTag, addTag, removeTag, tagCounts, setStar, searchTerms, entryMatches, userDataDir, at };
+    cleanTag, addTag, removeTag, tagCounts, setStar, setRead, setLastPage, setTagColour, tagColour, searchTerms, entryMatches, userDataDir, at };
 })();
 
 if (typeof module !== "undefined") module.exports = Library;
