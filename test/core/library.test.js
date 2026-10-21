@@ -185,3 +185,35 @@ test("checkSources flags missing and changed originals", async () => {
   await s.checkSources(db);
   assert.deepEqual(db.docs.map(d => [d.stale, d.sourceMissing]), [[false, false], [true, false], [false, false], [false, true], [false, false]]);
 });
+
+test("update with wait: 0 fails at once with ELOCKED while another process holds the lock", async () => {
+  const s = L.at(tmpDir());
+  await s.saveDb(L.EMPTY_DB());
+  fs.writeFileSync(s.paths.lock, "{}");
+  const t0 = Date.now();
+  await assert.rejects(s.update(db => { db.x = 1; }, { wait: 0 }), e => e.code === "ELOCKED");
+  assert.ok(Date.now() - t0 < 1000);
+  fs.rmSync(s.paths.lock);
+  await s.update(db => { db.x = 1; }, { wait: 0 });
+  assert.equal((await s.loadDb()).x, 1);
+});
+
+test("app session marker: written and removed by its own process, ignored once that process is gone", async () => {
+  const s = L.at(tmpDir());
+  s.openSession();
+  assert.ok(fs.existsSync(s.paths.session));
+  assert.equal(s.appSession(), null, "this process doesn't block itself");
+  s.closeSession();
+  assert.equal(fs.existsSync(s.paths.session), false);
+
+  const { spawn } = require("node:child_process");
+  const app = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  try {
+    fs.writeFileSync(s.paths.session, JSON.stringify({ pid: app.pid, at: Date.now() }));
+    assert.equal(s.appSession().pid, app.pid);
+    s.closeSession();   // not ours: left in place
+    assert.ok(fs.existsSync(s.paths.session));
+  } finally { app.kill(); }
+  await new Promise(r => app.once("exit", r));
+  assert.equal(s.appSession(), null);
+});

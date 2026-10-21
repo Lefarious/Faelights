@@ -611,4 +611,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main, Fail };
+module.exports = { main, Fail, scan, scanned };   // scan/scanned: shared with the MCP server's add_pdf

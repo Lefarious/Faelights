@@ -54,6 +54,47 @@ npm run cli -- --help                         # every command: text, info, libra
 
 `npm link` adds a `faelights` command instead. Close Faelights before commands that change the library: the open app saves its own copy and would overwrite them.
 
+## MCP server (Claude Code, Claude Desktop)
+
+`mcp/server.js` lets an MCP client such as Claude read your library over stdio. Run `npm install` in the checkout first.
+
+| Tool | What it does |
+|---|---|
+| `list_libraries` | Libraries and how many PDFs each holds |
+| `list_pdfs` | PDFs with ids, tags, stars and highlight counts (filter by `library`, `tag`, `starred`) |
+| `get_extracts` | One PDF's highlights grouped by topic, with pages, colours and comments (`mode` full or highlights, filter by `colours` or `topic`) |
+| `search` | Highlights containing every word, in the `sentence`, `highlight`, `note` or `all` |
+| `export_pdf` | One PDF as Markdown, Obsidian or plain text (returns the text) |
+| `export_library` | Writes a library to a folder inside `out_dir`, one file per PDF |
+| `add_pdf`, `tag_pdf`, `star_pdf` | The only tools that change the library |
+
+The resource `faelights://pdf/{id}` returns a PDF's extracts as Markdown.
+
+The server uses the app's own data folder: `%APPDATA%\Faelights` on Windows, `~/Library/Application Support/Faelights` on macOS and `~/.config/Faelights` on Linux. Set `FAELIGHTS_DATA_DIR` to use another one. While the desktop app is open, the three write tools refuse with `library_in_use`, because the app would overwrite their changes when it next saves. Reading works either way.
+
+**Claude Code:**
+
+```bash
+claude mcp add faelights --scope user -- node C:/Users/User/Downloads/faelights-desktop/mcp/server.js
+```
+
+**Claude Desktop:** open *Settings → Developer → Edit Config* (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS), add the server, and restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "faelights": {
+      "command": "node",
+      "args": ["C:/Users/User/Downloads/faelights-desktop/mcp/server.js"]
+    }
+  }
+}
+```
+
+To use another library, add `"env": { "FAELIGHTS_DATA_DIR": "D:/Notes/Faelights" }` to the server entry. With Claude Code, pass `-e FAELIGHTS_DATA_DIR=...` before the `--`.
+
+To try the tools by hand, run `npx @modelcontextprotocol/inspector node mcp/server.js`. `npm link` also adds a `faelights-mcp` command.
+
 ## Build installers
 
 ```bash

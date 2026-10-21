@@ -45,6 +45,7 @@ const Extract = (() => {
     const lines = [];       // {start, end, size, page, y}
     const annots = [];      // collected markup annotations
     const imgs = [];        // image boxes (Square annotations)
+    const textless = [];    // pages with no text layer (scanned images)
     const sizeHist = new Map();
 
     let last = null;        // {page, y, size, endX, hasEOL}
@@ -53,6 +54,7 @@ const Extract = (() => {
     for (let p = 1; p <= pdf.numPages; p++) {
       const page = await pdf.getPage(p);
       const [tc, rawAnn] = await Promise.all([page.getTextContent(), page.getAnnotations()]);
+      if (!tc.items.some(it => it.str && it.str.trim())) textless.push(p);
       const pageAnn = [];
       let sq = 0;
       for (const a of rawAnn) {
@@ -232,7 +234,7 @@ const Extract = (() => {
       at: im.at, topic: T.topicAt(topics, im.at) }));
 
     const looseOut = loose.map(a => ({ page: a.page, color: a.color, type: a.type, comment: a.comment }));
-    return { v: ANALYZER_VERSION, entries: out, loose: looseOut, topics, topicSource, pages: pdf.numPages, count: annots.length, images };
+    return { v: ANALYZER_VERSION, entries: out, loose: looseOut, topics, topicSource, pages: pdf.numPages, count: annots.length, images, textless };
   }
 
   // Where an image box sits in reading order: first line on its page below the box top that overlaps it
