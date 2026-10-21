@@ -138,7 +138,7 @@ function buildAppMenu() {
     ] },
     { role: "editMenu" },
     { label: "View", submenu: [
-      { label: "Search All Highlights", accelerator: "CmdOrCtrl+F", click: send("search") },
+      { label: "Search Highlights", accelerator: "CmdOrCtrl+F", click: send("search") },
       { label: "Toggle Full Sentence / Highlights Only", accelerator: "CmdOrCtrl+T", click: send("toggle-mode") },
       { type: "separator" },
       { label: "Show / Hide Sidebar", accelerator: "CmdOrCtrl+B", click: send("pane:side") },
