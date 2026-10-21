@@ -1,10 +1,10 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-21 · **Sprint 6 open** (integration `feature/s6-integration`, worktree `../fl-s6`) · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
+_Last updated: 2026-10-21 · **Sprint 6 closed** (merged to local main 9ff7a30, 168/168, tag `sprint-6-end`; release v1.4.0) · next: Sprint 7 · Sprint 5 closed (merged to local main 20a8e58, 156/156, tag `sprint-5-end`; pushed 2026-10-21 7ead2d6..3cbd93e, CI run 39585050117 green) · next: Sprint 6 · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
-- Todo ids: `T-NNN`, next free: T-037 (T-016 is the MCP server on `feature/T-016-mcp-server`) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
+- Todo ids: `T-NNN`, next free: T-039 (T-016 is the MCP server on `feature/T-016-mcp-server`) · types/branch prefixes: `feature/` `enhancement/` `bug/` `polish/` → `<type>/<todo-id>-<slug>`
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
@@ -81,11 +81,11 @@ Polish (reported by user):
 | T-019 extract-sentence-split (bug · exempt) | Extracts sometimes don't separate, even across " . ". Accept: a fixture with the failing case splits into separate extracts; existing snapshots unchanged or updated knowingly (ANALYZER_VERSION bump if results change) | core/extract.js, test/core/ | — | S | 1 | merged 20a8e58 (Sprint 5, F-025) |
 | T-002 offline-vs-unreachable (bug · exempt) | (proposal, pulled into Sprint 5) Tell "no connection" apart from "couldn't reach that site" | core/fetch.js, renderer/app.js (add dialog messages) | — | S | 1 | merged 20a8e58 (Sprint 5, F-025) |
 | T-008 pmc-fallback (bug · exempt) | (proposal, pulled into Sprint 5) PMC bot-check page: fall back to Europe PMC / Unpaywall for PMCID/PMID | core/fetch.js, test/ | — | S | 2 | merged 20a8e58 (Sprint 5, F-025) |
-| T-020 continue-reading (enhancement) | Viewer remembers the last page per PDF; "Continue reading" opens it there. Accept: close at p. 12, reopen → p. 12; new PDFs open at p. 1 | renderer/annotator.js, renderer/app.js (viewer open), core/library.js (`d.lastPage`) | library-doc-fields scaffold | S | 1 | planned · Sprint 6 |
-| T-022 search-current-pdf (enhancement) | Search scoped to the open PDF's extracts (sentence/highlight/note). Accept: a word in two PDFs matches only the open one | renderer/app.js (search panel) | — | S | 1 | planned · Sprint 6 |
-| T-023 search-current-library (enhancement) | Search scoped to the selected library. Accept: matches limited to that library's PDFs | renderer/app.js (search panel), core/library.js | T-022 (same panel) | S | 1 | planned · Sprint 6 |
-| T-024 tag-colours (enhancement) | Assign a colour to each tag; shown on tag chips in the library and on PDFs. Accept: colour persists across restart; CLI/MCP unaffected | renderer/app.js (tags), core/library.js (`db.tagColours`), renderer/styles.css | library-doc-fields scaffold | S | 2 | planned · Sprint 6 |
-| T-026 mark-as-read (enhancement) | Toggle read/unread per PDF; read PDFs look distinct in the list and can be filtered. Accept: toggle from item menu, persists | renderer/app.js (doc list, item menu), core/library.js (`d.read`) | library-doc-fields scaffold | S | 2 | planned · Sprint 6 |
+| T-020 continue-reading (enhancement) | Viewer remembers the last page per PDF; "Continue reading" opens it there. Accept: close at p. 12, reopen → p. 12; new PDFs open at p. 1 | renderer/annotator.js, renderer/app.js (viewer open), core/library.js (`d.lastPage`) | library-doc-fields scaffold | S | 1 | merged 9ff7a30 (Sprint 6, F-026) |
+| T-022 search-current-pdf (enhancement) | Search scoped to the open PDF's extracts (sentence/highlight/note). Accept: a word in two PDFs matches only the open one | renderer/app.js (search panel) | — | S | 1 | merged 9ff7a30 (Sprint 6, F-026) |
+| T-023 search-current-library (enhancement) | Search scoped to the selected library. Accept: matches limited to that library's PDFs | renderer/app.js (search panel), core/library.js | T-022 (same panel) | S | 1 | merged 9ff7a30 (Sprint 6, F-026) |
+| T-024 tag-colours (enhancement) | Assign a colour to each tag; shown on tag chips in the library and on PDFs. Accept: colour persists across restart; CLI/MCP unaffected | renderer/app.js (tags), core/library.js (`db.tagColours`), renderer/styles.css | library-doc-fields scaffold | S | 2 | merged 9ff7a30 (Sprint 6, F-026) |
+| T-026 mark-as-read (enhancement) | Toggle read/unread per PDF; read PDFs look distinct in the list and can be filtered. Accept: toggle from item menu, persists | renderer/app.js (doc list, item menu), core/library.js (`d.read`) | library-doc-fields scaffold | S | 2 | merged 9ff7a30 (Sprint 6, F-026) |
 | T-021 multi-select (enhancement) | Select one or several PDFs (click, Ctrl/Shift-click) and apply move/tag/star/remove to all. Accept: Shift-select 3, move to a library, all 3 move | renderer/app.js (doc list, item actions), renderer/styles.css | — | M | 1 | planned · Sprint 7 |
 | T-027 section-numbering (feature) | Keep the document's heading structure and numbering (e.g. "12.1.12 Section A") in exports. Accept: a numbered-heading fixture exports with the same numbers and nesting | core/topics.js, core/export.js, test/ | — | M | 1 | planned · Sprint 7 |
 | T-028 loose-marks-as-clips (enhancement) | Highlights over images/scans with no text (today `result.loose`, page numbers only) become image clips in the extract and exports. Accept: a text-less highlight shows as a cropped image | core/extract.js, renderer/app.js (reader), renderer/images.js | — | M | 2 | planned · Sprint 7 |
@@ -105,7 +105,7 @@ Polish (reported by user):
 | 9 | planned | T-030 ocr, T-031 ai-merge | — |
 | 8 | planned | T-025 markdown-notes, T-029 shelves | — |
 | 7 | planned | T-021 multi-select, T-027 section-numbering, T-028 loose-marks-as-clips | — |
-| 6 | **open** 2026-10-21 (tag `sprint-6-start`, main 3cbd93e) | T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read | — |
+| 6 | **closed** 2026-10-21 (tag `sprint-6-end`, main 9ff7a30) | T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read | 168/168 |
 | 5 | **closed** 2026-10-21 (tag `sprint-5-end`, main 20a8e58) | bugs: T-017, T-018, T-019, T-002, T-008 (all exempt) | 156/156 |
 | 4 | **closed** 2026-10-10 (tag `sprint-4-end`, main 43721ca) | T-014 onboarding-tour | 81/81 |
 | 3 | **closed** 2026-10-09 (tag `sprint-3-end`, main 736ffd2) | T-012 copy-image, T-001 meta-enrich (+ T-013 exempt, just before) | 69/69 |
@@ -114,13 +114,26 @@ Polish (reported by user):
 
 Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 
-### Sprint 6 — open (2026-10-21)
+### Sprint 6 — closed (2026-10-21)
 - Scope (5 slots): T-020 continue-reading, T-022 search-current-pdf, T-023 search-current-library, T-024 tag-colours, T-026 mark-as-read (all enhancement · S).
 - Backup: `backup/sprint-6-pre-20261021` · Tag: `sprint-6-start` (3cbd93e) · Baseline: `npm test` 156/156 green
 - Merge flow: branches merge into `feature/s6-integration` (worktree `../fl-s6`); user tries the build (gate 1) → main; push = gate 2
 - Scaffold (tech lead): `refactor/library-doc-fields` — `normalize` fills `d.read`, `d.lastPage` (0 = never opened), `db.tagColours`; helpers `setRead`, `setLastPage`, `setTagColour`, `tagColour`; new docs get read/lastPage in app.js. 159/159. Merged into s6-integration d6de5cc. Shelves/notes fields left for Sprint 8.
 - Dispatch: 4 agents in parallel, worktrees `../fl-T-020`, `../fl-T-022`, `../fl-T-024`, `../fl-T-026`, all cut from s6-integration d6de5cc. T-022 → T-023 run by one agent in sequence (same search panel; T-023 branch cut from T-022). The library scope select already existed, so T-023 = default scope to the library you came from + "Search this library" in the library menu.
 - app.js regions: T-020 `annotate()` + reader `r-actions`; T-022/23 search view, `libraryMenu`, keyboard handler; T-024 sidebar tags + `tags-inline` line + reader `tagedit`; T-026 `docMenu`, list header/tools, doc row, `visibleDocs`, reader `r-meta`. Each appends its own styles.css block. Expected textual overlap: T-024/T-026 in the list row, styles.css EOF.
+- Merge log (into feature/s6-integration):
+  | order | id | merge sha | conflicts | tests after |
+  |---|---|---|---|---|
+  | 0 | refactor/library-doc-fields (scaffold) | d6de5cc | none | 159/159 |
+  | 1 | T-020 continue-reading | b11694e | none | 162/162 |
+  | 2 | T-024 tag-colours | (merge) | styles.css EOF: kept T-020 + T-024 blocks | 162/162 |
+  | 3 | T-026 mark-as-read | (merge) | styles.css EOF: kept all blocks; list row auto-merged (is-read class + tint on chips) | 162/162 |
+  | 4 | T-022 search-current-pdf | (merge) | styles.css EOF: kept all blocks | 166/166 |
+  | 5 | T-023 search-current-library | 374a109 | none | 168/168 |
+  | 6 | fix: menu/start-screen labels drop "all" (flagged by the T-022 agent) | (commit) | — | 168/168 |
+- Checked in the running app (fresh `--user-data-dir`, driven over DevTools): viewer closed on p. 2 → `lastPage` 2, "Continue · p. 2" shown, reopening lands on p. 2; Read toggle → `.is-read` row + Read pill, Unread filter → "No unread PDFs" + Show all; tag colour on sidebar dot, list chip and reader chip; search scope list has "This PDF — Notes on Bioluminescence", entering from Inbox defaults to Inbox. After a restart: read, lastPage, tag and colour all kept. No console errors.
+- 2026-10-21: user asked to check, bump the version, publish, merge and push → merged into local main 9ff7a30; 168/168; tag `sprint-6-end`. Atlas synced, compass F-026, D-020. Version 1.4.0.
+- Test rounds: 156 (baseline) → 159 → 162 → 162 → 162 → 166 → 168 → 168 (main 9ff7a30); new failures introduced: 0
 
 ### Sprint 5 — closed (2026-10-21)
 - Scope: all bugs (each exempt, 0 slots): T-018, T-019, T-017, T-008, T-002.
@@ -237,6 +250,8 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 All open proposals are listed with todo ids under **To do** above: T-003 … T-006, T-009 … T-011. New proposals get the next free id.
 
 - [ ] **T-035** [enhancement · S] When an added paper comes with a better title from its source (e.g. the PMC bucket's "GenBank"), prefer it over the PDF's embedded title (CLI showed "OP-NARE120883 36..42"). Check title priority in cli/faelights.js and src/main.js. (from T-008)
+- [ ] **T-037** [enhancement · S] CLI/MCP support for the Sprint 6 fields: `read`/`unread`, `--unread` filter on `list`, `tag colour <tag> <#hex>`. (from T-024/T-026)
+- [ ] **T-038** [polish · XS · exempt] Show a colour swatch beside each name in the tag colour menu (needs an `openMenu` item swatch). (from T-024)
 - [ ] **T-036** [polish · XS · exempt] Strip `utm_*` and similar tracking parameters from doi.org links before resolving, so `10.1038/x?utm=…` doesn't fail. (from T-017)
 
 ## Decisions

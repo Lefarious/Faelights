@@ -1,5 +1,5 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-21 · Synced at commit: 20a8e58
+> Last synced: 2026-10-21 · Synced at commit: 9ff7a30
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
@@ -110,16 +110,19 @@ Info card "Look up details" / "Refresh details" → `app.js lookUp(d)`; or `addI
 Reader figure Copy button / right-click → "Copy image" → `app.js copyImage(d, img)` → `Images.png(d, img)` (PNG bytes from the cached crop) → `fl.copyImage` → IPC `clip:image` → `nativeImage.createFromBuffer` → `clipboard.writeImage` → toast "Image copied".
 
 ### Annotate a PDF
-Reader toolbar "View" button (first in the left-aligned `.r-tools`, before Info) / doc menu "Annotate" / clicking an extract's `p. N` → `app.js annotate(d, page)` → `Annot.open(d, page)` → `fl.readPdf(d)` (stored copy if `d.annotated`) → pdf.js doc + `PDFDocument.load` (pdf-lib, in the background) → `renderReader()` → `Annot.mount(#reader)` → pages drawn lazily (`drawPage`: canvas with `AnnotationMode.ENABLE` + `renderTextLayer`).
+Reader toolbar "View" button (first in the left-aligned `.r-tools`, before Info) / doc menu "Annotate" / clicking an extract's `p. N` / reader "Continue · p. N" → `app.js annotate(d, page)` → `Annot.open(d, page)` (no page → `d.lastPage`, else 1) → `fl.readPdf(d)` (stored copy if `d.annotated`) → pdf.js doc + `PDFDocument.load` (pdf-lib, in the background) → `renderReader()` → `Annot.mount(#reader)` → pages drawn lazily (`drawPage`: canvas with `AnnotationMode.ENABLE` + `renderTextLayer`).
 Edit (text selection + tool/popover, note click, ink drag, recolour, note, delete) → `edit(pages, fn)` on a serial queue → pdf-lib mutation (`addAnnot` / `recolorAnnot` / `setNote` / `deleteAnnot`, each writing an `/AP` stream) → `lib.save()` → push `{bytes, pages}` on `undo` → `swap()`: new pdf.js doc, bump `pageVer` for those pages, redraw them → `persist()`: `d.annotated = true`, `fl.writeStored(d.storedPath, bytes)` → IPC `pdf:writeStored` (atomic write inside `FILES_DIR`) + `save()`.
 Undo/redo → `history()` swaps byte snapshots (pdf-lib doc reloaded lazily). "Download PDF" → `fl.savePdfAs` → IPC `pdf:saveAs`.
-Leave (back button / Esc / another doc / search) → `Annot.close()` → after `queue` + `writing` settle → `rescan(d)` → `pdf:read` returns the stored copy → `analyzePdf` → new marks appear as extracts. Doc menu "Discard annotations made here…" → `useOriginal(d)`: `annotated=false`, `scannedMtime=0`, `rescan` → `pdf:read` re-copies the original over the stored copy.
+Scrolling → `trackPage()` → `Library.setLastPage(d, page)` → `save()` when it changed. Leave (back button / Esc / another doc / search) → `Annot.close()` (records the page once more) → after `queue` + `writing` settle → `rescan(d)` → `pdf:read` returns the stored copy → `analyzePdf` → new marks appear as extracts. Doc menu "Discard annotations made here…" → `useOriginal(d)`: `annotated=false`, `scannedMtime=0`, `rescan` → `pdf:read` re-copies the original over the stored copy.
 
 ### Theme change
 Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → `fl.setTheme(t)` → IPC `theme:set` → `main.js applyTheme(t)` sets `nativeTheme.themeSource`, `setBackgroundColor` on every window, writes `userData/theme.json`, rebuilds the menu, pushes `theme` → `fl.onTheme` → `S.theme`, `renderSide()`. View → Theme radio items call `applyTheme` directly. All styling and `<picture>` brand art react through `prefers-color-scheme`.
 
 ### First-run guided tour
 `boot()` → after 900 ms `maybeTour()` (also `tourSoon()` at the end of `renderReader` and after `annotate`) → picks the first chapter with a pending step whose target is on screen: `app`, else `viewer` if `Annot.isOpen()`, else `reader` (`Tour.ready(Tour.pending(S.db.settings, ch))`) → `startTour(ch)` → `Tour.start(ch, {steps: pending})` → overlay spotlights each step's `[data-tour]`/class target, skipping ones not on screen → each shown step `Tour.markShown` → `save()` (`settings.tour[ch]` = shown ids). Skip tour / Esc → `Tour.skipAll` (every chapter `true`). Finishing `app` → `tourSoon()` so an open PDF continues into `reader`. Steps skipped for a missing target stay pending and run as a short follow-up the first time it appears. Help › Show Tour → menu `tour` → `settings.tour = {}` → `startTour("app")`.
+
+### Search highlights with a scope
+Sidebar "Search highlights" / menu `search` (Ctrl/Cmd+F → `findCmd()`, scope `doc` when a PDF is in the reader) / library ⋯ "Search this library" → `go({kind:"search", scope?})` → on entering: `S.searchDoc = readerDocId()`, `S.searchLib = entryScope(S.view, scope, S.searchPicked) ?? S.searchLib` → `renderSearch` (scope select) → `renderResults` → `searchScope()` (`validScope`) → `searchDocs(db, scope, docId)` → `Library.entryMatches` per entry → hits grouped per doc, headed "N matches in <scope>".
 
 ### Command line: add a paper by identifier
 `faelights add 10.1371/… -l Thesis -t insects` → `cli/faelights.js main` → `parse` → `Library.at(--data-dir | userDataDir())` → `cmdAdd`: each arg is a `.pdf` on disk or `identify.parseIdentifier` (else exit 2) → `findLibrary` → `sameOrigin(db, id)`? "Already in your library" ; else `fetch.resolver(nodeGet()).resolvePdf(id)` (same resolver as the app; cookies per `Domain=`) → temp file → `store.importPdf` (`sourcePath: null`, `fileNameFor`) → same `hash` already there? `removeStored` ; else `scan(bytes)` (`Extract.openPdf` → `Meta.readMeta` + `Extract.analyzePdf`) → doc `{…addImported fields, origin, tags}` → `fetchDetails` → `fetch.lookupMeta` → `applyDetails` (`d.lookup`, title if none) → `store.update(db => db.docs.push(d))` (lock, read-modify-write) → stdout line + "restart the app" note on stderr.
@@ -144,7 +147,7 @@ Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`
 | IPC push | `open-files` | `main.js` `second-instance` / `open-file` | `app.js fl.onOpenFiles` → `addPaths` |
 | IPC push | `theme` (`system`/`light`/`dark`) | `main.js applyTheme()` | `app.js fl.onTheme` |
 | Persisted file | `userData/theme.json` (`{theme}`) | `main.js applyTheme`, `cli theme` | `main.js loadTheme` at startup, `cli theme` |
-| Persisted file | `userData/library/faelights.json` (`{version, libraries, docs, settings}`) | core `store.saveDb` (whole object from the renderer, via `main.js`), core `store.update` (CLI read-modify-write) | core `store.loadDb` → `main.js db:load` → renderer `S.db`; CLI |
+| Persisted file | `userData/library/faelights.json` (`{version, libraries, docs, tagColours, settings}`; docs carry `read`, `lastPage`) | core `store.saveDb` (whole object from the renderer, via `main.js`), core `store.update` (CLI read-modify-write) | core `store.loadDb` → `main.js db:load` → renderer `S.db`; CLI |
 | Lock file | `userData/library/faelights.json.lock` (`{pid, at}`, `wx`; stale after 30 s; wait ≤ 10 s → `ELOCKED`) | core `store.withLock` (every save/update, app and CLI) | same |
 | Persisted dir | `userData/library/files/<docId>.pdf` | core `store.importPdf` / `readPdf` (refresh) / `writeStored` (via IPC `pdf:import`, `pdf:read`, `pdf:writeStored`; CLI `add`, `rescan`) | `pdf:read`, `pdf:open`, `pdf:reveal`, CLI `text` / `rescan`; deleted by `store.removeStored` (`pdf:removeStored`, CLI `remove`) |
 | Doc flag | `annotated` (+ `annotatedAt`) | `annotator.js persist()`; cleared by `app.js useOriginal()` | `main.js` `pdf:read` (stored copy only) and `db:load` (never stale); `app.js` list pill + doc menu |
@@ -152,7 +155,7 @@ Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`
 | Global (window) | `Annot` | `annotator.js` | `app.js renderReader`, `annotate`, `openDoc`, `removeDoc`, `useOriginal`, keydown |
 | Global (window) | `Extract` (`analyzePdf`, `ANALYZER_VERSION` (4), `normQuads`, `imgStreamAt`, `imgSnapToFacts`, `highlights`) | `core/extract.js` (needs `Topics` from `core/topics.js`) | `app.js analyzeBytes`, `outdated()`; `annotator.js pickAt` (`normQuads`) |
 | Global (window) | `Meta` (`readMeta`, `cleanTitle`) | `core/meta.js` | `app.js` (`analyzeBytes`, `loadMeta`, `lookUp`, info card) |
-| Global (window) | `Library` (pure db ops, `entryMatches`) | `core/library.js` | `app.js` libraries, tags, stars, move, search |
+| Global (window) | `Library` (pure db ops, `entryMatches`) | `core/library.js` | `app.js` libraries, tags + tag colours, stars, read, move, search; `annotator.js` `setLastPage` |
 | Global (window) | `pdfjsLib` | `pdf.min.js` script tag | `app.js` (`GlobalWorkerOptions`, `getDocument`) |
 | Global (window) | `Images` | `images.js` | `app.js figureEl`, `exportImages`, `removeDoc`, `rescan` |
 | Global (window) | `Order` | `core/order.js` | `app.js renderReader` / `filteredImages` / `withImages` / `summary`, `core/export.js` |
@@ -173,6 +176,8 @@ Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`
 | Media query | `prefers-color-scheme` | `nativeTheme.themeSource` (main) | `styles.css`, `splash.html`, `<picture>` sources |
 | Settings keys | `settings.mode` (`full`/`only`), `fmt` (`md`/`obsidian`/`html`/`plain`), `sort` (`added`/`title`/`count`) | `main.js EMPTY_DB` defaults | `app.js` reader, export, list |
 | Doc flag | `mine` ("My publications") | `app.js setMine` (doc menu, reader toggle, drop on sidebar item) | `app.js visibleDocs` (`view.kind === "mine"`), sidebar count |
+| Settings key | `settings.read` (`all`/`unread`/`read`; no default) | `app.js` `#readf` select | `app.js visibleDocs()` via `readFilter()` |
+| Db key | `tagColours` (`{tag: "#rrggbb"}`, `normalize` default `{}`) | `app.js tagMenu` via `Library.setTagColour` | `app.js tint()` (sidebar, list chips, reader tag editor); CLI/MCP ignore it |
 | Settings key | `settings.info` (boolean; no main default) | `app.js` info toggle | `app.js renderReader()` |
 | Settings key | `settings.images` (boolean "With images"; no main default) | `app.js` reader toggle, `exportMenu` | `app.js renderReader`, `exportWithImages`, Copy |
 | Settings key | `settings.annotColor` (`[r,g,b]` 0–1; no main default, falls back to yellow) | `annotator.js` swatches / popover | `annotator.js color()` |
@@ -227,6 +232,7 @@ Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`
 | `src/preload.js` | preload-bridge |
 | `test/README.md` | tests |
 | `test/cli.test.js` | tests |
+| `test/continue-reading.test.js` | tests |
 | `test/core.test.js` | tests |
 | `test/core/export.test.js`, `extract.test.js`, `fetch.test.js`, `library.test.js`, `topics.test.js` | tests |
 | `test/export.test.js` | tests |
@@ -236,6 +242,7 @@ Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`
 | `test/images.test.js` | tests |
 | `test/metadata.test.js` | tests |
 | `test/reader-images.test.js` | tests |
+| `test/search-scope.test.js` | tests |
 | `test/tour.test.js` | tests |
 
 ## Excluded
