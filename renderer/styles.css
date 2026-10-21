@@ -443,3 +443,8 @@ button.pg:hover { color: var(--accent); background: color-mix(in srgb, var(--sel
 .tags-inline span.tc::before { color: var(--tc); opacity: 1; font-weight: 600; }
 .tagedit .tg.tc { background: color-mix(in srgb, var(--tc) 20%, var(--sel)); }
 .tagedit .tg.tc::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--tc); flex: none; }
+
+/* read state (T-026) */
+/* read rows stay readable: lighter title weight, muted ink, and a quiet "Read" pill */
+.doc-row.is-read .doc .t { font-weight: 500; color: color-mix(in srgb, var(--ink) 70%, var(--muted)); }
+.pill.read { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); }
