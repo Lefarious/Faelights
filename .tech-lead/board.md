@@ -8,6 +8,7 @@ _Last updated: 2026-10-21 · **Sprint 7 closed** (merged to local main c9791cc, 
 - Timebox: one implementation pass + one fix pass
 - Test command: `npm test` (Node >= 21) · Build: `npm start` smoke launch
 - Pause between sprints: no (merges to main need user OK per CLAUDE.md; pushing needs a second OK)
+- Between sprints (set by user 2026-10-21): nothing goes to `main`. Docs go to `docs/pending` and ride with the next sprint or feature; code fixes wait for the next sprint's integration branch; builds and version bumps happen only at sprint end unless the user says otherwise. The sprint lands as one PR with all of its docs and changes, minus anything the user drops.
 
 ## Sprint plan 5–10 (planned 2026-10-21 from the Trello board, user rules)
 
