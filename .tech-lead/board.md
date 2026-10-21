@@ -1,6 +1,6 @@
 # Tech Lead Board — Faelights
 
-_Last updated: 2026-10-21 · **Sprint 5 open** (all 5 bugs on `feature/s5-integration` dafb4c9, 156/156; awaiting user gate 1) · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
+_Last updated: 2026-10-21 · **Sprint 5 open** (all 5 bugs + 2 follow-ups on `feature/s5-integration` c0cc984, 156/156; awaiting user gate 1) · Sprints 6–10 planned · T-015 cli + headless core merged to main 796478d (142/142; backup `backup/pre-T-015-20261021`), pushed 2026-10-21 (f0168db..d596936, CI run 39519273972 green); release v1.3.0 (draft) · Current sprint: 4 closed (T-014 merged locally, 43721ca) · main: green 81/81 · pushed to GitHub 2026-10-10 (e53e35e..f0168db, CI green)_
 
 ## Settings
 - Sprint size: 3–5 slots per merge window (XS/S/M = 1 slot, L = 2) · minor bugs/polish (XS/S) are exempt and don't count (set by user 2026-10-21)
@@ -119,11 +119,11 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
 - Backup: `backup/sprint-5-pre-20261021` · Tag: `sprint-5-start` (7ead2d6) · Baseline: `npm test` 142/142 green
 - Merge flow: branches merge into `feature/s5-integration` (worktree `../fl-s5`); user tries the build (gate 1) → main; push = gate 2
 - Dispatch: T-018 built directly (XS). Agents in worktrees: T-019 (core/extract.js), T-017 (core/identify.js parser + app.js add dialog), T-008 (core/fetch.js). T-002 queued: it shares `fetchFailureReason` in core/identify.js with T-017's file and the fetch path with T-008; it starts once both are back.
-- T-019 leftovers (not fixed, noted): "vitamin C. The" still merges (single capital + full stop reads as an initial); "Smith et al. Nature 2020" now splits.
+- T-019 leftovers: "vitamin C. The" fixed on user request (64bc2b7): a lone capital + full stop ends a sentence when a common opener follows (The, This, We, However…); "J. Smith", "J. A. Smith" stay whole. Still open: "Smith et al. Nature 2020" splits; "Group A. Patients" merges (opener list).
 - T-017: cause was `parseIdentifier`'s 2048-char cap (links with long tracking tails = "Not recognised", paste did nothing), invisible chars (zero-width, soft hyphen), and `id:parseMany` silently keeping only 200. Cap now 16384, linear-time tidy, invisible chars stripped, >200 items / >100k chars refused with a message. The 200 limit is written in both app.js (`ADD_MAX`) and main.js: keep in sync.
 - T-008: Europe PMC is Cloudflare-walled too, so the fix fetches from NCBI's PMC Open Access bucket (`pmc-oa-opendata.s3.amazonaws.com`) first, then Europe PMC, then PMC. All failing → `no-free-copy` (was `paywalled`). Unpaywall skipped (no API contact email in the repo). Only open-access PMC papers are fully fixed. Live: CLI `add PMC3531190` OK, its PMID → same file. New host to note in atlas/compass.
 - T-002 started after T-017 and T-008 merged (worktree `../fl-T-002`, harness worktree isolation failed on a path-case check), so it may also edit core/fetch.js.
-- T-002: new reason `unreachable` ("Couldn't find that site…", Open in browser). `fetchFailureReason(err, url)`: no-connection codes → offline; DNS/refused → offline for the app's own service hosts (doi.org, crossref, arxiv, ncbi, PMC bucket, europepmc, openlibrary, archive.org, adsabs), else unreachable; no url → offline (old behaviour). DOI path now also tries CrossRef links when the publisher host is unreachable. Known limit: Wi-Fi without internet + unknown host shows unreachable.
+- T-002: new reason `unreachable` ("Couldn't find that site…", Open in browser). `fetchFailureReason(err, url)`: no-connection codes → offline; DNS/refused → offline for the app's own service hosts (doi.org, crossref, arxiv, ncbi, PMC bucket, europepmc, openlibrary, archive.org, adsabs), else unreachable; no url → offline (old behaviour). DOI path now also tries CrossRef links when the publisher host is unreachable. Wi-Fi-without-internet limit fixed on user request (1ee74af): before reporting `unreachable`, `resolvePdf` checks that doi.org answers; if it is offline too → `offline`. Costs one extra request only on that failure.
 - 2026-10-21: all 5 merged on feature/s5-integration @ dafb4c9, 156/156 green; app launched from integration for user gate 1.
 - Cause of T-002 found while reading: `ERR_NAME_NOT_RESOLVED` / `ENOTFOUND` are in `OFFLINE_CODES`, so a mistyped domain reads as "offline".
 - Merge log (into feature/s5-integration):
@@ -134,6 +134,8 @@ Newest first. "Between sprints" entries are small fixes merged outside a sprint.
   | 3 | T-017 long-paste-add-link | 8a3f3a1 | none (app.js auto-merged); also src/main.js `id:parseMany` 200 → 201 so the dialog can refuse >200 | 147/147 |
   | 4 | T-008 pmc-fallback | b53a36f | none | 152/152 |
   | 5 | T-002 offline-vs-unreachable | dafb4c9 | none (cut from s5-integration b53a36f) | 156/156 |
+  | 6 | T-019 follow-up (lone capital + sentence opener splits) | aa263b5 | none | 156/156 |
+  | 7 | T-002 follow-up (doi.org check before 'unreachable') | c0cc984 | none | 156/156 |
 
 ### Sprint 4 — closed (2026-10-10)
 - Scope: T-014 onboarding-tour (feature · M). A single feature, so it was built directly with no sub-agents.
