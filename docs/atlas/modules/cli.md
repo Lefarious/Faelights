@@ -1,5 +1,5 @@
 # Module: cli
-> Path: cli/faelights.js · Last synced commit: 796478d · Related features: F-024
+> Path: cli/faelights.js · Last synced commit: 2620815 · Related features: F-024
 
 ## Purpose
 The `faelights` command line: a thin shell over core/ that reads highlights and text from any PDF and manages the desktop app's library on disk (the same `<userData>/library` folder) without Electron. It doesn't render anything (no image crops), doesn't talk to a running app, and has no state of its own.
@@ -24,7 +24,7 @@ The `faelights` command line: a thin shell over core/ that reads highlights and 
 | `theme [system\|light\|dark]` | read/write `<userData>/theme.json` | — |
 | `tour [status\|skip\|restart]` | `settings.tour` | `Tour.pending` / `skipAll` (from `renderer/tour.js`) |
 
-Options: `-f md|obsidian|html|plain|json`, `-m full|only`, `-o file`, `-l`, `-t` (repeatable), `--starred`, `--pages`, `--all`, `--force`, `--no-lookup`, `--frontmatter`, `--json`, `--data-dir`, `-h`, `-v`. Exit codes: 0 ok, 1 failure (`Fail`, `ELOCKED`), 2 usage. Also `module.exports = {main, Fail}`.
+Options: `-f md|obsidian|html|plain|json`, `-m full|only`, `-o file`, `-l`, `-t` (repeatable), `--starred`, `--pages`, `--all`, `--force`, `--no-lookup`, `--frontmatter`, `--json`, `--data-dir`, `-h`, `-v`. Exit codes: 0 ok, 1 failure (`Fail`, `ELOCKED`), 2 usage. Also `module.exports = {main, Fail, scan, scanned}` (`scan`/`scanned` are reused by `mcp/tools.js add_pdf`).
 
 ## Dependencies
 - **Uses:** core (`extract`, `meta`, `order`, `export`, `library`, `identify`, `fetch`), renderer-ui's `renderer/tour.js` (pure helpers only), `package.json` (`version`), node `fs`, `os`, `path`, `util.parseArgs`

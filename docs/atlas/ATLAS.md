@@ -1,11 +1,11 @@
 # Faelights — Codebase Atlas
-> Last synced: 2026-10-21 · Synced at commit: 796478d
+> Last synced: 2026-10-21 · Synced at commit: 2620815
 
 ## How to read this
 Layer 0 (this file) → module docs in [modules/](modules/) → file entries inside each module doc.
 History, rationale and roadmap live in [../PROJECT_COMPASS.md](../PROJECT_COMPASS.md), not here.
 
-Faelights is an Electron 31 desktop app with no bundler and no framework, plus a `faelights` command line. A headless `core/` (extraction, topics, metadata, ordering, export, library store, identifiers, paper fetching) is shared by the renderer (as `<script>` globals), the main process and the CLI (through `require`). Tests are `node:test` files under `test/` (`npm test`). The renderer is plain browser scripts loaded by `<script>` tags in order; the main process is a single CommonJS file.
+Faelights is an Electron 31 desktop app with no bundler and no framework, plus a `faelights` command line and a `faelights-mcp` MCP server. A headless `core/` (extraction, topics, metadata, ordering, export, library store, identifiers, paper fetching) is shared by the renderer (as `<script>` globals), the main process and the CLI (through `require`). Tests are `node:test` files under `test/` (`npm test`). The renderer is plain browser scripts loaded by `<script>` tags in order; the main process is a single CommonJS file.
 
 ## Entry points
 | Entry | File | What starts here |
@@ -17,6 +17,7 @@ Faelights is an Electron 31 desktop app with no bundler and no framework, plus a
 | Renderer boot | `renderer/app.js` `boot()` IIFE | Loads DB + theme, renders UI, sends `app:ready`, consumes pending "Open with" files |
 | OS file open | `src/main.js` `pdfArgs()`, `second-instance`, `open-file` | PDFs passed on the app's argv or macOS "Open with" |
 | Command line | `cli/faelights.js` (`package.json` `bin.faelights`, `npm run cli`) | `main(argv)`: extract / export / text / info / list / search / add / rescan / lookup / library / move / tag / star / remove / theme / tour on the app's library folder |
+| MCP server | `mcp/server.js` (`package.json` `bin.faelights-mcp`, `npm run mcp`) | stdio MCP server: `list_libraries`, `list_pdfs`, `get_extracts`, `search`, `export_pdf`, `export_library`, `add_pdf`, `tag_pdf`, `star_pdf`, resource `faelights://pdf/{id}` |
 | CI build | `.github/workflows/build.yml` | On `v*` tag: `electron-builder` for win/mac/linux, files attached to a draft GitHub Release |
 | Tests | `npm test` → `node --test "test/**/*.test.js"` | `test/core.test.js`, `test/images.test.js`, `test/identify.test.js`, `test/metadata.test.js`, `test/reader-images.test.js`, `test/export.test.js`, `test/tour.test.js`, `test/cli.test.js`, `test/core/{extract,topics,export,library,fetch}.test.js` |
 
@@ -40,11 +41,15 @@ graph LR
   CLI[cli<br/>faelights.js] -->|require| CORE
   CLI -->|tour.js pure helpers| UI
   CLI -.->|same library folder + lock file| MAIN
+  MCP[mcp<br/>server.js, tools.js] -->|require| CORE & EP
+  MCP -->|scan, scanned| CLI
+  MCP -.->|reads session marker; same library + lock| MAIN
   TEST[tests<br/>test/] -.->|require| CORE & EP & CLI
+  TEST -.->|stdio client| MCP
   TEST -.->|require tour.js| UI
   PKG[packaging<br/>package.json, CI] -.->|bundles| MAIN & UI & CORE & PDFJS
 ```
-Two deliberate two-way edges: renderer-ui ↔ annotator (app.js opens/mounts the viewer; annotator calls app.js helpers and `rescan` at call time), and cli → renderer-ui's `tour.js` (pure step data only). The CLI and the main process never talk to each other; they share the files on disk, guarded by core `library.js`'s lock file.
+Two deliberate two-way edges: renderer-ui ↔ annotator (app.js opens/mounts the viewer; annotator calls app.js helpers and `rescan` at call time), and cli → renderer-ui's `tour.js` (pure step data only). The CLI, the MCP server and the main process never talk to each other; they share the files on disk, guarded by core `library.js`'s lock file. The MCP server also reads the app's session marker (`library/faelights.app`) and won't write while the app is open.
 
 | Module | Path | Responsibility | Depends on | Used by | Doc |
 |---|---|---|---|---|---|
@@ -52,6 +57,7 @@ Two deliberate two-way edges: renderer-ui ↔ annotator (app.js opens/mounts the
 | preload-bridge | `src/preload.js` | Maps `window.fl.*` → IPC channels | electron `contextBridge`, `ipcRenderer`, `webUtils` | renderer-ui | [preload-bridge.md](modules/preload-bridge.md) |
 | core | `core/` (`extract.js`, `topics.js`, `meta.js`, `order.js`, `export.js`, `library.js`, `identify.js`, `metadata.js`, `fetch.js`) | Headless: pdf.js document → entries, topics, loose marks, image boxes; PDF metadata; reading order + doc summary; export text/HTML; search matching; library db ops + on-disk store with lock; identifier parsing; paper resolving + details lookup over a passed-in transport | pdf.js document API (passed in), pdfjs-dist legacy (Node), node fs/path/os/crypto, Node `fetch` (`nodeGet`) | renderer-ui, annotator, main-process, cli, tests | [core.md](modules/core.md) |
 | cli | `cli/faelights.js` | `faelights` command: read, search, add (files or identifiers), organise and rescan the app's library; theme and tour settings | core, renderer-ui `tour.js`, node fs/os/path/util | users, tests | [cli.md](modules/cli.md) |
+| mcp | `mcp/server.js`, `mcp/tools.js` | `faelights-mcp`: stdio MCP server over core/ (read, search, export; three write tools that refuse while the app is open) | core, main-process `exportPaths.js`, cli `scan`/`scanned`, `@modelcontextprotocol/sdk`, `zod` | tests | [mcp.md](modules/mcp.md) |
 | annotator | `renderer/annotator.js` | In-app PDF viewer; writes Highlight/Underline/StrikeOut/Text/Ink annotations and Square image boxes with pdf-lib into the library copy; undo/redo | pdf-lib, pdfjs-dist, preload-bridge, core (`Extract.normQuads`), renderer-ui helpers | renderer-ui | [annotator.md](modules/annotator.md) |
 | renderer-ui | `renderer/app.js`, `images.js`, `tour.js`, `index.html`, `splash.html`, `styles.css`, `assets/brand/*`, `sample.pdf` | State, three-pane UI, splash page, brand artwork, theme button, search, image crops, exports, first-run guided tour, drag/drop, keyboard | preload-bridge, core, pdfjs-dist, @fontsource | — (top of stack); cli (`tour.js`) | [renderer-ui.md](modules/renderer-ui.md) |
 | packaging | `package.json`, `.github/workflows/build.yml` | Dependencies, scripts, electron-builder config, CI release builds | electron-builder | — | [packaging.md](modules/packaging.md) |
@@ -125,6 +131,10 @@ Sidebar footer `themeSwitch()` (monitor / sun / moon icons, one click each) → 
 `faelights add 10.1371/… -l Thesis -t insects` → `cli/faelights.js main` → `parse` → `Library.at(--data-dir | userDataDir())` → `cmdAdd`: each arg is a `.pdf` on disk or `identify.parseIdentifier` (else exit 2) → `findLibrary` → `sameOrigin(db, id)`? "Already in your library" ; else `fetch.resolver(nodeGet()).resolvePdf(id)` (same resolver as the app; cookies per `Domain=`) → temp file → `store.importPdf` (`sourcePath: null`, `fileNameFor`) → same `hash` already there? `removeStored` ; else `scan(bytes)` (`Extract.openPdf` → `Meta.readMeta` + `Extract.analyzePdf`) → doc `{…addImported fields, origin, tags}` → `fetchDetails` → `fetch.lookupMeta` → `applyDetails` (`d.lookup`, title if none) → `store.update(db => db.docs.push(d))` (lock, read-modify-write) → stdout line + "restart the app" note on stderr.
 Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`, `tour skip|restart`) are one `store.update(fn)` each, looking the doc/library up inside `fn`. `search` reads with `loadDb` and filters entries with `Library.entryMatches` (the app's `renderResults` uses the same function).
 
+### MCP: a write tool while the app may be open
+Client `tools/call star_pdf` → `mcp/server.js` zod check → `wrap(tools.star_pdf)` → `write(fn)` → `writable()`: `store.appSession()` reads `library/faelights.app`. If a live pid other than this one holds it → `library_in_use`. Otherwise → `store.update(fn, {wait: 0})` (lock file held → `ELOCKED` → `library_in_use`) → `Library.findDoc` / `setStar` → atomic write → JSON result. The app writes the marker in `main.js` `whenReady` (`store().openSession()`) and removes it on `will-quit` (`closeSession()`). A marker whose pid is dead is ignored.
+Reads (`get_extracts`, `export_pdf`, the resource) → `readable(id)` → `store.checkSources(loadDb())` → `resultOf(d)` (saved result, or in-memory re-read when missing, outdated or stale) → `checkText` (`result.textless`) → grouped by `ExportFmt.groupsOf` / rendered by `ExportFmt.docText`.
+
 ## Cross-cutting couplings
 | Kind | Key | Producers | Consumers |
 |---|---|---|---|
@@ -145,7 +155,8 @@ Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`
 | IPC push | `theme` (`system`/`light`/`dark`) | `main.js applyTheme()` | `app.js fl.onTheme` |
 | Persisted file | `userData/theme.json` (`{theme}`) | `main.js applyTheme`, `cli theme` | `main.js loadTheme` at startup, `cli theme` |
 | Persisted file | `userData/library/faelights.json` (`{version, libraries, docs, settings}`) | core `store.saveDb` (whole object from the renderer, via `main.js`), core `store.update` (CLI read-modify-write) | core `store.loadDb` → `main.js db:load` → renderer `S.db`; CLI |
-| Lock file | `userData/library/faelights.json.lock` (`{pid, at}`, `wx`; stale after 30 s; wait ≤ 10 s → `ELOCKED`) | core `store.withLock` (every save/update, app and CLI) | same |
+| Lock file | `userData/library/faelights.json.lock` (`{pid, at}`, `wx`; stale after 30 s; wait ≤ 10 s, or `opts.wait` (MCP: 0) → `ELOCKED`) | core `store.withLock` (every save/update: app, CLI, MCP) | same |
+| Session marker | `userData/library/faelights.app` (`{pid, at}`) | `main.js` `whenReady` → `store.openSession()`; removed on `will-quit` by `closeSession()` (own pid only) | `mcp/tools.js writable()` via `store.appSession()` (live pid → `library_in_use`) |
 | Persisted dir | `userData/library/files/<docId>.pdf` | core `store.importPdf` / `readPdf` (refresh) / `writeStored` (via IPC `pdf:import`, `pdf:read`, `pdf:writeStored`; CLI `add`, `rescan`) | `pdf:read`, `pdf:open`, `pdf:reveal`, CLI `text` / `rescan`; deleted by `store.removeStored` (`pdf:removeStored`, CLI `remove`) |
 | Doc flag | `annotated` (+ `annotatedAt`) | `annotator.js persist()`; cleared by `app.js useOriginal()` | `main.js` `pdf:read` (stored copy only) and `db:load` (never stale); `app.js` list pill + doc menu |
 | Global (window) | `PDFLib` | `pdf-lib.min.js` script tag | `annotator.js` |
@@ -164,6 +175,7 @@ Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`
 | Result field | `result.images[]` `{id, n, page, rect, color, comment, at, topic}` | `core/extract.js analyzePdf` | `core/order.js`, `images.js`, `core/export.js`, `app.js`, CLI `info` |
 | PDF annotation | `Square` (`/Subj (Image)`, border-only) = image box | `annotator.js startBox` (or other apps) | `core/extract.js` (`images`), `images.js` (crop by `/Rect`) |
 | Placeholder token | random `dirToken` in export text / asset paths | `app.js exportDoc` | `main.js export:bundle` (`exportPaths.fillToken`) |
+| Result field | `result.textless` (pages with no text layer; absent on older scans) | `core/extract.js analyzePdf` | `mcp/tools.js checkText` (`no_text_layer` / warnings) |
 | Result version | `result.v` | `core/extract.js analyzePdf` | `app.js outdated()` → rescan on open / Rescan all; CLI `rescan` / `export` warning |
 | Global (window) | `fl` | `preload.js` | `app.js` everywhere |
 | Magic id | library id `"inbox"` (`system: true`) | `main.js EMPTY_DB/loadDb` | `app.js` (default target, delete fallback, boot) |
@@ -178,14 +190,15 @@ Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`
 | Settings key | `settings.annotColor` (`[r,g,b]` 0–1; no main default, falls back to yellow) | `annotator.js` swatches / popover | `annotator.js color()` |
 | Settings key | `settings.layout` (`{side,list,rail: {w, closed}}`; no main default, filled by `app.js layout()`) | `app.js` drag / toggle / `resetLayout` | `app.js applyLayout()` |
 | CSS vars + classes on `#app` | `--side-w`, `--list-w`, `--rail-w`; `side-closed`, `list-closed`, `rail-closed`, `wide` | `app.js applyLayout()`, `renderList()` | `styles.css` grid, strips, `.app > .resizer` positions |
-| Env vars | `FAELIGHTS_DATA_DIR`, `APPDATA`, `XDG_CONFIG_HOME` (only when no folder is passed) | — | core `library.js userDataDir()` (CLI; the app passes `app.getPath("userData")`) |
+| Env vars | `FAELIGHTS_DATA_DIR`, `APPDATA`, `XDG_CONFIG_HOME` (only when no folder is passed) | — | core `library.js userDataDir()` (CLI and MCP server; the app passes `app.getPath("userData")`) |
 
 ## Conventions
 - All filesystem, dialog, shell and clipboard access stays in `main.js` behind an `ipcMain.handle`. The renderer runs with `contextIsolation: true`, `nodeIntegration: false` and `sandbox: true`, and only reaches the OS through `window.fl`.
 - Adding an OS capability takes three edits: `ipcMain.handle("<area>:<verb>")` in `main.js`, a `fl.<name>` wrapper in `preload.js`, and the call site in `app.js`.
 - `core/` has no DOM, no `fl`, no Electron. Browser-loadable files expose exactly one global (`Extract`, `Topics`, `Meta`, `Order`, `ExportFmt`, `Library`) and end with a `module.exports` guard; they find each other as globals first, `require` second. Node-only core files (`identify`, `metadata`, `fetch`) are plain CommonJS. Network code in core takes the transport as a parameter.
 - Logic the app and the CLI both need goes in `core/` and both call it (doc summary, metadata, search matching, resolving papers), so their doc records stay identical.
-- Every CLI change to the library is one `store.update(fn)`; never `saveDb` from the CLI.
+- Every CLI or MCP change to the library is one `store.update(fn)`; never `saveDb` from either. MCP write tools also check `store.appSession()` first and use `{wait: 0}`.
+- The MCP server never writes to stdout: `server.js` sends `console.log` to stderr before loading anything.
 - The renderer is immediate-mode: mutate `S` / `S.db`, call `save()`, then `renderAll()` (or `renderSide`/`renderList`/`renderReader`). There is no diffing.
 - IDs: docs `"d" + base36 time + random`, libraries `"l" + base36 time`.
 - CSS uses custom properties on `:root`, with a dark override under `prefers-color-scheme: dark`. Never add a theme class: the light/dark choice is made only through `nativeTheme.themeSource` in `main.js`.
@@ -211,6 +224,8 @@ Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`
 | `core/metadata.js` | core |
 | `core/order.js` | core |
 | `core/topics.js` | core |
+| `mcp/server.js` | mcp |
+| `mcp/tools.js` | mcp |
 | `package.json` | packaging |
 | `renderer/annotator.js` | annotator |
 | `renderer/app.js` | renderer-ui |
@@ -234,6 +249,7 @@ Other library commands (`move`, `tag`, `star`, `library …`, `remove`, `rescan`
 | `test/helpers/annotate.js`, `test/helpers/pdf.js` | tests |
 | `test/identify.test.js` | tests |
 | `test/images.test.js` | tests |
+| `test/mcp.test.js` | tests |
 | `test/metadata.test.js` | tests |
 | `test/reader-images.test.js` | tests |
 | `test/tour.test.js` | tests |

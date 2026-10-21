@@ -1,5 +1,5 @@
 # Module: tests
-> Path: test/ · Last synced commit: 796478d · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024
+> Path: test/ · Last synced commit: 2620815 · Related features: F-011, F-012, F-014, F-015, F-016, F-020, F-022, F-023, F-024
 
 ## Purpose
 Automated checks run with Node's built-in `node:test` and `node:assert`, with no extra dependencies. They cover everything that loads in plain Node: core/ (extraction incl. image boxes, topics, reading order, export formatting, the library store with its lock, identifier parsing, CrossRef/arXiv mapping, paper resolving and the Node transport against a local server), the guided tour's step data (`renderer/tour.js`), export path safety (`src/exportPaths.js`) and the `faelights` CLI as a child process on a temp library. They do not launch Electron or exercise the UI, and nothing touches the network.
@@ -58,7 +58,7 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Imports (internal):** `core/extract.js`, `core/export.js`
 
 ### `test/core/library.test.js`
-- **Role:** `core/library.js`: `userDataDir` per platform and `FAELIGHTS_DATA_DIR`, empty library with Inbox, atomic saves, lock waiting / stale lock clearing, `update()` read-modify-write within and across processes, refusing to overwrite an unreadable file, tags / stars / libraries
+- **Role:** `core/library.js`: `userDataDir` per platform and `FAELIGHTS_DATA_DIR`, empty library with Inbox, atomic saves, lock waiting / stale lock clearing / `wait: 0` failing at once, the app session marker (own pid, live other pid, dead pid), `update()` read-modify-write within and across processes, refusing to overwrite an unreadable file, tags / stars / libraries
 - **Imports (internal):** `core/library.js`; spawns `node` children for the cross-process cases
 
 ### `test/core/fetch.test.js`
@@ -69,6 +69,11 @@ Reads `renderer/sample.pdf` and `test/fixtures/images.pdf`. `core/library.test.j
 - **Role:** `cli/faelights.js` run as a child process: `extract` equals `ExportFmt.docText`, json rows equal `Extract.highlights`, html/obsidian/only/`--out`, usage errors exit 2; on a temp `--data-dir`: add/list/libraries/export, re-add rescans, library new/rename/delete, move, tag/untag/tags, star/unstar and filters, info, text (`--pages`, file path), rescan, remove (`--force` for annotated), search (words, notes, topics, md marks), theme (`theme.json`), tour skip/restart (`settings.tour`); `core/meta.js` `readMeta` / `cleanTitle` / `DOI_RE`
 - **Imports (internal):** `test/helpers/pdf.js`, `core/extract.js`, `core/export.js`, `core/meta.js`, `renderer/tour.js`
 - **Change impact:** CLI wording asserted here (messages, `--json` shapes) is a contract for scripts.
+
+### `test/mcp.test.js`
+- **Role:** `mcp/server.js` spawned and driven over stdio by the SDK's `Client` + `StdioClientTransport`, on temp `FAELIGHTS_DATA_DIR`s (filled with the CLI). Covers every read tool on `renderer/sample.pdf` (topics, pages, comments, colour/topic filters, search scopes, export text = `ExportFmt.docText`, `export_library` folder, the `faelights://pdf/{id}` resource), the write tools, and the errors `unknown_pdf`, `file_missing`, `no_text_layer` (blank pdf-lib PDF) and `library_in_use` (a live process's session marker, a held lock; a dead pid's marker is ignored).
+- **Imports (internal):** `test/helpers/pdf.js`, `core/extract.js`, `core/export.js`; `@modelcontextprotocol/sdk` client, `pdf-lib`
+- **Change impact:** tool names, error codes and output shapes asserted here are the MCP contract.
 
 ### `test/helpers/annotate.js`
 - **Role:** adds markup annotations (`Underline`, `StrikeOut`, `Squiggly`, `Highlight` by `find` text or `rect`) and bookmarks to a PDF in memory with pdf-lib → bytes

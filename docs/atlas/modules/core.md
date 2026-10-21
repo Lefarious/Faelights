@@ -1,12 +1,12 @@
 # Module: core
-> Path: core/ (extract.js, topics.js, meta.js, order.js, export.js, library.js, identify.js, metadata.js, fetch.js) · Last synced commit: 796478d · Related features: F-001, F-002, F-006, F-007, F-011, F-012, F-014, F-015, F-016, F-020, F-023, F-024
+> Path: core/ (extract.js, topics.js, meta.js, order.js, export.js, library.js, identify.js, metadata.js, fetch.js) · Last synced commit: 2620815 · Related features: F-001, F-002, F-006, F-007, F-011, F-012, F-014, F-015, F-016, F-020, F-023, F-024
 
 ## Purpose
 This is the headless, framework-free core: PDF highlight extraction, topic detection, PDF metadata, reading order with images, export formatting, search matching, the library on disk, identifier parsing, and finding/downloading papers. It has no DOM, no IPC and no Electron. The browser-loadable files (`extract`, `topics`, `meta`, `order`, `export`, `library`) load two ways: through a `<script>` tag in the renderer, where each defines one global namespace, and through `require()` in plain Node (main process, CLI, tests). The fs half of `library.js` is Node-only; the renderer only uses its pure db operations. `identify.js`, `metadata.js` and `fetch.js` are plain CommonJS, used only from Node (main process and CLI).
 
 ## Public interface
 - **`Extract`** (`core/extract.js`)
-  - `analyzePdf(pdf, onProgress?)` → `{ v, entries, loose, topics, topicSource, pages, count, images }` on any pdf.js document
+  - `analyzePdf(pdf, onProgress?)` → `{ v, entries, loose, topics, topicSource, pages, count, images, textless }` (`textless`: page numbers with no text layer) on any pdf.js document
     - `entries[]`: `{ n, page, at, segs:[{t, hl}], spans:[{id, color, type, comment, text}], topic, sentence }`
     - `loose[]`: `{ page, color, type, comment }` for marks with no text under them
     - `topics[]`: `{ title, path[], level, page, at }`; `topicSource` `"outline"` | `"headings"` | `"patterns"` | `"pages"`
@@ -18,10 +18,10 @@ This is the headless, framework-free core: PDF highlight extraction, topic detec
 - **`Topics`** (`core/topics.js`): `buildTopics(pdf, lines, text, sizeHist)` → `{topics, topicSource}` (sorted by `at`); `resolveOutline(pdf)`, `headingTopics(lines, text, body)`, `patternTopics(lines, text)`, `pageTopics(lines)`, `topicAt(topics, at)`
 - **`Meta`** (`core/meta.js`): `readMeta(pdf)` → `{title, authors[], abstract, publication, volume, issue, pages, date, doi, arxiv, issn, isbn, publisher, url, rights, keywords[], creator, producer, created, modified, pdfVersion}` (XMP dc/prism → Info dict → DOI/arXiv regex on page 1; empty fields dropped), `cleanTitle(t)` (drops `Microsoft Word - `, file extensions, `untitled`, < 3 chars → `""`), `DOI_RE`, `ARXIV_RE`
 - **`Order`** (`core/order.js`): `ckey(color)`, `imagesOf(result)`, `filterImages(images, offSet)`, `withImages(entries, images)` (an image goes before an entry when `img.at <= e.at`), `groupItems(items)`, `summary(result)` → `{count, colours}` (the doc's list fields: marks incl. loose; up to 6 colours, extracts then images)
-- **`ExportFmt`** (`core/export.js`): `PRE_TOPIC`, `FORMATS`, `extOf(fmt)`, `wrapHl`, `entryLines`, `groupsOf`, `exportItems`, `isImage`, `imageFile(img)`, `mdLink(path)`, `imageLines(ref, fmt)`, `docText(d, {fmt, mode, frontmatter, libraryName, date, preTopic, entries, images})`, `esc`, `docHtml(d, opts)`
+- **`ExportFmt`** (`core/export.js`): `PRE_TOPIC`, `FORMATS`, `extOf(fmt)`, `wrapHl`, `entryLines`, `groupsOf`, `exportItems`, `isImage`, `imageFile(img)`, `mdLink(path)`, `imageLines(ref, fmt)`, `safeName(title)` / `fileBase(title)` (export file names; `fileBase` also safe on Windows), `docText(d, {fmt, mode, frontmatter, libraryName, date, preTopic, entries, images})`, `esc`, `docHtml(d, opts)`
 - **`Library`** (`core/library.js`)
   - pure (renderer + Node): `EMPTY_DB()`, `normalize(db)`, `findDoc`, `findLibrary`, `docsIn(db, libId)`, `addLibrary(db, name?)`, `renameLibrary(db, id, name)`, `removeLibrary(db, id)` (docs → Inbox; refuses system), `moveDoc(d, libId)`, `cleanTag`, `addTag(d, tag)` → the added tag or `""`, `removeTag(d, tag)`, `tagCounts(db)` → `Map`, `setStar(d, on?)` (toggles when `on` is omitted), `searchTerms(q)` (lower-cased words), `entryMatches(e, terms)` (every term in the sentence, a span's text or comment, or the topic path), `INBOX`, `APP_NAME`
-  - Node only: `userDataDir(env?, platform?, home?)` (`FAELIGHTS_DATA_DIR`, else `%APPDATA%\Faelights`, `~/Library/Application Support/Faelights`, `$XDG_CONFIG_HOME|~/.config/Faelights`); `at(userData?)` → a store (one per folder per process): `paths {userData, dir, db, files, lock}`, `loadDb()`, `saveDb(db)`, `update(fn)`, `withLock(fn)`, `checkSources(db)`, `isStored(p)`, `importPdf(srcPath)`, `readPdf(doc)`, `pdfPath(doc)`, `writeStored(storedPath, bytes)`, `removeStored(storedPath)`
+  - Node only: `userDataDir(env?, platform?, home?)` (`FAELIGHTS_DATA_DIR`, else `%APPDATA%\Faelights`, `~/Library/Application Support/Faelights`, `$XDG_CONFIG_HOME|~/.config/Faelights`); `at(userData?)` → a store (one per folder per process): `paths {userData, dir, db, files, lock, session}`, `loadDb()`, `saveDb(db)`, `update(fn, opts?)`, `withLock(fn, opts?)` (`opts.wait` ms before `ELOCKED`, default 10 s; 0 = fail at once), `openSession()` / `closeSession()` / `appSession()` (the desktop app's `faelights.app` marker; `appSession()` → `{pid, at}` only for a live process other than this one), `checkSources(db)`, `isStored(p)`, `importPdf(srcPath)`, `readPdf(doc)`, `pdfPath(doc)`, `writeStored(storedPath, bytes)`, `removeStored(storedPath)`
 
 - **identify** (`core/identify.js`, CommonJS): `parseIdentifier(text)` → `{kind: doi|arxiv|pmcid|pmid|isbn|ads|url, value, url}` | `null`, `parseIdentifiers(text)` → `[{text, id}]`, `describe(id)`, `findPdfLink(html, baseUrl)` → `{pdf, refresh, title}`, `isPdf(buf)`, `fileNameFor(id, pdfUrl)`, `fetchFailureReason(err)` → `offline` | `network`
 - **metadata** (`core/metadata.js`, CommonJS): `lookupTarget(meta, origin)` → `{source: crossref|arxiv, id}` | `null`, `fromCrossref(json)`, `fromArxivAtom(xml)` (both → the `Meta.readMeta` field shape, plus `itemType`)
@@ -90,14 +90,14 @@ In the browser, a dependency is found as a global (`typeof Topics !== "undefined
 - **Role:** export text and HTML (moved from `renderer/exportfmt.js`): Markdown `**hl**`, Obsidian `==hl==`, plain, self-contained HTML; YAML frontmatter; `mode` `full` (sentence with marks) or `only` (marked words joined by ` … `)
 - **Exports:** `ExportFmt`, see Public interface
 - **Imports (internal):** `Order` (global or `./order.js`)
-- **Used by:** `renderer/app.js` export section, `cli/faelights.js` `render` / `search` (`docText`, `docHtml`, `entryLines`), `test/export.test.js`, `test/core/export.test.js`, `test/cli.test.js`
+- **Used by:** `renderer/app.js` export section (`safeName`, `exportFileBase` = `fileBase`), `cli/faelights.js` `render` / `search` (`docText`, `docHtml`, `entryLines`), `mcp/tools.js` (`docText`, `groupsOf`, `fileBase`, `extOf`), `test/export.test.js`, `test/core/export.test.js`, `test/cli.test.js`
 - **Change impact:** this is the text users paste into Notion and Obsidian; with no images, md/obsidian/plain must stay identical to the pre-F-016 output (tested).
 
 ### `core/library.js`
 - **Role:** library data: pure db operations and the on-disk store
 - **Exports:** `Library`, see Public interface
 - **Imports (internal):** none
-- **Used by:** `cli/faelights.js` (every library command, through `at()` + `update()`; `searchTerms` / `entryMatches` for `search`); `src/main.js` (`db:load`, `db:save`, `pdf:import`, `pdf:fetch`, `pdf:read`, `pdf:open`, `pdf:reveal`, `pdf:writeStored`, `pdf:removeStored`, "Show Library Folder"); `renderer/app.js` (`newLibrary`, `deleteLibrary`, rename, `moveDoc`, star buttons, tag editor, sidebar tag counts, `renderResults` via `entryMatches`); `test/core/library.test.js`
+- **Used by:** `cli/faelights.js` (every library command, through `at()` + `update()`; `searchTerms` / `entryMatches` for `search`); `mcp/tools.js` (reads, `update(fn, {wait: 0})`, `appSession()`); `src/main.js` `whenReady` / `will-quit` (`openSession` / `closeSession`); `src/main.js` (`db:load`, `db:save`, `pdf:import`, `pdf:fetch`, `pdf:read`, `pdf:open`, `pdf:reveal`, `pdf:writeStored`, `pdf:removeStored`, "Show Library Folder"); `renderer/app.js` (`newLibrary`, `deleteLibrary`, rename, `moveDoc`, star buttons, tag editor, sidebar tag counts, `renderResults` via `entryMatches`); `test/core/library.test.js`
 - **Side effects:** the files listed under Data & state; reads `FAELIGHTS_DATA_DIR`, `APPDATA`, `XDG_CONFIG_HOME` in `userDataDir()`
 - **Change impact:** `saveDb` writes the whole object it is given (the desktop app's in-memory copy), so it can overwrite a script's change made after the app loaded. Scripts should use `update()`. Changing `paths` moves users' data.
 
