@@ -1,7 +1,8 @@
 /* Faelights — highlight extraction (headless core; no DOM, no IPC)
    Given a pdf.js document, rebuilds the text stream in reading order, works out which characters each markup
    annotation (Highlight, Underline, Squiggly, StrikeOut) covers, expands the marks to whole sentences and assigns
-   each one to a topic (topics.js). Square annotations become image boxes.
+   each one to a topic (topics.js). Square annotations become image boxes; marks with no text under them become
+   image clips (result.loose) of the area they cover.
    Loaded by a <script> tag in the renderer (global `Extract`, using the renderer's pdf.js) and by require() in Node,
    where openPdf / extractPdf open files with the pdfjs-dist legacy build (no DOM, no canvas, no worker). */
 "use strict";
@@ -72,8 +73,8 @@ const Extract = (() => {
         if (!MARK_TYPES[a.subtype]) continue;
         const id = annots.length;
         const comment = ((a.contentsObj && a.contentsObj.str) || a.contents || "").trim();
-        const rec = { id, page: p, type: MARK_TYPES[a.subtype], color: colorOf(a), quads: normQuads(a), comment,
-          author: (a.titleObj && a.titleObj.str) || "", first: -1, lastIdx: -1, top: 0 };
+        const rec = { id, aid: a.id || "p" + p + "-m" + id, page: p, type: MARK_TYPES[a.subtype], color: colorOf(a),
+          quads: normQuads(a), comment, author: (a.titleObj && a.titleObj.str) || "", first: -1, lastIdx: -1, top: 0 };
         rec.top = rec.quads.length ? Math.max(...rec.quads.map(q => q[3])) : 0;
         annots.push(rec); pageAnn.push(rec);
       }
@@ -242,14 +243,30 @@ const Extract = (() => {
     // ---- images: anchor in the char stream, then pull any that land inside a fact to its start ----
     for (const im of imgs) im.at = imgStreamAt(im, lines, text.length);
     imgSnapToFacts(imgs, merged);
-    imgs.sort((a, b) => a.at - b.at || a.page - b.page || b.rect[3] - a.rect[3] || b.rect[1] - a.rect[1] || a.rect[0] - b.rect[0]);
+    imgs.sort(byPos);
     const images = imgs.map((im, i) => ({ id: im.id, n: i + 1, page: im.page, rect: im.rect, color: im.color, comment: im.comment,
       at: im.at, topic: T.topicAt(topics, im.at) }));
 
-    const looseOut = loose.map(a => ({ page: a.page, color: a.color, type: a.type, comment: a.comment }));
+    // ---- loose marks → image clips: the union of their quads, placed in reading order like image boxes.
+    // No usable area (zero-size quads) → rect null, placed after the page's text (a top below every line).
+    const clips = loose.map(a => {
+      const q = a.quads, r = q.length ? [0, 1, 2, 3].map(k => (k < 2 ? Math.min : Math.max)(...q.map(b => b[k]))) : null;
+      const rect = r && r[2] - r[0] >= 1 && r[3] - r[1] >= 1 ? r : null;
+      return { ...a, rect, at: imgStreamAt({ page: a.page, rect: rect || [0, 0, 0, -Infinity] }, lines, text.length) };
+    });
+    imgSnapToFacts(clips, merged);
+    clips.sort(byPos);
+    const looseOut = clips.map((a, i) => ({ id: a.aid, n: i + 1, page: a.page, rect: a.rect, color: a.color, type: a.type, comment: a.comment,
+      at: a.at, topic: T.topicAt(topics, a.at) }));
     return { v: ANALYZER_VERSION, entries: out, loose: looseOut, topics, topicSource, pages: pdf.numPages, count: annots.length, images, textless };
   }
 
+  // image boxes and clips: reading order, then page, top-to-bottom, left-to-right (no rect last)
+  const NO_RECT = [Infinity, -Infinity, Infinity, -Infinity];
+  function byPos(a, b) {
+    const ra = a.rect || NO_RECT, rb = b.rect || NO_RECT;
+    return a.at - b.at || a.page - b.page || rb[3] - ra[3] || rb[1] - ra[1] || ra[0] - rb[0];
+  }
   // Where an image box sits in reading order: first line on its page below the box top that overlaps it
   // horizontally; else first line below the top; else just after the page's text (or the next page's text).
   function imgStreamAt(im, lines, textLen) {

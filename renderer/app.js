@@ -583,9 +583,10 @@ const docHtml = (d, images) => ExportFmt.docHtml(d, { ...exportOpts(d), images }
 const safeName = ExportFmt.safeName;
 // safeName that Windows also accepts as a file/folder name (exports with assets are path-checked in main.js)
 const exportFileBase = ExportFmt.fileBase;
-const exportImageList = d => (d.result && d.result.images) || [];
-const exportWithImages = d => !!S.db.settings.images && exportImageList(d).length > 0;
-// Render a doc's image boxes for export. html → embedded data URLs; others → PNG assets under `dir`.
+// clips (highlights over no text) always go out; image boxes only with "Include images"
+const exportImageList = d => Order.figuresOf(d.result, !!S.db.settings.images);
+const exportWithImages = d => exportImageList(d).length > 0;
+// Render a doc's image boxes and clips for export. html → embedded data URLs; others → PNG assets under `dir`.
 // A crop that fails becomes a placeholder line instead of failing the export.
 async function exportImages(d, fmt, dir, tick) {
   const refs = [], assets = [];
@@ -624,7 +625,7 @@ async function exportMenu(d, at) {
   for (;;) {
     const fmt = S.db.settings.fmt, rect = at instanceof Element ? at.getBoundingClientRect() : null;
     const items = [{ type: "heading", label: "Export as" }, ...ExportFmt.FORMATS.map(([v, t]) => ({ id: "fmt:" + v, label: t, checked: fmt === v }))];
-    if (exportImageList(d).length) items.push({ type: "separator" }, { id: "images", label: "Include images", checked: !!S.db.settings.images });
+    if (Order.imagesOf(d.result).length) items.push({ type: "separator" }, { id: "images", label: "Include images", checked: !!S.db.settings.images });
     const r = await openMenu(at, items, { label: "Export" });
     if (!r) return;
     if (r === "images") {   // toggle, then reopen where the menu was (the reader re-renders its toolbar)
@@ -1173,12 +1174,12 @@ function renderReader() {
   const rail = el("aside", "rail");
   const main = el("div", "r-main");
   const entries = filtered(d);
-  // images join the stream only while "With images" is on; off, the list is entries alone (same DOM as before)
+  // image boxes join the stream only while "With images" is on; clips (highlights over no text) always do
   const showImg = !!S.db.settings.images && allImgs.length > 0;
-  const groups = Order.groupItems(withImages(entries, showImg ? filteredImages(d) : []));
+  const groups = Order.groupItems(withImages(entries, filteredImages(d)));
   const colours = new Map();
   for (const e of d.result.entries) for (const s of e.spans) { const k = ckey(s.color); const c = colours.get(k) || { color: s.color, n: 0 }; c.n++; colours.set(k, c); }
-  if (showImg) for (const img of allImgs) { const k = ckey(img.color); const c = colours.get(k) || { color: img.color, n: 0 }; c.n++; colours.set(k, c); }
+  for (const img of Order.figuresOf(d.result, showImg)) { const k = ckey(img.color); const c = colours.get(k) || { color: img.color, n: 0 }; c.n++; colours.set(k, c); }
   if (colours.size) {   // even one colour: hiding it made the filter look tied to "With images"
     const sec = el("section"); sec.append(el("p", "label", "Filter by colour"));
     const chips = el("div", "chips");
@@ -1214,7 +1215,7 @@ function renderReader() {
     if (g.topic && g.topic.path.length > 1) gh.append(el("p", "crumb", g.topic.path.slice(0, -1).join("  ›  ")));
     const h = el("h3"); h.append(document.createTextNode(g.topic ? g.topic.title : PRE_TOPIC));
     const n = spanCount(g);
-    h.append(el("small", null, !g.images ? plural(n, "extract") : !g.entries ? plural(g.images, "image") : plural(n, "extract") + " · " + plural(g.images, "image")));
+    h.append(el("small", null, !g.images ? plural(n, "extract") : !n ? plural(g.images, "image") : plural(n, "extract") + " · " + plural(g.images, "image")));
     gh.append(h); sec.append(gh);
     for (const it of g.items) {
       if (it.kind === "image") { sec.append(figureEl(d, it.image)); continue; }
@@ -1229,10 +1230,11 @@ function renderReader() {
     }
     main.append(sec);
   });
-  if (d.result.loose.length) {
+  const loose = Order.looseOf(d.result);   // marks with no text and no usable area (clips are in the groups above)
+  if (loose.length) {
     const sec = el("section", "group"); const gh = el("div", "group-head"); gh.append(el("h3", null, "Marks without text")); sec.append(gh);
-    sec.append(el("p", "loose", `${plural(d.result.loose.length, "mark")} sit over images or scanned pages (p. ${[...new Set(d.result.loose.map(l => l.page))].join(", ")}). Run OCR on the PDF, then rescan, to read them.`));
-    for (const l of d.result.loose.filter(l => l.comment)) { const p = el("p", "note"); p.append(el("b", null, "Note p." + l.page), document.createTextNode(l.comment)); sec.append(p); }
+    sec.append(el("p", "loose", `${plural(loose.length, "mark")} sit over images or scanned pages (p. ${[...new Set(loose.map(l => l.page))].join(", ")}). Run OCR on the PDF, then rescan, to read them.`));
+    for (const l of loose.filter(l => l.comment)) { const p = el("p", "note"); p.append(el("b", null, "Note p." + l.page), document.createTextNode(l.comment)); sec.append(p); }
     main.append(sec);
   }
   if (rail.childElementCount) {
@@ -1256,32 +1258,35 @@ const TOPIC_SOURCE = {
 function filtered(d) {
   return d.result.entries.map(e => ({ ...e, spans: e.spans.filter(s => !S.off.has(ckey(s.color))) })).filter(e => e.spans.length);
 }
-// Captured images whose colour isn't hidden (core/order.js; [] for results without images)
-const filteredImages = d => Order.filterImages(Order.imagesOf(d.result), S.off);
+// Clips, plus captured images while "With images" is on, whose colour isn't hidden (core/order.js)
+const filteredImages = d => Order.filterImages(Order.figuresOf(d.result, !!S.db.settings.images), S.off);
 // entries + images → [{kind: "entry", entry, topic} | {kind: "image", image, topic}] in reading order
 const withImages = (entries, images) => Order.withImages(entries, images);
-// extracts in a group of the combined list (images don't count)
-const spanCount = g => g.items.reduce((n, it) => n + (it.kind === "entry" ? it.entry.spans.length : 0), 0);
+// extracts in a group of the combined list (clips count, they are highlights; images don't)
+const spanCount = g => g.items.reduce((n, it) => n + (it.kind === "entry" ? it.entry.spans.length : it.image.clip ? 1 : 0), 0);
 const IMG_ICON = '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>';
-// One captured image, centred in the reading column; a fixed-aspect placeholder holds its place while it renders
+// One captured image or clip (img.clip: a highlight over no text), centred in the reading column;
+// a fixed-aspect placeholder holds its place while it renders
 function figureEl(d, img) {
-  const f = el("figure", "fig"); f.id = "i" + img.n; f.style.setProperty("--mc", rgb(img.color));
+  const c0 = !!img.clip, what = c0 ? "highlighted area" : "image";
+  const f = el("figure", c0 ? "fig clip" : "fig"); f.id = (c0 ? "c" : "i") + img.n; f.style.setProperty("--mc", rgb(img.color));
   const w = Math.abs(img.rect[2] - img.rect[0]) || 1, h = Math.abs(img.rect[3] - img.rect[1]) || 1;
   const box = el("div", "fig-img loading");
   box.style.aspectRatio = `${w} / ${h}`;
   // natural size (1pt = 4/3 px), never wider than the column or taller than 60vh
   box.style.width = `min(100%, ${Math.round(w * 4 / 3)}px, calc(60vh * ${(w / h).toFixed(4)}))`;
-  const alt = "Image from page " + img.page + (img.comment ? ": " + img.comment : "");
+  const alt = (c0 ? "Highlighted area on page " : "Image from page ") + img.page + (img.comment ? ": " + img.comment : "");
   box.setAttribute("role", "img"); box.setAttribute("aria-label", alt);
   Images.crop(d, img).then(({ url }) => {
     const im = el("img"); im.src = url; im.alt = alt;
     box.removeAttribute("role"); box.removeAttribute("aria-label"); box.classList.remove("loading"); box.replaceChildren(im);
-  }, err => { console.error(err); box.replaceWith(el("p", "fig-fail", "Couldn't render this image")); });
+  }, err => { console.error(err); box.replaceWith(el("p", "fig-fail", "Couldn't render this " + what)); });
   const cap = el("figcaption");
   const pg = el("button", "pg", "p. " + img.page); pg.title = "Show page " + img.page + " in the viewer"; pg.onclick = () => annotate(d, img.page);
   cap.append(pg);
+  if (c0 && img.type && img.type !== "Highlight") cap.append(el("span", "fig-kind", img.type));
   if (img.comment) { const p = el("p", "note"); p.append(el("b", null, "Note"), document.createTextNode(img.comment)); cap.append(p); }
-  const c = el("button", "copy1"); c.append(svg(ICON.copy)); c.title = "Copy image"; c.setAttribute("aria-label", "Copy image from page " + img.page);
+  const c = el("button", "copy1"); c.append(svg(ICON.copy)); c.title = "Copy " + what; c.setAttribute("aria-label", "Copy " + what + " from page " + img.page);
   c.onclick = () => copyImage(d, img); cap.append(c);
   f.oncontextmenu = async ev => {
     ev.preventDefault();

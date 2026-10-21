@@ -17,7 +17,7 @@
 //   page 2  "3. Results"
 //           "3.1 Counts"       para R1: Highlight (green) on S2
 //           [figure F2]  loose Highlight (yellow), one quad over the figure (right half of the page), no comment
-//           para R2 (no marks)
+//           para R2 (no marks; runs under F2, so F2 sits before it)
 //           "3.2 Errors"       para E: Underline (purple) in S2
 //   page 3  no text layer ("scanned"): [figure F3] loose Highlight (blue, comment "scanned table"), two quads,
 //           and a Highlight whose /Rect and quad are all zeros (no usable position)
@@ -125,7 +125,7 @@ async function main() {
   const f2Top = r1.last - 20, f2 = [320, f2Top - 100, 540, f2Top];
   figure(p2, f2);
   looseMark(p2, f2, [f2], YELLOW);
-  const r2 = para(p2, "Longer notes came from the second season.", 72, f2Top - 120, 468);
+  const r2 = para(p2, "Longer notes came from the second season, when the observers had more time to write them up.", 72, f2Top - 120, 468);
   tops.errors = heading(p2, "3.2 Errors", r2.last - 30);
   const e = para(p2, "Some notes were dated wrongly. These were corrected from the weather records.", 72, tops.errors - 20, 468);
   mark(p2, "Underline", e.words, find(e.words, "corrected from the weather records."), PURPLE);

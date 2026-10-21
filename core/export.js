@@ -39,27 +39,36 @@ const ExportFmt = (() => {
     return Ord.withImages(entries, images).map(x => x.kind === "image" ? (isImage(x.image) ? x.image : { ...x.image, kind: "image" }) : x.entry);
   }
 
-  // Images live in "<file base> images/p<page>-<n>.png" next to the exported file
-  const imageFile = img => `p${img.page}-${img.n}.png`;
+  // Images live in "<file base> images/p<page>-<n>.png" next to the exported file; clips in ".../p<page>-clip<n>.png"
+  const imageFile = img => `p${img.page}-${img.clip ? "clip" : ""}${img.n}.png`;
   // Markdown link destination: percent-encode each path segment (spaces → %20, brackets, #, …)
   const mdLink = p => p.split("/").map(s => encodeURIComponent(s).replace(/[()']/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase())).join("/");
 
-  // ref: an image with optional `path` (relative file), `failed` (couldn't be rendered). No path → text placeholder.
+  // ref: an image or clip with optional `path` (relative file), `failed` (couldn't be rendered). No path → text placeholder.
   function imageLines(ref, fmt) {
-    const p = ref.page;
+    const p = ref.page, c = !!ref.clip;
     let line;
-    if (ref.failed) line = `- (image on p. ${p} couldn't be rendered)`;
-    else if (!ref.path) line = `- [Image, p. ${p}]`;
+    if (ref.failed) line = `- (${c ? "highlighted area" : "image"} on p. ${p} couldn't be rendered)`;
+    else if (!ref.path) line = c ? `- [image clip, p. ${p}]` : `- [Image, p. ${p}]`;
     else if (fmt === "obsidian") line = `- ![[${ref.path}]] (p. ${p})`;
-    else if (fmt === "plain") line = `- [Image p. ${p}: ${ref.path}]`;
-    else line = `- ![Image from p. ${p}](${mdLink(ref.path)}) (p. ${p})`;
+    else if (fmt === "plain") line = `- [${c ? "Image clip" : "Image"} p. ${p}: ${ref.path}]`;
+    else line = `- ![${c ? "Highlighted area" : "Image"} from p. ${p}](${mdLink(ref.path)}) (p. ${p})`;
     const lines = [line];
     if (ref.comment) lines.push(`  - Note: ${ref.comment}`);
     return lines;
   }
 
-  // Markdown / Obsidian / plain text. With no images the output is identical to the pre-image exporter.
+  // o.images: images and clips to interleave; left out → the result's clips, as text placeholders
+  const withClips = (d, o) => o.images ? o : { ...o, images: Ord.clipsOf(d.result) };
+  // loose marks with no position: one line naming their pages
+  function looseNote(d) {
+    const l = Ord.looseOf(d.result);
+    return l.length ? `(${plural(l.length, "mark")} on pages without text: ${[...new Set(l.map(x => x.page))].join(", ")})` : "";
+  }
+
+  // Markdown / Obsidian / plain text. With no images or clips the output is identical to the pre-image exporter.
   function docText(d, o) {
+    o = withClips(d, o);
     const fmt = o.fmt === "html" ? "md" : o.fmt, mode = o.mode;
     const entries = o.entries || d.result.entries;
     const out = [];
@@ -81,8 +90,7 @@ const ExportFmt = (() => {
       for (const it of g.items) out.push(...(isImage(it) ? imageLines(it, fmt) : entryLines(it, fmt, mode)));
       out.push("");
     }
-    const loose = d.result.loose || [];
-    if (loose.length) out.push(`(${plural(loose.length, "mark")} on pages without text: ${[...new Set(loose.map(l => l.page))].join(", ")})`);
+    if (looseNote(d)) out.push(looseNote(d));
     return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
   }
 
@@ -108,9 +116,12 @@ const ExportFmt = (() => {
   }
   function figureHtml(ref) {
     const cap = `p. ${esc(ref.page)}` + (ref.comment ? ` · ${esc(ref.comment)}` : "");
-    const src = safeSrc(ref.url);
-    if (ref.failed || !src) return `<p class="missing">(image on p. ${esc(ref.page)} couldn't be rendered)</p>`;
+    const src = safeSrc(ref.url), c = !!ref.clip;
+    // a clip that was never rendered (no url, e.g. from the CLI) is a placeholder, as in text exports
+    if (c && !ref.failed && !ref.url) return `<p class="missing">[image clip, ${cap}]</p>`;
+    if (ref.failed || !src) return `<p class="missing">(${c ? "highlighted area" : "image"} on p. ${esc(ref.page)} couldn't be rendered)</p>`;
     const dim = ref.width && ref.height ? ` width="${Math.round(ref.width / 2)}" height="${Math.round(ref.height / 2)}"` : "";
+    if (c) return `<figure class="clip"><img src="${src}" alt="Highlighted area from p. ${esc(ref.page)}"${dim} style="border-left:4px solid ${rgba(ref.color, 1)}"><figcaption>${cap}</figcaption></figure>`;
     return `<figure><img src="${src}" alt="Image from p. ${esc(ref.page)}"${dim}><figcaption>${cap}</figcaption></figure>`;
   }
 
@@ -125,6 +136,7 @@ figure{margin:1.5rem auto;text-align:center}figure img{max-width:100%;height:aut
 figcaption{color:var(--muted);font-size:.85rem;margin-top:.4rem}`;
 
   function docHtml(d, o) {
+    o = withClips(d, o);
     const mode = o.mode, entries = o.entries || d.result.entries;
     const out = ["<!doctype html>", '<html lang="en">', "<head>", '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">', `<title>${esc(d.title)}</title>`, `<style>${CSS}</style>`, "</head>", "<body>",
@@ -150,8 +162,7 @@ figcaption{color:var(--muted);font-size:.85rem;margin-top:.4rem}`;
       }
       if (open) out.push("</ul>");
     }
-    const loose = d.result.loose || [];
-    if (loose.length) out.push(`<p class="loose">(${plural(loose.length, "mark")} on pages without text: ${[...new Set(loose.map(l => l.page))].join(", ")})</p>`);
+    if (looseNote(d)) out.push(`<p class="loose">${esc(looseNote(d))}</p>`);
     out.push("</body>", "</html>");
     return out.join("\n") + "\n";
   }
