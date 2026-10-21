@@ -133,6 +133,33 @@ test("stars toggle or set", () => {
   assert.equal(L.setStar(d, true), true);
 });
 
+test("read flag toggles or sets; last page keeps positive whole pages only", () => {
+  const d = doc("a");
+  assert.equal(L.setRead(d), true);
+  assert.equal(L.setRead(d), false);
+  assert.equal(L.setRead(d, true), true);
+  assert.equal(L.setLastPage(d, 12), true);
+  assert.equal(L.setLastPage(d, 12), false);
+  assert.equal(d.lastPage, 12);
+  for (const bad of [0, -3, 2.5, "7", null]) { L.setLastPage(d, bad); assert.equal(d.lastPage, 0); }
+});
+
+test("tag colours: set, read back, cleared by an empty or invalid colour", () => {
+  const db = L.EMPTY_DB();
+  assert.equal(L.setTagColour(db, "#ml", "#AA3300"), "#aa3300");
+  assert.equal(L.tagColour(db, "ml"), "#aa3300");
+  assert.equal(L.setTagColour(db, "ml", "red"), "");
+  assert.equal(L.tagColour(db, "ml"), "");
+  L.setTagColour(db, "ml", "#112233"); L.setTagColour(db, "ml", "");
+  assert.deepEqual(db.tagColours, {});
+});
+
+test("normalize fills read, lastPage and tagColours on older files", () => {
+  const db = L.normalize({ libraries: [], docs: [doc("a"), doc("b", { read: true, lastPage: 4 }), doc("c", { lastPage: -1 })] });
+  assert.deepEqual(db.docs.map(d => [d.read, d.lastPage]), [[false, 0], [true, 4], [false, 0]]);
+  assert.deepEqual(db.tagColours, {});
+});
+
 test("libraries: add, rename, move, remove (PDFs go back to the Inbox; the Inbox stays)", () => {
   const db = { ...L.EMPTY_DB(), docs: [doc("a"), doc("b")] };
   const l = L.addLibrary(db);
