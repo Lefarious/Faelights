@@ -1,20 +1,24 @@
 /* Faelights — MCP tool handlers (T-016)
    Plain async functions over core/ that return JSON-able objects; server.js wires them to the protocol.
    Reads use the library the desktop app keeps (<userData>/library, Library.at) and re-read a PDF only when its saved
-   scan is missing, outdated or older than the file. The three write tools (add_pdf, tag_pdf, star_pdf) refuse while
+   scan is missing, outdated or older than the file. The four write tools (add_pdf, add_by_identifier, tag_pdf, star_pdf) refuse while
    the app is open (its session marker) or another process holds the lock, instead of writing something the app
    would overwrite. Failures are ToolError {code, message}. */
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const Library = require("../core/library.js");
 const Extract = require("../core/extract.js");
 const Order = require("../core/order.js");
 const ExportFmt = require("../core/export.js");
+const Identify = require("../core/identify.js");
+const Fetch = require("../core/fetch.js");
 const exportPaths = require("../src/exportPaths.js");
-const { scan, scanned } = require("../cli/faelights.js");
+const { scan, scanned, ADD_FAIL, sameOrigin, fetchDetails, applyDetails } = require("../cli/faelights.js");
+const { version } = require("../package.json");
 
 class ToolError extends Error {
   constructor(code, message) { super(message); this.code = code; }
@@ -248,6 +252,52 @@ function tools(dataDir) {
     } catch (e) { await store.removeStored(info.storedPath); throw e; }
   }
 
+  // Download a paper by DOI, arXiv id, PMID, PMCID, ISBN, ADS bibcode or link, as `faelights add <id>` does: skip papers
+  // already there (same identifier, or same file contents), keep no original on disk, fill in details from CrossRef /
+  // arXiv. The only tool that uses the network. Download failures → codes named after core/fetch.js reasons.
+  // progress({stage: "find" | "download" | "details", got?, total?}) is called as it goes (optional).
+  async function add_by_identifier({ identifier, library, tags = [], lookup = true }, progress = () => {}) {
+    const id = Identify.parseIdentifier(identifier);
+    if (!id) throw new ToolError("invalid_input", `"${identifier}": ${ADD_FAIL.invalid}`);
+    writable();
+    const before = await store.loadDb();
+    const target = library ? libraryOf(before, library) : Library.findLibrary(before, Library.INBOX);
+    const clean = tags.map(Library.cleanTag).filter(Boolean);
+    const exists = d => ({ action: "exists", pdf: summary(before, d), warnings: [] });
+    const dup = sameOrigin(before, id);
+    if (dup) return exists(dup);
+
+    const get = Fetch.nodeGet({ userAgent: `Faelights/${version} (PDF highlights MCP server)`, onProgress: progress });
+    let r;
+    try { r = await Fetch.resolver(get, progress).resolvePdf(id); } catch (e) {
+      const reason = e instanceof Fetch.FetchFail ? e.reason : "network";
+      throw new ToolError(reason.replace(/-/g, "_"), (ADD_FAIL[reason] || ADD_FAIL.network) + (id.url ? ` (${id.url})` : ""));
+    }
+    const tmp = path.join(os.tmpdir(), `faelights-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}.pdf`);
+    let info;
+    try { fs.writeFileSync(tmp, r.buf); info = await store.importPdf(tmp); } finally { fs.rmSync(tmp, { force: true }); }
+    Object.assign(info, { sourcePath: null, fileName: Identify.fileNameFor(id, r.url) });
+    const same = (await store.loadDb()).docs.find(d => d.hash === info.hash);
+    if (same) { await store.removeStored(info.storedPath); return exists(same); }
+
+    try {
+      const { title, meta, result } = await readBytes(fs.readFileSync(info.storedPath));
+      const warnings = [];
+      try { checkText({ title: info.fileName }, result, warnings); } catch (e) { warnings.push(e.message); }
+      const d = { id: info.id, libraryId: target.id, title: title || r.title || info.fileName.replace(/\.pdf$/i, ""), fileName: info.fileName,
+        sourcePath: null, storedPath: info.storedPath, hash: info.hash, addedAt: Date.now(), tags: [...new Set(clean)], starred: false,
+        scannedMtime: info.mtime, meta, ...scanned(result), origin: { kind: id.kind, value: id.value, url: r.url } };
+      let details = null;
+      if (lookup) {
+        progress({ stage: "details" });
+        const got = await fetchDetails(d, get);
+        if (got.ok) { applyDetails(d, got); details = got.source; }
+      }
+      await write(db => { db.docs.push(d); });
+      return { action: "added", pdf: summary(before, d), origin: d.origin, details, warnings };
+    } catch (e) { await store.removeStored(info.storedPath); throw e; }
+  }
+
   async function tag_pdf({ pdf_id, tags }) {
     const [db, d, added] = await write(db => {
       const d = docOf(db, pdf_id);
@@ -272,7 +322,8 @@ function tools(dataDir) {
     return db.docs.map(d => ({ id: d.id, title: d.title, library: libName(db, d.libraryId) }));
   }
 
-  return { store, list_libraries, list_pdfs, get_extracts, search, export_pdf, export_library, add_pdf, tag_pdf, star_pdf, pdf_markdown, pdf_resources };
+  return { store, list_libraries, list_pdfs, get_extracts, search, export_pdf, export_library, add_pdf, add_by_identifier, tag_pdf, star_pdf,
+    pdf_markdown, pdf_resources };
 }
 
 module.exports = { tools, ToolError, FORMATS };

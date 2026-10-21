@@ -15,7 +15,7 @@ const { z } = require("zod");
 const { tools, ToolError } = require("./tools.js");
 const { version } = require("../package.json");
 
-const WRITE_NOTE = "This is one of the only three tools that change your Faelights library (add_pdf, tag_pdf, star_pdf). " +
+const WRITE_NOTE = "This is one of the only four tools that change your Faelights library (add_pdf, add_by_identifier, tag_pdf, star_pdf). " +
   "It refuses with library_in_use while the Faelights desktop app is open, because the app would overwrite the change.";
 
 const pdfId = z.string().min(1).describe("The PDF's id, from list_pdfs or search");
@@ -26,9 +26,9 @@ const mode = z.enum(["full", "highlights"]).optional()
 const library = z.string().min(1).describe("Library name or id (see list_libraries)");
 
 // Map the handler's {code, message} failures to tool errors; anything else is logged and reported as internal
-const wrap = fn => async args => {
+const wrap = fn => async (args, extra) => {
   try {
-    const out = await fn(args);
+    const out = await fn(args, extra);
     return { content: [{ type: "text", text: JSON.stringify(out, null, 2) }], structuredContent: out };
   } catch (e) {
     const error = e instanceof ToolError ? { code: e.code, message: e.message } : { code: "internal", message: e && e.message || String(e) };
@@ -37,12 +37,27 @@ const wrap = fn => async args => {
   }
 };
 
+// notifications/progress for a request that carries a progressToken (clients may reset their timeout on each one);
+// progress only ever increases: bytes downloaded once known, otherwise one step per stage
+const STAGES = { find: "Finding the PDF", download: "Downloading", details: "Looking up the paper's details" };
+function progressFor(extra) {
+  const token = extra && extra._meta && extra._meta.progressToken;
+  if (token === undefined) return undefined;
+  let last = 0;
+  return p => {
+    last = Math.max(last + 1, p.got || 0);
+    const message = p.got ? `Downloading: ${Math.round(p.got / 1024)} KB` + (p.total ? ` of ${Math.round(p.total / 1024)} KB` : "") : STAGES[p.stage] || p.stage;
+    extra.sendNotification({ method: "notifications/progress", params: { progressToken: token, progress: last, message } }).catch(() => {});
+  };
+}
+
 function createServer(dataDir) {
   const t = tools(dataDir);
   const server = new McpServer({ name: "faelights", version }, {
     instructions: "Faelights pulls highlights out of annotated PDFs, grouped by the PDF's topics (headings). " +
       "Start with list_pdfs or search to find a PDF id, then get_extracts or export_pdf. " +
-      "Only add_pdf, tag_pdf and star_pdf change the library, and they fail with library_in_use while the desktop app is open."
+      "Only add_pdf, add_by_identifier, tag_pdf and star_pdf change the library, and they fail with library_in_use while the desktop app is open. " +
+      "add_by_identifier is the only tool that uses the internet."
   });
   const read = { readOnlyHint: true, openWorldHint: false };
 
@@ -110,6 +125,22 @@ function createServer(dataDir) {
     },
     annotations: writeHints
   }, wrap(a => t.add_pdf(a)));
+
+  server.registerTool("add_by_identifier", {
+    title: "Add a paper by identifier", description: "Download a paper by DOI, arXiv id, PMID, PMCID, ISBN, ADS bibcode or web link, add it to the " +
+      "library (the Inbox unless library is given) and read its highlights. This is the only tool that uses the internet: it contacts the publisher " +
+      "or repository and, unless lookup is false, CrossRef or arXiv for the paper's details. It can take up to a minute. A paper already in the " +
+      "library (same identifier or same file) is returned as \"exists\" and not downloaded again. A large PDF from a slow server can take " +
+      "several minutes; progress notifications are sent while it downloads. Download failures come back as offline, " +
+      "paywalled, not_pdf, not_found, no_free_copy, too_large or network. " + WRITE_NOTE,
+    inputSchema: {
+      identifier: z.string().min(1).describe("e.g. 10.1371/journal.pone.0185809, arXiv:1706.03762, PMID 31452104, PMC6482211, an ISBN, or a link"),
+      library: library.optional(),
+      tags: z.array(z.string().min(1)).optional().describe("Tags to give it"),
+      lookup: z.boolean().default(true).describe("Fill in title, authors, journal… from CrossRef / arXiv after downloading")
+    },
+    annotations: { ...writeHints, openWorldHint: true }
+  }, wrap((a, extra) => t.add_by_identifier(a, progressFor(extra))));
 
   server.registerTool("tag_pdf", {
     title: "Tag a PDF", description: "Add tags to a PDF (a leading # is dropped; tags it already has are kept once). " + WRITE_NOTE,

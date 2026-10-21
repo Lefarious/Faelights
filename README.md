@@ -66,11 +66,13 @@ npm run cli -- --help                         # every command: text, info, libra
 | `search` | Highlights containing every word, in the `sentence`, `highlight`, `note` or `all` |
 | `export_pdf` | One PDF as Markdown, Obsidian or plain text (returns the text) |
 | `export_library` | Writes a library to a folder inside `out_dir`, one file per PDF |
-| `add_pdf`, `tag_pdf`, `star_pdf` | The only tools that change the library |
+| `add_pdf`, `add_by_identifier`, `tag_pdf`, `star_pdf` | The only tools that change the library. `add_by_identifier` downloads a paper by DOI, arXiv id, PMID, PMCID, ISBN, ADS bibcode or link, and is the only tool that uses the internet |
 
 The resource `faelights://pdf/{id}` returns a PDF's extracts as Markdown.
 
-The server uses the app's own data folder: `%APPDATA%\Faelights` on Windows, `~/Library/Application Support/Faelights` on macOS and `~/.config/Faelights` on Linux. Set `FAELIGHTS_DATA_DIR` to use another one. While the desktop app is open, the three write tools refuse with `library_in_use`, because the app would overwrite their changes when it next saves. Reading works either way.
+The server uses the app's own data folder: `%APPDATA%\Faelights` on Windows, `~/Library/Application Support/Faelights` on macOS and `~/.config/Faelights` on Linux. Set `FAELIGHTS_DATA_DIR` to use another one. While the desktop app is open, the four write tools refuse with `library_in_use`, because the app would overwrite their changes when it next saves. Reading works either way.
+
+A download from a slow server can take minutes. `add_by_identifier` sends progress notifications while it downloads, but a client that doesn't reset its timeout on progress may give up first. The paper is still added in that case, and asking again returns `exists`. In Claude Code you can raise the limit by starting it with `MCP_TOOL_TIMEOUT=300000` (milliseconds).
 
 **Claude Code:**
 

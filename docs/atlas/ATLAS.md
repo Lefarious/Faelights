@@ -17,7 +17,7 @@ Faelights is an Electron 31 desktop app with no bundler and no framework, plus a
 | Renderer boot | `renderer/app.js` `boot()` IIFE | Loads DB + theme, renders UI, sends `app:ready`, consumes pending "Open with" files |
 | OS file open | `src/main.js` `pdfArgs()`, `second-instance`, `open-file` | PDFs passed on the app's argv or macOS "Open with" |
 | Command line | `cli/faelights.js` (`package.json` `bin.faelights`, `npm run cli`) | `main(argv)`: extract / export / text / info / list / search / add / rescan / lookup / library / move / tag / star / remove / theme / tour on the app's library folder |
-| MCP server | `mcp/server.js` (`package.json` `bin.faelights-mcp`, `npm run mcp`) | stdio MCP server: `list_libraries`, `list_pdfs`, `get_extracts`, `search`, `export_pdf`, `export_library`, `add_pdf`, `tag_pdf`, `star_pdf`, resource `faelights://pdf/{id}` |
+| MCP server | `mcp/server.js` (`package.json` `bin.faelights-mcp`, `npm run mcp`) | stdio MCP server: `list_libraries`, `list_pdfs`, `get_extracts`, `search`, `export_pdf`, `export_library`, `add_pdf`, `add_by_identifier`, `tag_pdf`, `star_pdf`, resource `faelights://pdf/{id}` |
 | CI build | `.github/workflows/build.yml` | On `v*` tag: `electron-builder` for win/mac/linux, files attached to a draft GitHub Release |
 | Tests | `npm test` → `node --test "test/**/*.test.js"` | `test/core.test.js`, `test/images.test.js`, `test/identify.test.js`, `test/metadata.test.js`, `test/reader-images.test.js`, `test/export.test.js`, `test/tour.test.js`, `test/cli.test.js`, `test/core/{extract,topics,export,library,fetch}.test.js` |
 
@@ -144,11 +144,11 @@ Reads (`get_extracts`, `export_pdf`, the resource) → `readable(id)` → `store
 | IPC invoke | `theme:get`, `theme:set` | `preload.js` | `main.js` |
 | IPC invoke | `id:parse`, `id:parseMany`, `pdf:fetch`, `pdf:fetchCancel`, `meta:lookup`, `app:openExternal`, `clip:read` | `preload.js` | `main.js` |
 | IPC push | `fetch-progress` (`{stage}`) | `main.js sendProgress` | `app.js fl.onFetchProgress` |
-| Network | arxiv.org, export.arxiv.org, doi.org (+ publisher redirects), api.crossref.org, pmc.ncbi.nlm.nih.gov, eutils.ncbi.nlm.nih.gov, ui.adsabs.harvard.edu (+ redirects), openlibrary.org, archive.org — only from `pdf:fetch` / `meta:lookup` and CLI `add <identifier>` / `lookup` | core `fetch.js` over `main.js fetchUrl` (app) or `nodeGet` (CLI) | — |
+| Network | arxiv.org, export.arxiv.org, doi.org (+ publisher redirects), api.crossref.org, pmc.ncbi.nlm.nih.gov, eutils.ncbi.nlm.nih.gov, ui.adsabs.harvard.edu (+ redirects), openlibrary.org, archive.org — only from `pdf:fetch` / `meta:lookup`, CLI `add <identifier>` / `lookup` and MCP `add_by_identifier` | core `fetch.js` over `main.js fetchUrl` (app) or `nodeGet` (CLI, MCP) | — |
 | Session partition | `faelights-fetch` (in-memory) | `main.js fetchUrl` | — |
-| Temp file | `<temp>/faelights-<random>.pdf` (deleted after import) | `main.js` `pdf:fetch`, CLI `add <identifier>` | core `store.importPdf` |
+| Temp file | `<temp>/faelights-<random>.pdf` (deleted after import) | `main.js` `pdf:fetch`, CLI `add <identifier>`, MCP `add_by_identifier` | core `store.importPdf` |
 | String keys | fetch failure reasons (`invalid`, `offline`, `network`, `not-found`, `paywalled`, `not-pdf`, `too-large`, `no-free-copy`, `cancelled`) | core `fetch.js FetchFail`, `identify.fetchFailureReason` | `app.js ADD_FAIL` / `ADD_OPEN`, CLI `ADD_FAIL` |
-| Doc field | `origin` `{kind: doi|arxiv|pmcid|pmid|isbn|ads|url, value, url}` | `app.js addImported` (from `pdf:fetch`), CLI `add <identifier>` | `app.js submitAddId` / CLI `add` duplicate check; `lookupQuery` / CLI `fetchDetails` |
+| Doc field | `origin` `{kind: doi|arxiv|pmcid|pmid|isbn|ads|url, value, url}` | `app.js addImported` (from `pdf:fetch`), CLI `add <identifier>`, MCP `add_by_identifier` | `app.js submitAddId` / CLI `add` duplicate check; `lookupQuery` / CLI `fetchDetails` |
 | IPC send (renderer → main) | `app:ready` | `app.js boot()` via `fl.ready()` | `main.js revealMain()` |
 | IPC push | `menu` (payloads: `add`, `add-id`, `new-library`, `export-doc`, `export-library`, `rescan-all`, `search`, `toggle-mode`, `pane:side`, `pane:list`, `pane:rail`, `layout-reset`) | `main.js buildAppMenu()` | `app.js fl.onMenu` handler |
 | IPC push | `open-files` | `main.js` `second-instance` / `open-file` | `app.js fl.onOpenFiles` → `addPaths` |

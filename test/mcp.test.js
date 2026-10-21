@@ -7,6 +7,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const http = require("node:http");
 const { execFileSync, spawn } = require("node:child_process");
 const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
 const { StdioClientTransport } = require("@modelcontextprotocol/sdk/client/stdio.js");
@@ -36,8 +37,18 @@ async function call(client, name, args = {}) {
 }
 const rejects = (p, code) => assert.rejects(p, e => { assert.equal(e.code, code, e.message); return true; });
 
-let work, readDir, writeDir, reader, writer, doc, scannedPdf;
+let work, readDir, writeDir, reader, writer, doc, scannedPdf, web, base;
 before(async () => {
+  // stands in for a publisher: the sample PDF at two links, a 404, a paywall and an HTML page with no PDF
+  web = http.createServer((req, res) => {
+    const send = (code, type, body) => { res.writeHead(code, type ? { "Content-Type": type } : {}); res.end(body); };
+    if (req.url === "/paper.pdf" || req.url === "/mirror.pdf") return send(200, "application/pdf", fs.readFileSync(SAMPLE));
+    if (req.url === "/paywall") return send(403);
+    if (req.url === "/page") return send(200, "text/html", "<html><body>No PDF here</body></html>");
+    send(404);
+  });
+  await new Promise(r => web.listen(0, "127.0.0.1", r));
+  base = `http://127.0.0.1:${web.address().port}`;
   work = tmp("work");
   readDir = tmp("read");
   writeDir = tmp("write");
@@ -56,14 +67,16 @@ before(async () => {
 after(async () => {
   await reader?.close();
   await writer?.close();
+  web?.close();
   for (const d of [work, readDir, writeDir]) fs.rmSync(d, { recursive: true, force: true });
 });
 
 test("lists every tool and the pdf resource template", async () => {
   const names = (await reader.listTools()).tools.map(t => t.name).sort();
-  assert.deepEqual(names, ["add_pdf", "export_library", "export_pdf", "get_extracts", "list_libraries", "list_pdfs", "search", "star_pdf", "tag_pdf"]);
+  assert.deepEqual(names, ["add_by_identifier", "add_pdf", "export_library", "export_pdf", "get_extracts", "list_libraries", "list_pdfs", "search", "star_pdf", "tag_pdf"]);
   const { tools } = await reader.listTools();
-  for (const n of ["add_pdf", "tag_pdf", "star_pdf"]) assert.match(tools.find(t => t.name === n).description, /only three tools that change/);
+  for (const n of ["add_pdf", "add_by_identifier", "tag_pdf", "star_pdf"]) assert.match(tools.find(t => t.name === n).description, /only four tools that change/);
+  assert.equal(tools.find(t => t.name === "add_by_identifier").annotations.openWorldHint, true);
   const { resourceTemplates } = await reader.listResourceTemplates();
   assert.equal(resourceTemplates[0].uriTemplate, "faelights://pdf/{id}");
 });
@@ -224,4 +237,42 @@ test("writes refuse with library_in_use while the app is open or the lock is hel
     await rejects(call(writer, "tag_pdf", { pdf_id: p.id, tags: ["locked"] }), "library_in_use");
     assert.equal(fs.readFileSync(path.join(writeDir, "library", "faelights.json"), "utf8"), after);
   } finally { fs.rmSync(lock); }
+});
+
+test("add_by_identifier downloads a paper by link, skips duplicates and reports download failures", async () => {
+  const dir = tmp("ident");
+  const c = await connect(dir);
+  try {
+    const seen = [];
+    const raw = await c.callTool({ name: "add_by_identifier", arguments: { identifier: base + "/paper.pdf", tags: ["web"], lookup: false } }, undefined,
+      { onprogress: p => seen.push(p), resetTimeoutOnProgress: true });
+    const r = JSON.parse(raw.content[0].text);
+    assert.equal(r.action, "added");
+    assert.ok(seen.length >= 1, "progress notifications while downloading");
+    assert.ok(seen.every((p, i) => i === 0 || p.progress > seen[i - 1].progress));
+    assert.ok(seen.every(p => /^(Finding the PDF|Downloading)/.test(p.message)), JSON.stringify(seen));
+    assert.deepEqual([r.pdf.title, r.pdf.library, r.pdf.tags, r.pdf.highlights], ["Notes on Bioluminescence", "Inbox", ["web"], 8]);
+    assert.deepEqual([r.origin.kind, r.origin.url], ["url", base + "/paper.pdf"]);
+    // no original on disk: only the library's copy, which the read tools use
+    const db = JSON.parse(fs.readFileSync(path.join(dir, "library", "faelights.json"), "utf8"));
+    const d = db.docs.find(x => x.id === r.pdf.id);
+    assert.equal(d.sourcePath, null);
+    assert.ok(fs.existsSync(d.storedPath));
+    assert.equal((await call(c, "get_extracts", { pdf_id: r.pdf.id })).extracts, 7);
+
+    // same link → its identifier is already there; another link to the same file → same contents
+    assert.deepEqual([(await call(c, "add_by_identifier", { identifier: base + "/paper.pdf" })).action, (await call(c, "add_by_identifier", { identifier: base + "/mirror.pdf" })).action], ["exists", "exists"]);
+    assert.equal((await call(c, "list_pdfs")).pdfs.length, 1);
+    assert.equal(fs.readdirSync(path.join(dir, "library", "files")).length, 1, "the duplicate download was removed");
+
+    await rejects(call(c, "add_by_identifier", { identifier: "not an identifier" }), "invalid_input");
+    await rejects(call(c, "add_by_identifier", { identifier: base + "/missing.pdf" }), "not_found");
+    await rejects(call(c, "add_by_identifier", { identifier: base + "/paywall" }), "paywalled");
+    await rejects(call(c, "add_by_identifier", { identifier: base + "/page" }), "not_pdf");
+
+    // refused before downloading while the app is open
+    const app = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    fs.writeFileSync(path.join(dir, "library", "faelights.app"), JSON.stringify({ pid: app.pid, at: Date.now() }));
+    try { await rejects(call(c, "add_by_identifier", { identifier: base + "/other.pdf" }), "library_in_use"); } finally { app.kill(); }
+  } finally { await c.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

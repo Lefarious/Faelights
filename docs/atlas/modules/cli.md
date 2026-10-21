@@ -24,7 +24,7 @@ The `faelights` command line: a thin shell over core/ that reads highlights and 
 | `theme [system\|light\|dark]` | read/write `<userData>/theme.json` | — |
 | `tour [status\|skip\|restart]` | `settings.tour` | `Tour.pending` / `skipAll` (from `renderer/tour.js`) |
 
-Options: `-f md|obsidian|html|plain|json`, `-m full|only`, `-o file`, `-l`, `-t` (repeatable), `--starred`, `--pages`, `--all`, `--force`, `--no-lookup`, `--frontmatter`, `--json`, `--data-dir`, `-h`, `-v`. Exit codes: 0 ok, 1 failure (`Fail`, `ELOCKED`), 2 usage. Also `module.exports = {main, Fail, scan, scanned}` (`scan`/`scanned` are reused by `mcp/tools.js add_pdf`).
+Options: `-f md|obsidian|html|plain|json`, `-m full|only`, `-o file`, `-l`, `-t` (repeatable), `--starred`, `--pages`, `--all`, `--force`, `--no-lookup`, `--frontmatter`, `--json`, `--data-dir`, `-h`, `-v`. Exit codes: 0 ok, 1 failure (`Fail`, `ELOCKED`), 2 usage. Also `module.exports = {main, Fail, scan, scanned, ADD_FAIL, sameOrigin, fetchDetails, applyDetails}`, reused by `mcp/tools.js` `add_pdf` / `add_by_identifier`.
 
 ## Dependencies
 - **Uses:** core (`extract`, `meta`, `order`, `export`, `library`, `identify`, `fetch`), renderer-ui's `renderer/tour.js` (pure helpers only), `package.json` (`version`), node `fs`, `os`, `path`, `util.parseArgs`
