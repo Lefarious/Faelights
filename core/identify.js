@@ -10,16 +10,25 @@ const PMCID = /^PMC\d{4,9}$/i;
 const BIBCODE = /^\d{4}[A-Za-z][A-Za-z&.]{4}[\w.]{4}[\w.][\w.]{4}[A-Za-z.]$/;
 const PMID = /^\d{1,8}$/, BARE_PMID = /^\d{6,8}$/;
 
+// Long enough for a link carrying kilobytes of tracking parameters (real ones stay well under this)
+const MAX_ID = 16384;
+// Invisible characters copied along from web pages and PDFs: zero-width space / joiners, word joiner, soft hyphen
+const INVISIBLE = /[\u200B-\u200D\u2060\u00AD]/g;
+// Drop trailing chars matching a one-char class by walking back: a `[…]+$` regex backtracks quadratically on long input
+const trimEnd = (s, re) => { let e = s.length; while (e && re.test(s[e - 1])) e--; return s.slice(0, e); };
+
 // Strip surrounding quotes / brackets and trailing sentence punctuation.
 // A closing ) or ] is only dropped when it is unbalanced: DOIs such as 10.1016/S0140-6736(20)30183-5 contain parens.
+// Bracket counts are kept up to date as chars are dropped, so this stays linear on long input.
 function tidy(text) {
-  let s = String(text).trim().replace(/^[\s<"'“‘(\[{]+/, "");
+  const s = String(text).trim().replace(/^[\s<"'“‘(\[{]+/, ""), n = { "(": 0, ")": 0, "[": 0, "]": 0 }, open = { ")": "(", "]": "[" };
+  for (const c of s) if (c in n) n[c]++;
+  let e = s.length;
   for (;;) {
-    const t = s.replace(/[\s>"'”’.,;:!?}]+$/, "");
-    const last = t.slice(-1);
-    const unbalanced = (o, c) => last === c && t.split(o).length < t.split(c).length;
-    s = unbalanced("(", ")") || unbalanced("[", "]") ? t.slice(0, -1) : t;
-    if (s === t) return s;
+    const c = s[e - 1];
+    if (e && /[\s>"'”’.,;:!?}]/.test(c)) e--;
+    else if (open[c] && n[open[c]] < n[c]) { n[c]--; e--; }
+    else return s.slice(0, e);
   }
 }
 
@@ -45,9 +54,10 @@ const isbn = text => { const v = isbn13(text); return v && { kind: "isbn", value
 // text → {kind: "doi"|"arxiv"|"pmcid"|"url", value, url} or null.
 // `url` is the human landing page (what "Open in browser" shows), not necessarily the PDF.
 function parseIdentifier(text) {
-  if (typeof text !== "string" || text.length > 2048) return null;
+  if (typeof text !== "string" || text.length > MAX_ID) return null;
+  text = text.replace(INVISIBLE, "");
   // a bibcode may end in "." padding, which tidy() strips: check before it, with and without one trailing dot
-  const raw = String(text).trim().replace(/^[\s<"'“‘(\[{]+/, "").replace(/[\s>"'”’,;:!?}\])]+$/, "").replace(/^bibcode:\s*/i, "");
+  const raw = trimEnd(text.trim().replace(/^[\s<"'“‘(\[{]+/, ""), /[\s>"'”’,;:!?}\])]/).replace(/^bibcode:\s*/i, "");
   if (BIBCODE.test(raw)) return ads(raw);
   if (raw.endsWith(".") && BIBCODE.test(raw.slice(0, -1))) return ads(raw.slice(0, -1));
   let s = tidy(text), m;
@@ -167,7 +177,10 @@ const PREFIX = /^(?:doi|arxiv|pmid|bibcode|isbn(?:-1[03])?):?$/i;
 function parseIdentifiers(text) {
   const out = [], seen = new Set();
   const push = t => { if (!t || seen.has(t)) return; seen.add(t); out.push({ text: t, id: parseIdentifier(t) }); };
-  for (let line of String(text ?? "").slice(0, 100000).split(/\r?\n/)) {
+  // past 100000 chars, cut at the last whitespace so no identifier is cut in half (the dialog refuses that much anyway)
+  let all = String(text ?? "").replace(INVISIBLE, "");
+  if (all.length > 100000) all = /\s/.test(all[100000]) ? all.slice(0, 100000) : all.slice(0, 100000).replace(/\S+$/, "");
+  for (let line of all.split(/\r?\n/)) {
     line = line.trim(); if (!line) continue;
     if (/\s/.test(line) && !/[,;]\s/.test(line) && parseIdentifier(line)) { push(line); continue; }
     const toks = line.split(/\s+|[,;](?=\s|$)/).filter(Boolean);
