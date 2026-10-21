@@ -71,7 +71,7 @@ function resolver(get, progress = () => {}) {
     throw big || new FetchFail(gone ? "not-found" : "no-free-copy");
   }
 
-  async function resolvePdf(id) {
+  async function findPdf(id) {
     progress({ stage: "find" });
     const ax = id.kind === "doi" && /^10\.48550\/arxiv\.(.+)$/i.exec(id.value);  // arXiv's own DOIs
     if (id.kind === "arxiv" || ax) {   // the abs page gives the title too; fall back to the PDF URL if it has no citation link
@@ -88,14 +88,14 @@ function resolver(get, progress = () => {}) {
       }
       const pmc = rec.pmcid && parseIdentifier(rec.pmcid), viaDoi = rec.doi && parseIdentifier("doi:" + rec.doi);
       if (pmc && pmc.kind === "pmcid") {
-        try { return await resolvePdf(pmc); } catch (e) { if (!viaDoi || hardFail(e)) throw e; }
+        try { return await findPdf(pmc); } catch (e) { if (!viaDoi || hardFail(e)) throw e; }
       }
-      if (viaDoi && viaDoi.kind === "doi") return resolvePdf(viaDoi);
+      if (viaDoi && viaDoi.kind === "doi") return findPdf(viaDoi);
       throw new FetchFail("no-free-copy");
     }
     if (id.kind === "ads") {
       const ax = /^\d{4}arXiv(\d{4})\.?(\d{4,5})[A-Z.]$/.exec(id.value);   // e.g. 2020arXiv200112345A → 2001.12345
-      if (ax) return resolvePdf({ kind: "arxiv", value: ax[1] + "." + ax[2] });
+      if (ax) return findPdf({ kind: "arxiv", value: ax[1] + "." + ax[2] });
       // ADS's link gateway redirects to the e-print, the publisher's PDF or ADS's own scan; no API token needed
       let big = null;
       for (const t of ["EPRINT_PDF", "PUB_PDF", "ADS_PDF"]) {
@@ -131,6 +131,13 @@ function resolver(get, progress = () => {}) {
       // a publisher page with no reachable PDF is access-controlled (or bot-walled) far more often than PDF-less
       throw new FetchFail(err.reason === "unreachable" ? "unreachable" : "paywalled");
     }
+  }
+
+  // On Wi-Fi with no internet DNS fails for every host, so before blaming the link, check a service the app uses answers
+  const offline = () => get("https://doi.org/", "text/html", MAX_HTML, { quiet: true }).then(() => false, e => e.reason === "offline");
+  async function resolvePdf(id) {
+    try { return await findPdf(id); }
+    catch (e) { if (e.reason === "unreachable" && await offline()) throw new FetchFail("offline"); throw e; }
   }
 
   return { pdfFrom, fetchJson, resolvePdf };
