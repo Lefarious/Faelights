@@ -448,7 +448,19 @@ Context: F-023/F-024 — the CLI needed extraction, metadata, the library store 
 Context: F-024. Options: a running-app API (IPC server / socket); refuse to run while the app is open; write the files directly under core's lock file. Decision: direct, locked read-modify-write per command, plus a "restart the app" note. Consequences: works with the app closed and needs no server; the open app keeps its own copy and its next save overwrites CLI changes — users must close or restart it. A live-reload of the DB in the app would remove the caveat.
 
 ## 9. Roadmap & deployment plan
-No roadmap is recorded yet. The candidates below are drawn from known limits (unverified priority):
+Planned sprints (2026-10-21, from the Trello board; detail and todo cards in `.tech-lead/board.md`). Sprint 5 is all the bugs; sizable items come later; 3–5 slots per sprint.
+
+| sprint | theme | todos |
+|---|---|---|
+| 5 | Bugs | T-017 long paste in Add by link, T-018 colour filter only with images, T-019 extracts not splitting, T-002 offline vs. unreachable, T-008 PMC fallback |
+| 6 | Small library improvements | T-020 continue reading, T-022 search in this PDF, T-023 search in this library, T-024 tag colours, T-026 mark as read |
+| 7 | Medium items | T-021 multi-select, T-027 keep section numbering on export, T-028 text-less highlights as image clips |
+| 8 | Notes and shelves | T-025 Markdown notes and headings in the extract, T-029 shelves |
+| 9 | OCR and AI | T-030 OCR, T-031 AI merge of highlight fragments (each needs a design decision first) |
+| 10 | Diagrams | T-032 diagrams as SVG |
+
+Parked: T-033 accounts and T-034 library sharing need a server, which conflicts with offline-first (D-009); they wait for a backend decision.
+
 ### Now
 - v1.2.1 tagged (2026-10-10): CI builds the installers into a draft GitHub Release for the user to publish. (v1.2.0's run failed on a native-module rebuild; no release was made from it.)
 - Sprint 4 (2026-10-10): T-014 guided tour merged and pushed (F-022), CI green; not in a tagged release yet. Proposals T-002…T-011 remain on the tech-lead board.
