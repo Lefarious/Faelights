@@ -1,7 +1,7 @@
 {
   "name": "faelights",
   "productName": "Faelights",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Pull highlights out of annotated PDFs, organised by topic, and keep them in libraries.",
   "main": "src/main.js",
   "bin": {
