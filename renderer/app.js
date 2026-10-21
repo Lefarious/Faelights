@@ -224,6 +224,25 @@ async function libraryMenu(id, at, opts) {
   if (r === "delete") deleteLibrary(id);
 }
 
+/* ---------------- tag colours ---------------- */
+// Mid-tone hues: readable as dots and tints on both the light and dark themes
+const TAG_COLOURS = [["Red", "#d64550"], ["Orange", "#e07b39"], ["Yellow", "#c9a227"], ["Green", "#3a9d5d"], ["Teal", "#2a9d9f"], ["Blue", "#3b7dd8"], ["Purple", "#8a5cd6"], ["Pink", "#d0559b"]];
+// Paints a tag's dot / chip with its colour (--tc); uncoloured tags are left as they are
+function tint(node, tag) {
+  const c = Library.tagColour(S.db, tag);
+  if (c) { node.classList.add("tc"); node.style.setProperty("--tc", c); }
+  return node;
+}
+// at / opts: see openMenu()
+async function tagMenu(tag, at, opts) {
+  const cur = Library.tagColour(S.db, tag);
+  const items = [{ type: "heading", label: "Colour" }, ...TAG_COLOURS.map(([n, c]) => ({ id: c, label: n, checked: cur === c })),
+    { type: "separator" }, { id: "none", label: "No colour", checked: !cur }];
+  const r = await openMenu(at || document.activeElement, items, { label: "Tag " + tag, ...opts });
+  if (!r) return;
+  Library.setTagColour(S.db, tag, r === "none" ? "" : r); save(); renderAll();
+}
+
 /* ---------------- action menu ---------------- */
 // Themed in-app popover menu (the native fl.popup is no longer used). Items:
 //   { id, label, icon, hint, danger, disabled, checked, submenu: [items] } | { type: "separator" } | { type: "heading", label }
@@ -709,7 +728,8 @@ function renderSide() {
     sc.append(Object.assign(el("h3"), { textContent: "Tags" }));
     const tl = el("ul", "nav");
     for (const [t, n] of [...tags].sort((a, b) => a[0].localeCompare(b[0])))
-      tl.append(navItem({ icon: el("i", "tagdot"), name: t, count: n, current: S.view.kind === "tag" && S.view.tag === t, onClick: () => go({ kind: "tag", tag: t }) }));
+      tl.append(navItem({ icon: tint(el("i", "tagdot"), t), name: t, count: n, current: S.view.kind === "tag" && S.view.tag === t, onClick: () => go({ kind: "tag", tag: t }),
+        onMenu: (at, o) => tagMenu(t, at, o) }));
     sc.append(tl);
   }
   side.append(sc);
@@ -828,7 +848,7 @@ function renderDocs() {
     else if (d.stale) m.append(el("span", "pill", "Changed"));
     if (d.annotated) m.append(el("span", "pill", "Annotated"));
     b.append(t, m);
-    if (d.tags && d.tags.length) { const tg = el("div", "tags-inline"); for (const x of d.tags) tg.append(el("span", null, x)); b.append(tg); }
+    if (d.tags && d.tags.length) { const tg = el("div", "tags-inline"); for (const x of d.tags) tg.append(tint(el("span", null, x), x)); b.append(tg); }
     b.onclick = () => openDoc(d.id);
     b.ondragstart = e => { e.dataTransfer.setData("application/x-faelights-doc", d.id); e.dataTransfer.effectAllowed = "move"; };
     const mb = moreBtn("Actions for " + d.title); mb.onclick = () => docMenu(d, mb);
@@ -973,7 +993,7 @@ function renderReader() {
   mine.title = d.mine ? "Remove from My publications" : "Mark as my publication"; mine.onclick = () => setMine(d, !d.mine); meta.append(mine);
   const tools = el("div", "r-tools");
   const tagedit = el("div", "tagedit");
-  for (const t of d.tags) { const g = el("span", "tg", t); const x = el("button", null, "×"); x.title = "Remove tag"; x.setAttribute("aria-label", "Remove tag " + t); x.onclick = () => { Library.removeTag(d, t); save(); renderAll(); }; g.append(x); tagedit.append(g); }
+  for (const t of d.tags) { const g = tint(el("span", "tg", t), t); const x = el("button", null, "×"); x.title = "Remove tag"; x.setAttribute("aria-label", "Remove tag " + t); x.onclick = () => { Library.removeTag(d, t); save(); renderAll(); }; g.append(x); tagedit.append(g); }
   const ti = el("input"); ti.id = "tagin"; ti.placeholder = "+ tag"; ti.setAttribute("aria-label", "Add tag");
   const known = [...new Set(S.db.docs.flatMap(x => x.tags))]; if (known.length) { const dl = el("datalist"); dl.id = "tagsdl"; for (const k of known) { const o = el("option"); o.value = k; dl.append(o); } tagedit.append(dl); ti.setAttribute("list", "tagsdl"); }
   ti.onkeydown = e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); if (Library.addTag(d, ti.value)) { save(); renderAll(); setTimeout(() => $("tagin")?.focus(), 0); } } };
